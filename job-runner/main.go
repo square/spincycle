@@ -3,20 +3,17 @@
 package main
 
 import (
-	"flag"
 	"log"
 	"net/http"
 
 	"github.com/square/spincycle/job-runner/app"
+	"github.com/square/spincycle/job-runner/cache"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job/external"
 )
 
 func main() {
-	flag.Parse()
-	flag.Lookup("logtostderr").Value.Set("true")
-
 	runnerFactory := &runner.RealRunnerFactory{
 		JobFactory: external.JobFactory,
 	}
@@ -26,6 +23,7 @@ func main() {
 		HTTPServer:    h,
 		RunnerFactory: runnerFactory,
 		ChainRepo:     &chain.FakeRepo{},
+		Cache:         cache.NewLocalCache(),
 	})
 
 	err := http.ListenAndServe(":9999", h)

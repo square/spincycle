@@ -7,8 +7,11 @@ TODO: Fill this out
 3. Run the JR web server: `go run spincycle/job-runner/main.go`
 4. Send commands to the web server:
 ```bash
-# POST a new chain and start running it
+# POST a new chain
 curl -H "Content-Type: application/json" -X POST -d '<CHAIN_PAYLOAD>' localhost:9999/api/v1/job-chains
+
+# PUT a chain that is running to start it
+curl -X PUT localhost:9999/api/v1/job-chains/<REQUEST_ID_OF_THE_CHAIN>/start
 
 # PUT a chain that is running to stop it
 curl -X PUT localhost:9999/api/v1/job-chains/<REQUEST_ID_OF_THE_CHAIN>/stop
@@ -19,7 +22,5 @@ curl localhost:9999/api/v1/job-chains/<REQUEST_ID_OF_THE_CHAIN>/status
 
 ### TODOs
 * When a traverser finishes, it should POST back to the Request Manager API the final status of the chain.
-* The traverser Status method should only return status for failed and running nodes (currently returns status for all nodes).
 * Make basic things configurable (ex: port for http server).
 * Simplify http routing stuff.
-* Add an in-memory traverser repo that can be used in api/api.go

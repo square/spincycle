@@ -3,92 +3,85 @@
 package chain
 
 import (
-	"fmt"
-	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/test/mock"
 )
 
-func initJobs(count int, emptyBytes bool) map[string]*SerializedJob {
-	jobs := make(map[string]*SerializedJob)
-	for i := 1; i <= count; i++ {
-		name := fmt.Sprintf("job%d", i)
-		if emptyBytes {
-			jobs[name] = &SerializedJob{
-				Name:  name,
-				State: proto.STATE_PENDING,
-			}
-		} else {
-			bytes := make([]byte, 10)
-			rand.Read(bytes)
-			jobs[name] = &SerializedJob{
-				Name:  name,
-				Bytes: bytes,
-				State: proto.STATE_PENDING,
-			}
-		}
-	}
-	return jobs
-}
-
-func TestRootJobMultipleRoots(t *testing.T) {
-	c := &Chain{
-		Jobs: initJobs(4, true),
+func TestFirstJobMultiple(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job3"},
 			"job2": []string{"job3"},
 			"job3": []string{"job4"},
 		},
 	}
+	c := NewChain(jc)
 
-	rootJob, err := c.RootJob()
-	if rootJob != nil {
-		t.Errorf("rootJob = %s, expected nil", rootJob)
-	}
+	_, err := c.FirstJob()
 	if err == nil {
 		t.Errorf("expected an error, but did not get one")
 	}
 }
 
-func TestRootJobCyclic(t *testing.T) {
-	c := &Chain{
-		Jobs: initJobs(4, true),
-		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
-			"job4": []string{"job1"},
-		},
-	}
-
-	rootJob, err := c.RootJob()
-	if rootJob != nil {
-		t.Errorf("rootJob = %s, expected nil", rootJob)
-	}
-	if err == nil {
-		t.Errorf("expected an error, but did not get one")
-	}
-}
-
-func TestRootJobOneRoot(t *testing.T) {
-	jobs := initJobs(4, false)
-	c := &Chain{
-		Jobs: jobs,
+func TestFirstJobOne(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 			"job2": []string{"job4"},
 			"job3": []string{"job4"},
 		},
 	}
+	c := NewChain(jc)
 
-	expectedRootJob := jobs["job1"]
-	rootJob, err := c.RootJob()
+	expectedFirstJob := c.JobChain.Jobs["job1"]
+	firstJob, err := c.FirstJob()
 
-	if !reflect.DeepEqual(rootJob, expectedRootJob) {
-		t.Errorf("root job = %v, expected %v", rootJob, expectedRootJob)
+	if !reflect.DeepEqual(firstJob, expectedFirstJob) {
+		t.Errorf("firstJob = %v, expected %v", firstJob, expectedFirstJob)
+	}
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+}
+
+func TestLastJobMultiple(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(3),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2", "job3"},
+		},
+	}
+	c := NewChain(jc)
+
+	_, err := c.LastJob()
+	if err == nil {
+		t.Errorf("expected an error, but did not get one")
+	}
+}
+
+func TestLastJobOne(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2", "job3"},
+			"job2": []string{"job4"},
+			"job3": []string{"job4"},
+		},
+	}
+	c := NewChain(jc)
+
+	expectedLastJob := c.JobChain.Jobs["job4"]
+	lastJob, err := c.LastJob()
+
+	if !reflect.DeepEqual(lastJob, expectedLastJob) {
+		t.Errorf("lastJob = %v, expected %v", lastJob, expectedLastJob)
 	}
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
@@ -96,17 +89,17 @@ func TestRootJobOneRoot(t *testing.T) {
 }
 
 func TestNextJobs(t *testing.T) {
-	jobs := initJobs(4, false)
-	c := &Chain{
-		Jobs: jobs,
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 			"job2": []string{"job4"},
 			"job3": []string{"job4"},
 		},
 	}
+	c := NewChain(jc)
 
-	expectedNextJobs := SerializedJobs{jobs["job2"], jobs["job3"]}
+	expectedNextJobs := proto.Jobs{c.JobChain.Jobs["job2"], c.JobChain.Jobs["job3"]}
 	sort.Sort(expectedNextJobs)
 	nextJobs := c.NextJobs("job1")
 	sort.Sort(nextJobs)
@@ -123,17 +116,17 @@ func TestNextJobs(t *testing.T) {
 }
 
 func TestPreviousJobs(t *testing.T) {
-	jobs := initJobs(4, false)
-	c := &Chain{
-		Jobs: jobs,
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 			"job2": []string{"job4"},
 			"job3": []string{"job4"},
 		},
 	}
+	c := NewChain(jc)
 
-	expectedPreviousJobs := SerializedJobs{jobs["job2"], jobs["job3"]}
+	expectedPreviousJobs := proto.Jobs{c.JobChain.Jobs["job2"], c.JobChain.Jobs["job3"]}
 	sort.Sort(expectedPreviousJobs)
 	previousJobs := c.PreviousJobs("job4")
 	sort.Sort(previousJobs)
@@ -150,17 +143,17 @@ func TestPreviousJobs(t *testing.T) {
 }
 
 func TestJobIsReady(t *testing.T) {
-	jobs := initJobs(5, false)
-	jobs["job2"].State = proto.STATE_COMPLETE
-	jobs["job3"].State = proto.STATE_PENDING
-	c := &Chain{
-		Jobs: jobs,
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 			"job2": []string{"job4"},
 			"job3": []string{"job4"},
 		},
 	}
+	c := NewChain(jc)
+	c.SetJobState("job2", proto.STATE_COMPLETE)
+	c.SetJobState("job3", proto.STATE_PENDING)
 
 	expectedReady := false
 	ready := c.JobIsReady("job4")
@@ -177,78 +170,166 @@ func TestJobIsReady(t *testing.T) {
 	}
 }
 
-func TestComplete(t *testing.T) {
-	jobs := initJobs(4, false)
-	jobs["job1"].State = proto.STATE_COMPLETE
-	jobs["job2"].State = proto.STATE_COMPLETE
-	jobs["job3"].State = proto.STATE_COMPLETE
-	jobs["job4"].State = proto.STATE_COMPLETE
-	c := &Chain{
-		Jobs: jobs,
+// When the chain is not done or complete.
+func TestIsDoneJobRunning(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 			"job2": []string{"job4"},
 		},
 	}
+	c := NewChain(jc)
+	c.SetJobState("job1", proto.STATE_RUNNING)
 
-	expectedComplete := true
-	complete := c.Complete()
+	expectedDone := false
+	expectedComplete := false
+	done, complete := c.IsDone()
 
-	if complete != expectedComplete {
-		t.Errorf("complete = %t, want %t", complete, expectedComplete)
-	}
-
-	c.Jobs["job3"].State = proto.STATE_RUNNING
-	expectedComplete = false
-	complete = c.Complete()
-
-	if complete != expectedComplete {
-		t.Errorf("complete = %t, want %t", complete, expectedComplete)
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
 	}
 }
 
-func TestIncomplete(t *testing.T) {
-	jobs := initJobs(4, false)
-	jobs["job1"].State = proto.STATE_COMPLETE
-	jobs["job2"].State = proto.STATE_RUNNING
-	jobs["job3"].State = proto.STATE_FAIL
-	jobs["job4"].State = proto.STATE_PENDING
-	c := &Chain{
-		Jobs: jobs,
+// When the chain is done but not complete.
+func TestIsDoneNotComplete(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 			"job2": []string{"job4"},
-			"job3": []string{"job4"},
 		},
 	}
+	c := NewChain(jc)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_FAIL)
+	c.SetJobState("job3", proto.STATE_COMPLETE)
+	c.SetJobState("job4", proto.STATE_PENDING)
 
-	expectedIncomplete := false
-	incomplete := c.Incomplete()
+	expectedDone := true
+	expectedComplete := false
+	done, complete := c.IsDone()
 
-	if incomplete != expectedIncomplete {
-		t.Errorf("incomplete = %t, want %t", incomplete, expectedIncomplete)
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
 	}
 
-	c.Jobs["job2"].State = proto.STATE_COMPLETE
-	expectedIncomplete = true
-	incomplete = c.Incomplete()
+	// Make sure we can handle unknown states
+	c.SetJobState("job4", proto.STATE_UNKNOWN)
 
-	if incomplete != expectedIncomplete {
-		t.Errorf("incomplete = %t, want %t", incomplete, expectedIncomplete)
+	done, complete = c.IsDone()
+
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
 	}
+}
 
-	c.Jobs["job3"].State = proto.STATE_COMPLETE
-	expectedIncomplete = false
-	incomplete = c.Incomplete()
+// When the chain is done and complete.
+func TestIsDoneComplete(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2", "job3"},
+			"job2": []string{"job4"},
+		},
+	}
+	c := NewChain(jc)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_COMPLETE)
+	c.SetJobState("job3", proto.STATE_COMPLETE)
+	c.SetJobState("job4", proto.STATE_COMPLETE)
 
-	if incomplete != expectedIncomplete {
-		t.Errorf("incomplete = %t, want %t", incomplete, expectedIncomplete)
+	expectedDone := true
+	expectedComplete := true
+	done, complete := c.IsDone()
+
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
+	}
+}
+
+func TestCurrentJobData(t *testing.T) {
+	jc := &proto.JobChain{}
+	c := NewChain(jc)
+	expectedJobData := map[string]string{"k1": "v1"}
+	c.JobData = expectedJobData
+
+	jobData := c.CurrentJobData()
+	if !reflect.DeepEqual(jobData, expectedJobData) {
+		t.Errorf("jobData = %v, want %v", jobData, expectedJobData)
+	}
+}
+
+func TestAddJobData(t *testing.T) {
+	jc := &proto.JobChain{}
+	c := NewChain(jc)
+	c.JobData = map[string]string{"k1": "v1", "k2": "v2"}
+
+	expectedJobData := map[string]string{"k1": "v7", "k2": "v2", "k3": "v3"}
+
+	c.AddJobData(map[string]string{"k1": "v7", "k3": "v3"})
+	if !reflect.DeepEqual(c.JobData, expectedJobData) {
+		t.Errorf("jobData = %v, want %v", c.JobData, expectedJobData)
+	}
+}
+
+func TestSetJobState(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(1),
+	}
+	c := NewChain(jc)
+
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	if c.JobChain.Jobs["job1"].State != proto.STATE_COMPLETE {
+		t.Errorf("State = %d, want %d", c.JobChain.Jobs["job1"].State, proto.STATE_COMPLETE)
+	}
+}
+
+func TestSetStart(t *testing.T) {
+	jc := &proto.JobChain{}
+	c := NewChain(jc)
+	now := time.Now()
+
+	c.SetStart()
+	if c.JobChain.StartTime.Unix() != now.Unix() {
+		t.Errorf("StartTime unix = %d, want %d", c.JobChain.StartTime.Unix(), now.Unix())
+	}
+	if c.JobChain.State != proto.STATE_RUNNING {
+		t.Errorf("State = %d, want %d", c.JobChain.State, proto.STATE_RUNNING)
+	}
+}
+
+func TestSetComplete(t *testing.T) {
+	jc := &proto.JobChain{}
+	c := NewChain(jc)
+	now := time.Now()
+
+	c.SetComplete()
+	if c.JobChain.EndTime.Unix() != now.Unix() {
+		t.Errorf("EndTime unix = %d, want %d", c.JobChain.EndTime.Unix(), now.Unix())
+	}
+	if c.JobChain.State != proto.STATE_COMPLETE {
+		t.Errorf("State = %d, want %d", c.JobChain.State, proto.STATE_COMPLETE)
+	}
+}
+
+func TestSetIncomplete(t *testing.T) {
+	jc := &proto.JobChain{}
+	c := NewChain(jc)
+	now := time.Now()
+
+	c.SetIncomplete()
+	if c.JobChain.EndTime.Unix() != now.Unix() {
+		t.Errorf("EndTime unix = %d, want %d", c.JobChain.EndTime.Unix(), now.Unix())
+	}
+	if c.JobChain.State != proto.STATE_INCOMPLETE {
+		t.Errorf("State = %d, want %d", c.JobChain.State, proto.STATE_INCOMPLETE)
 	}
 }
 
 func TestIndegreeCounts(t *testing.T) {
-	c := &Chain{
-		Jobs: initJobs(9, true),
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(9),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 			"job2": []string{"job4", "job5"},
@@ -259,6 +340,7 @@ func TestIndegreeCounts(t *testing.T) {
 			"job7": []string{"job8"},
 		},
 	}
+	c := NewChain(jc)
 
 	expectedCounts := map[string]int{
 		"job1": 0,
@@ -275,5 +357,164 @@ func TestIndegreeCounts(t *testing.T) {
 
 	if !reflect.DeepEqual(counts, expectedCounts) {
 		t.Errorf("counts = %v, want %v", counts, expectedCounts)
+	}
+}
+
+func TestOutdegreeCounts(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(7),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2", "job3"},
+			"job2": []string{"job4", "job5", "job6"},
+			"job3": []string{"job5", "job6"},
+			"job4": []string{"job5", "job6"},
+			"job5": []string{"job6"},
+			"job6": []string{"job7"},
+		},
+	}
+	c := NewChain(jc)
+
+	expectedCounts := map[string]int{
+		"job1": 2,
+		"job2": 3,
+		"job3": 2,
+		"job4": 2,
+		"job5": 1,
+		"job6": 1,
+		"job7": 0,
+	}
+	counts := c.outdegreeCounts()
+
+	if !reflect.DeepEqual(counts, expectedCounts) {
+		t.Errorf("counts = %v, want %v", counts, expectedCounts)
+	}
+}
+
+func TestIsAcyclic(t *testing.T) {
+	// No cycle in the chain.
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2", "job3"},
+			"job2": []string{"job4"},
+			"job3": []string{"job4"},
+		},
+	}
+	c := NewChain(jc)
+
+	expectedIsAcyclic := true
+	isAcyclic := c.isAcyclic()
+
+	if isAcyclic != expectedIsAcyclic {
+		t.Errorf("isAcyclic = %t, want %t", isAcyclic, expectedIsAcyclic)
+	}
+
+	// Cycle from end to beginning of the chain (i.e., there is no first job).
+	jc = &proto.JobChain{
+		Jobs: mock.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2", "job3"},
+			"job2": []string{"job4"},
+			"job3": []string{"job4"},
+			"job4": []string{"job1"},
+		},
+	}
+	c = NewChain(jc)
+
+	expectedIsAcyclic = false
+	isAcyclic = c.isAcyclic()
+
+	if isAcyclic != expectedIsAcyclic {
+		t.Errorf("isAcyclic = %t, want %t", isAcyclic, expectedIsAcyclic)
+	}
+
+	// Cycle in the middle of the chain.
+	jc = &proto.JobChain{
+		Jobs: mock.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2", "job3"},
+			"job2": []string{"job4"},
+			"job3": []string{"job5"},
+			"job4": []string{"job5"},
+			"job5": []string{"job2", "job6"},
+		},
+	}
+	c = NewChain(jc)
+
+	expectedIsAcyclic = false
+	isAcyclic = c.isAcyclic()
+
+	if isAcyclic != expectedIsAcyclic {
+		t.Errorf("isAcyclic = %t, want %t", isAcyclic, expectedIsAcyclic)
+	}
+
+	// No cycle, but multiple first jobs and last jobs.
+	jc = &proto.JobChain{
+		Jobs: mock.InitJobs(5),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job3"},
+			"job2": []string{"job3"},
+			"job3": []string{"job4", "job5"},
+		},
+	}
+	c = NewChain(jc)
+
+	expectedIsAcyclic = true
+	isAcyclic = c.isAcyclic()
+
+	if isAcyclic != expectedIsAcyclic {
+		t.Errorf("isAcyclic = %t, want %t", isAcyclic, expectedIsAcyclic)
+	}
+}
+
+func TestValidateAdjacencyList(t *testing.T) {
+	// Invalid 1.
+	jc := &proto.JobChain{
+		Jobs: mock.InitJobs(2),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2", "job3"},
+		},
+	}
+	c := NewChain(jc)
+
+	expectedValid := false
+	valid := c.adjacencyListIsValid()
+
+	if valid != expectedValid {
+		t.Errorf("valid = %t, expected %t", valid, expectedValid)
+	}
+
+	// Invalid 2.
+	jc = &proto.JobChain{
+		Jobs: mock.InitJobs(2),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2"},
+			"job7": []string{},
+		},
+	}
+	c = NewChain(jc)
+
+	expectedValid = false
+	valid = c.adjacencyListIsValid()
+
+	if valid != expectedValid {
+		t.Errorf("valid = %t, expected %t", valid, expectedValid)
+	}
+
+	// Valid.
+	jc = &proto.JobChain{
+		Jobs: mock.InitJobs(3),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2"},
+			"job2": []string{"job3"},
+		},
+	}
+	c = NewChain(jc)
+
+	expectedValid = true
+	valid = c.adjacencyListIsValid()
+
+	if valid != expectedValid {
+		t.Errorf("valid = %t, expected %t", valid, expectedValid)
 	}
 }

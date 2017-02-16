@@ -1,0 +1,38 @@
+// Copyright 2017, Square, Inc.
+
+// Package cache implements a generic storage cache.
+package cache
+
+import (
+	"errors"
+)
+
+var (
+	ErrDbNotFound  = errors.New("database not found in cache")
+	ErrKeyNotFound = errors.New("key not found in cache")
+	ErrConflict    = errors.New("key already exists in database in cache")
+)
+
+// A Cacher caches items in memory, storing them with the following keyspace -
+// database::key::item. Databases and keys must be strings, but the items
+// themselves can be any interface. Clients can use databases to logically
+// separate the items that they store in the cache.
+type Cacher interface {
+	// Add adds an interface to the cache. It takes two string arguments,
+	// the first of which is the database to add the interface to, and the
+	// second of which is the key to add the interface to. If the key
+	// already exists, it will return an error.
+	Add(string, string, interface{}) error
+
+	// Get looks up an interface from the cache, using the supplied database
+	// and key. It returns an error if the database+key does not exist.
+	Get(string, string) (interface{}, error)
+
+	// GetAll returns a map of all keys and interfaces in a database. It
+	// returns an empty map if the database does not exist.
+	GetAll(string) map[string]interface{}
+
+	// Delete removes an interface from the cache, using the supplied
+	// database and key. It does nothing if the database+key does not exist.
+	Delete(string, string)
+}

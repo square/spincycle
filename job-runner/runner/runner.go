@@ -1,5 +1,6 @@
 // Copyright 2017, Square, Inc.
 
+// Packege runner implements running a job.
 package runner
 
 import (
@@ -7,7 +8,7 @@ import (
 
 	"github.com/square/spincycle/job"
 
-	"github.com/golang/glog"
+	log "github.com/Sirupsen/logrus"
 )
 
 // A Runner runs and manages one job in a job chain. The job must implement
@@ -16,9 +17,8 @@ type Runner interface {
 	// Run runs the job, blocking until it has completed or when Stop is called.
 	// It returns true if the job completes, else false. Jobs are all or nothing
 	// so "completes" means the returns on its own (isn't stopped) with no error
-	// and a zero exit. Job data from the previous job is passed to the job.
-	// Job data is not thread-safe and is used in a free-for-all manner by all
-	// runners.
+	// and a zero exit. jobData from the previous job is passed to the job, and
+	// the job is free to write to it.
 	Run(jobData map[string]string) bool
 
 	// Stop stops the job if it's running. The job is responsible for stopping
@@ -55,7 +55,7 @@ func NewJobRunner(job job.Job, requestId uint) *JobRunner {
 
 func (r *JobRunner) Run(jobData map[string]string) bool {
 	r.Lock()
-	glog.Infof("[chain=%d,job=%s]: Starting the job.", r.requestId, r.job.Name())
+	log.Infof("[chain=%d,job=%s]: Starting the job.", r.requestId, r.job.Name())
 	errChan := make(chan error, 1) // must be buffered!
 	go r.runJob(jobData, errChan)
 	r.running = true
@@ -71,14 +71,14 @@ func (r *JobRunner) Run(jobData map[string]string) bool {
 	select {
 	case err := <-errChan: // job completed
 		if err != nil {
-			glog.Errorf("[chain=%d,job=%s]: Error running job (error: %s).", r.requestId, r.job.Name(), err)
+			log.Errorf("[chain=%d,job=%s]: Error running job (error: %s).", r.requestId, r.job.Name(), err)
 			return false
 		}
 	case <-r.stopChan: // Stop called
 		return false
 	}
 
-	glog.Infof("[chain=%d,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
+	log.Infof("[chain=%d,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
 	return true
 }
 
@@ -96,18 +96,20 @@ func (r *JobRunner) Stop() error {
 	// Stop is a blocking call that should return quickly.
 	err := r.job.Stop()
 	if err != nil {
-		glog.Errorf("[chain=%d,job=%s]: Error stopping job (error: %s).", r.requestId, r.job.Name(), err)
+		log.Errorf("[chain=%d,job=%s]: Error stopping job (error: %s).", r.requestId, r.job.Name(), err)
 	} else {
-		glog.Infof("[chain=%d,job=%s]: Job stopped successfully.", r.requestId, r.job.Name())
+		log.Infof("[chain=%d,job=%s]: Job stopped successfully.", r.requestId, r.job.Name())
 	}
 	return err
 }
 
 func (r *JobRunner) Status() string {
-	glog.Infof("[chain=%d,job=%s]: Getting job status.", r.requestId, r.job.Name())
+	log.Infof("[chain=%d,job=%s]: Getting job status.", r.requestId, r.job.Name())
 	// job.Status is a blocking operation that is expected to return quickly.
 	return r.job.Status()
 }
+
+// -------------------------------------------------------------------------- //
 
 // runJob runs a job and creates a job log entry when it's done.
 func (r *JobRunner) runJob(jobData map[string]string, errChan chan error) {
