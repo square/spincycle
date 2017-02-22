@@ -22,7 +22,7 @@ type RCEAgentClient interface {
 
 	// Get the status of the given job id.
 	// An error is returned if the jobid does not exist
-	GetJobStatus(jobID int) (*JobStatus, error)
+	GetJobStatus(jobID uint64) (*JobStatus, error)
 
 	// Starts a job. This is a non-blocking operation.
 	// A job status will be returned immediately. It is up to the
@@ -35,7 +35,7 @@ type RCEAgentClient interface {
 	// This will issue a SIGTERM signal to the running job. The job status
 	// of that job will be returned. Because that job is killed with a SIGTERM
 	// the exit code will not be available.
-	StopJob(jobID int) (*JobStatus, error)
+	StopJob(jobID uint64) (*JobStatus, error)
 
 	// Get the hostname of the agent that the client is connected to.
 	GetAgentHostname() string
@@ -155,9 +155,9 @@ func (c *rceAgentClient) GetJobs(since time.Time) ([]uint64, error) {
 // Given the id of a job, return the status of that job.
 // A nil JobStatus and a non-nil error will be returned if the
 // job cannot be found.
-func (c *rceAgentClient) GetJobStatus(jobID int) (*JobStatus, error) {
+func (c *rceAgentClient) GetJobStatus(jobID uint64) (*JobStatus, error) {
 	req := &pb.JobID{
-		JobID: uint64(jobID),
+		JobID: jobID,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -175,9 +175,9 @@ func (c *rceAgentClient) GetJobStatus(jobID int) (*JobStatus, error) {
 // Given the id of a job, stop that job. If the job is not found, or the job
 // is not currently running. A non-nil error will be returned, and JobStatus will
 // be nil.
-func (c *rceAgentClient) StopJob(jobID int) (*JobStatus, error) {
+func (c *rceAgentClient) StopJob(jobID uint64) (*JobStatus, error) {
 	req := &pb.JobID{
-		JobID: uint64(jobID),
+		JobID: jobID,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

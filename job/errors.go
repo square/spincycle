@@ -9,6 +9,8 @@ var (
 	ErrUnknownJobType = errors.New("unknown job type")
 	ErrJobNotFound    = errors.New("job not found")
 	ErrNilJob         = errors.New("nil job")
+	ErrConnectTimeout = errors.New("connect timeout")
+	ErrRunTimeout     = errors.New("run timeout")
 )
 
 type ErrArgNotSet struct {

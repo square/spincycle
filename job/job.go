@@ -80,12 +80,19 @@ type Factory interface {
 	Make(jobType, jobName string) (Job, error)
 }
 
-// Return is return values and output from a completed job.
+// Return represents return values and output from a job. State and Exit
+// indicate how the job completed. Success is STATE_COMPLETE and exit 0.
+// If the job completes with an error, the result is STATE_COMPLETE and a
+// non-zero Exit. Any other State indicates the job did not complete. Error
+// only indicates an internal Go error, not a job error. For example: an RPC
+// client connection error to indicate the job was never attempted because
+// the RPC server couldn't be reached.
 type Return struct {
-	Exit   int    // Unix exit code
-	Error  error  // Go error, if any
-	Stdout string // stdout ouput, if any
-	Stderr string // stderr output, if any
+	State  byte   // proto/STATE_ const
+	Exit   int64  // Unix exit code
+	Error  error  // Go error
+	Stdout string // stdout ouput
+	Stderr string // stderr output
 }
 
 // A Repo stores jobs, abstracting away the actual storage method.
