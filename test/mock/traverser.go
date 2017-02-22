@@ -8,6 +8,7 @@ import (
 
 type Traverser struct {
 	RunErr     error
+	StopErr    error
 	StatusResp proto.JobChainStatus
 }
 
@@ -15,7 +16,8 @@ func (t *Traverser) Run() error {
 	return t.RunErr
 }
 
-func (t *Traverser) Stop() {
+func (t *Traverser) Stop() error {
+	return t.StopErr
 }
 
 func (t *Traverser) Status() proto.JobChainStatus {

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/golang/glog"
+	log "github.com/Sirupsen/logrus"
 )
 
 // HTTPContext is an object that is passed around during the handling of the request.
@@ -38,7 +38,7 @@ func (ctx HTTPContext) APIError(errorType, message string, messageArgs ...interf
 
 	errorCode, ok := errorCodes[errorType]
 	if !ok {
-		glog.Errorf("Unknown error type: %v", errorType)
+		log.Errorf("Unknown error type: %v", errorType)
 		errorType = ErrInternal
 		errorCode = http.StatusInternalServerError
 	}

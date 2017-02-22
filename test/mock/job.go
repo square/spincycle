@@ -4,8 +4,11 @@ package mock
 
 import (
 	"errors"
+	"fmt"
+	"math/rand"
 
 	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/proto"
 )
 
 var (
@@ -73,4 +76,19 @@ func (j *Job) Name() string {
 
 func (j *Job) Type() string {
 	return j.TypeResp
+}
+
+// InitJobs initalizes some mock proto jobs.
+func InitJobs(count int) map[string]proto.Job {
+	jobs := make(map[string]proto.Job)
+	for i := 1; i <= count; i++ {
+		bytes := make([]byte, 10)
+		rand.Read(bytes)
+		job := proto.Job{
+			Name:  fmt.Sprintf("job%d", i),
+			Bytes: bytes,
+		}
+		jobs[job.Name] = job
+	}
+	return jobs
 }
