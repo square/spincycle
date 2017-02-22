@@ -5,16 +5,6 @@
 // because everything else depends on it.
 package job
 
-import (
-	"errors"
-)
-
-var (
-	ErrUnknownJobType = errors.New("unknown job type")
-	ErrJobNotFound    = errors.New("job not found")
-	ErrNilJob         = errors.New("nil job")
-)
-
 // A Job is the smallest, reusable building block in Spin Cycle that has meaning
 // by itself. A job should, ideally, do one thing. For example: "DownSIP" brings
 // down a SIP. This job is meaningful by itself and highly reusable.

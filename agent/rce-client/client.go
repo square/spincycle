@@ -43,6 +43,9 @@ type RCEAgentClient interface {
 	// Get the port of the agent that the client is connected to.
 	GetAgentPort() string
 
+	// Open the connection to the agent
+	Open(host, port string) error
+
 	// Closes the connection to the agent.
 	Close() error
 }
@@ -73,44 +76,43 @@ type JobRequest struct {
 
 // non-exported intentionally
 type rceAgentClient struct {
-	agentHost string
-	port      string
-	conn      *grpc.ClientConn
-	agent     pb.RCEAgentClient
+	host  string
+	port  string
+	conn  *grpc.ClientConn
+	agent pb.RCEAgentClient
 }
 
-// Create a new gRPC client, connecting to the agent at hostname:port
-// TODO: enable TLS
-// If a gRPC connection is not succussfully formed, a non-nil error is returned
-// and RCEAgentClient will be nil.
-func NewClient(hostname string, port string) (RCEAgentClient, error) {
-	c := &rceAgentClient{
-		agentHost: hostname,
-		port:      port,
-	}
-	// TODO: use tls here
+// Create a new gRPC client
+func NewClient() RCEAgentClient {
+	return &rceAgentClient{}
+}
+
+// Open the connection to the RCE Agent
+func (c *rceAgentClient) Open(host, port string) error {
+	// TODO: enable TLS
 	opt := grpc.WithInsecure()
-	conn, err := grpc.Dial(hostname+":"+port, opt)
+	conn, err := grpc.Dial(host+":"+port, opt)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	client := pb.NewRCEAgentClient(conn)
 	c.conn = conn
-	c.agent = client
-	return c, nil
+	c.agent = pb.NewRCEAgentClient(conn)
+	c.host = host
+	c.port = port
+	return nil
 }
 
 // Close the connection to the RCE Agent
 func (c *rceAgentClient) Close() error {
-	c.conn.Close()
-	c.conn = nil
-	c.agent = nil
+	if c.conn != nil {
+		return c.conn.Close()
+	}
 	return nil
 }
 
 // Get the hostname of the agent that this client connects to.
 func (c *rceAgentClient) GetAgentHostname() string {
-	return c.agentHost
+	return c.host
 }
 
 // Get the port of the agent that this client connects to.
@@ -214,7 +216,7 @@ func (c *rceAgentClient) StartJob(jobName string, jobCommand string, args []stri
 // Given a pb.JobStatus, convert that into the JobStatus for the user
 func (c *rceAgentClient) getJobStatus(s *pb.JobStatus) *JobStatus {
 	jobStatus := &JobStatus{
-		Hostname:    c.agentHost,
+		Hostname:    c.host,
 		Port:        c.port,
 		JobID:       s.JobID,
 		JobName:     s.JobName,
