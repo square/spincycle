@@ -6,8 +6,8 @@ import (
 	"net/http"
 
 	"github.com/square/spincycle/job-runner/api"
-	"github.com/square/spincycle/job-runner/cache"
 	"github.com/square/spincycle/job-runner/chain"
+	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/router"
 )
@@ -25,8 +25,8 @@ func (app *App) Router() *router.Router {
 type Config struct {
 	HTTPServer    *http.ServeMux
 	RunnerFactory *runner.RealRunnerFactory
-	ChainRepo     *chain.FakeRepo
-	Cache         cache.Cacher
+	ChainRepo     chain.Repo
+	Cache         db.Driver
 }
 
 func New(cfg *Config) *App {

@@ -9,8 +9,8 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/square/spincycle/job-runner/cache"
 	"github.com/square/spincycle/job-runner/chain"
+	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/router"
@@ -19,19 +19,19 @@ import (
 const (
 	API_ROOT           = "/api/v1/"
 	REQUEST_ID_PATTERN = "([0-9]+)"
-	CACHE_DB_PREFIX    = "API"
+	API_DB             = "API"
 )
 
 type API struct {
 	Router        *router.Router
 	chainRepo     chain.Repo
 	runnerFactory runner.RunnerFactory
-	cache         cache.Cacher // in-memory cache for storing traversers
+	cache         db.Driver // in-memory cache for storing traversers
 }
 
 var hostname func() (string, error) = os.Hostname
 
-func NewAPI(router *router.Router, chainRepo chain.Repo, runnerFactory runner.RunnerFactory, cache cache.Cacher) *API {
+func NewAPI(router *router.Router, chainRepo chain.Repo, runnerFactory runner.RunnerFactory, cache db.Driver) *API {
 	api := &API{
 		Router:        router,
 		chainRepo:     chainRepo,
@@ -96,7 +96,7 @@ func (api *API) startJobChainHandler(ctx router.HTTPContext) {
 
 		// Create a traverser and add it to the cache.
 		traverser := chain.NewTraverser(api.chainRepo, api.runnerFactory, c, api.cache)
-		err = api.cache.Add(api.cacheDb(), requestIdStr, traverser)
+		err = api.cache.Add(API_DB, requestIdStr, traverser)
 		if err != nil {
 			ctx.APIError(router.ErrBadRequest, err.Error())
 		}
@@ -109,7 +109,7 @@ func (api *API) startJobChainHandler(ctx router.HTTPContext) {
 		// so we run it in a goroutine.
 		go func() {
 			traverser.Run()
-			api.cache.Delete(api.cacheDb(), requestIdStr)
+			api.cache.Delete(API_DB, requestIdStr)
 		}()
 	default:
 		ctx.UnsupportedAPIMethod()
@@ -123,9 +123,9 @@ func (api *API) stopJobChainHandler(ctx router.HTTPContext) {
 	case "PUT":
 		requestIdStr := ctx.Arguments[1]
 
-		val, err := api.cache.Get(api.cacheDb(), requestIdStr)
+		val, err := api.cache.Get(API_DB, requestIdStr)
 		if err != nil {
-			ctx.APIError(router.ErrNotFound, err.Error())
+			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from cache (error: %s).", err.Error())
 			return
 		}
 
@@ -138,11 +138,11 @@ func (api *API) stopJobChainHandler(ctx router.HTTPContext) {
 		// This is expected to return quickly.
 		err = traverser.Stop()
 		if err != nil {
-			ctx.APIError(router.ErrInvalidParam, "Can't stop the chain (error: %s)", err)
+			ctx.APIError(router.ErrInternal, "Can't stop the chain (error: %s)", err)
 			return
 		}
 
-		api.cache.Delete(api.cacheDb(), requestIdStr)
+		api.cache.Delete(API_DB, requestIdStr)
 	default:
 		ctx.UnsupportedAPIMethod()
 	}
@@ -155,9 +155,9 @@ func (api *API) statusJobChainHandler(ctx router.HTTPContext) {
 	case "GET":
 		requestIdStr := ctx.Arguments[1]
 
-		val, err := api.cache.Get(api.cacheDb(), requestIdStr)
+		val, err := api.cache.Get(API_DB, requestIdStr)
 		if err != nil {
-			ctx.APIError(router.ErrNotFound, err.Error())
+			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from cache (error: %s).", err.Error())
 			return
 		}
 
@@ -168,7 +168,12 @@ func (api *API) statusJobChainHandler(ctx router.HTTPContext) {
 		}
 
 		// This is expected to return quickly.
-		statuses := traverser.Status()
+		statuses, err := traverser.Status()
+		if err != nil {
+			ctx.APIError(router.ErrInternal, "Can't get the chain's status (error: %s)", err)
+			return
+		}
+
 		if out, err := marshal(statuses); err != nil {
 			ctx.APIError(router.ErrInternal, "Can't encode response (error: %s)", err)
 		} else {
@@ -180,12 +185,6 @@ func (api *API) statusJobChainHandler(ctx router.HTTPContext) {
 }
 
 // ========================================================================= //
-
-// cacheDb returns a string unique for the api that can be used as the key for
-// storing stuff in the cache.
-func (api *API) cacheDb() string {
-	return CACHE_DB_PREFIX
-}
 
 // chainLocation returns the URL location of a job chain
 func chainLocation(requestId string, hostname func() (string, error)) string {

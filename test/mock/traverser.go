@@ -10,6 +10,7 @@ type Traverser struct {
 	RunErr     error
 	StopErr    error
 	StatusResp proto.JobChainStatus
+	StatusErr  error
 }
 
 func (t *Traverser) Run() error {
@@ -20,6 +21,6 @@ func (t *Traverser) Stop() error {
 	return t.StopErr
 }
 
-func (t *Traverser) Status() proto.JobChainStatus {
-	return t.StatusResp
+func (t *Traverser) Status() (proto.JobChainStatus, error) {
+	return t.StatusResp, t.StatusErr
 }
