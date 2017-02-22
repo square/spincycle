@@ -86,7 +86,7 @@ func (j *ShellCommand) Run(jobData map[string]string) (job.Return, error) {
 	cmd.Stderr = &stderr
 
 	// Run the cmd and wait for it to return
-	exit := 0
+	exit := int64(0)
 	err := cmd.Run()
 	if err != nil {
 		exit = 1
