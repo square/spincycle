@@ -5,14 +5,14 @@ package chain
 import (
 	"strconv"
 
-	"github.com/square/spincycle/job-runner/cache"
+	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 
 	log "github.com/Sirupsen/logrus"
 )
 
-const CACHE_DB_PREFIX = "TRAVERSER"
+const TRAVERSER_DB_PREFIX = "TRAVERSER"
 
 // A traverser provides the ability to run a job chain while respecting the
 // dependencies between the jobs.
@@ -28,7 +28,7 @@ type Traverser interface {
 	// Stop makes a traverser stop traversing its job chain. It also sends a stop
 	// signal to all of the jobs that a traverser is running.
 	//
-	// It returns an error if it fails to stop running jobs.
+	// It returns an error if it fails to stop all running jobs.
 	Stop() error
 
 	// Status gets the status of all running and failed jobs. Since a job can only
@@ -36,7 +36,9 @@ type Traverser interface {
 	// can be inferred from this information - every job in the chain before a
 	// running or failed job must be complete, and every job in the chain after a
 	// running or failed job must be pending.
-	Status() proto.JobChainStatus
+	//
+	// It returns an error if it fails to get the status of all running jobs.
+	Status() (proto.JobChainStatus, error)
 }
 
 // A traverser represents a job chain and everything needed to traverse it.
@@ -60,11 +62,11 @@ type traverser struct {
 	doneJobChan chan proto.Job
 
 	// Cache for storing Runners.
-	cache cache.Cacher
+	cache db.Driver
 }
 
 // NewTraverser creates a new traverser for a job chain.
-func NewTraverser(repo Repo, rf runner.RunnerFactory, chain *chain, cache cache.Cacher) *traverser {
+func NewTraverser(repo Repo, rf runner.RunnerFactory, chain *chain, cache db.Driver) *traverser {
 	return &traverser{
 		chain:       chain,
 		chainRepo:   repo,
@@ -157,7 +159,11 @@ func (t *traverser) Stop() error {
 
 	// Get all of the runners for this traverser from the cache. Only runners that are
 	// in the cache will be stopped.
-	cachedRunners := t.cache.GetAll(t.cacheDb())
+	cachedRunners, err := t.cache.GetAll(t.cacheDb())
+	if err != nil {
+		log.Errorf("[chain=%d]: Can't get runners from cache (error: %s).", t.chain.RequestId(), err)
+		return err
+	}
 
 	// Call Stop on each runner, and then remove it from the cache.
 	for jobName, i := range cachedRunners {
@@ -176,14 +182,18 @@ func (t *traverser) Stop() error {
 	return nil
 }
 
-func (t *traverser) Status() proto.JobChainStatus {
+func (t *traverser) Status() (proto.JobChainStatus, error) {
 	log.Infof("[chain=%d]: Getting the status of all running jobs.", t.chain.RequestId())
+	var jobStatuses []proto.JobStatus
 
 	// Get all of the runners for this traverser from the cache. Only runners that are
 	// in the cache will have their statuses queried.
-	cachedRunners := t.cache.GetAll(t.cacheDb())
+	cachedRunners, err := t.cache.GetAll(t.cacheDb())
+	if err != nil {
+		log.Errorf("[chain=%d]: Can't get runners from cache (error: %s).", t.chain.RequestId(), err)
+		return proto.JobChainStatus{}, err
+	}
 
-	var jobStatuses []proto.JobStatus
 	// Get the Status of each runner, as well as the state of the job it represents.
 	for jobName, i := range cachedRunners {
 		r, ok := i.(runner.Runner) // make sure we got a Runner from the cache
@@ -204,7 +214,7 @@ func (t *traverser) Status() proto.JobChainStatus {
 	return proto.JobChainStatus{
 		RequestId:   t.chain.RequestId(),
 		JobStatuses: jobStatuses,
-	}
+	}, nil
 }
 
 // -------------------------------------------------------------------------- //
@@ -279,5 +289,5 @@ func (t *traverser) runJobs() {
 // cacheDb returns a string unique for this traverser that can be used as the
 // key for storing stuff in the cache.
 func (t *traverser) cacheDb() string {
-	return CACHE_DB_PREFIX + strconv.FormatUint(uint64(t.chain.RequestId()), 10)
+	return TRAVERSER_DB_PREFIX + strconv.FormatUint(uint64(t.chain.RequestId()), 10)
 }

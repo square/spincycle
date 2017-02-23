@@ -13,15 +13,15 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/square/spincycle/job-runner/cache"
 	"github.com/square/spincycle/job-runner/chain"
+	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/router"
 	"github.com/square/spincycle/test/mock"
 )
 
 func TestNewJobChainValid(t *testing.T) {
-	api := NewAPI(&router.Router{}, &chain.FakeRepo{}, &mock.RunnerFactory{}, cache.NewLocalCache())
+	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{}, db.NewMemory())
 	jobChain := &proto.JobChain{
 		RequestId: uint(4),
 		Jobs:      mock.InitJobs(3),
@@ -50,7 +50,7 @@ func TestNewJobChainValid(t *testing.T) {
 }
 
 func TestNewJobChainInvalid(t *testing.T) {
-	api := NewAPI(&router.Router{}, &chain.FakeRepo{}, &mock.RunnerFactory{}, cache.NewLocalCache())
+	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{}, db.NewMemory())
 	// The chain is cyclic.
 	jobChain := &proto.JobChain{
 		RequestId: uint(4),
@@ -80,11 +80,57 @@ func TestNewJobChainInvalid(t *testing.T) {
 	}
 }
 
-func TestStopJobChain(t *testing.T) {
-	cache := cache.NewLocalCache()
-	api := NewAPI(&router.Router{}, &chain.FakeRepo{}, &mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}}, cache)
+func TestStartJobChain(t *testing.T) {
+	chainRepo := chain.NewMemoryRepo()
+	api := NewAPI(&router.Router{}, chainRepo, &mock.RunnerFactory{
+		RunnersToReturn: map[string]*mock.Runner{
+			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+		},
+	}, db.NewMemory())
+	jobChain := &proto.JobChain{
+		RequestId: uint(4),
+		Jobs:      mock.InitJobs(3),
+		AdjacencyList: map[string][]string{
+			"job1": []string{"job2"},
+			"job2": []string{"job3"},
+		},
+	}
+	c := chain.NewChain(jobChain)
 
-	err := cache.Add(api.cacheDb(), "4", &mock.Traverser{})
+	err := chainRepo.Add(c)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	h := httptest.NewServer(api.Router)
+	defer h.Close()
+
+	url, err := url.Parse(h.URL + API_ROOT + "job-chains/4/start")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := &http.Request{
+		Method: "PUT",
+		URL:    url,
+	}
+	res, err := (&http.Client{}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	if res.StatusCode != 200 {
+		t.Errorf("response status = %d, expected 200", res.StatusCode)
+	}
+}
+
+func TestStopJobChain(t *testing.T) {
+	cache := db.NewMemory()
+	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}}, cache)
+
+	err := cache.Add(API_DB, "4", &mock.Traverser{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -110,15 +156,15 @@ func TestStopJobChain(t *testing.T) {
 		t.Errorf("response status = %d, expected 200", res.StatusCode)
 	}
 
-	_, err = cache.Get(api.cacheDb(), "4")
+	_, err = cache.Get(API_DB, "4")
 	if err == nil {
 		t.Errorf("Traverser was not removed from the cache as expected.")
 	}
 }
 
 func TestStopJobChainNotRunning(t *testing.T) {
-	cache := cache.NewLocalCache()
-	api := NewAPI(&router.Router{}, &chain.FakeRepo{}, &mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}}, cache)
+	cache := db.NewMemory()
+	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}}, cache)
 
 	h := httptest.NewServer(api.Router)
 	defer h.Close()
@@ -143,8 +189,8 @@ func TestStopJobChainNotRunning(t *testing.T) {
 }
 
 func TestStatusJobChain(t *testing.T) {
-	cache := cache.NewLocalCache()
-	api := NewAPI(&router.Router{}, &chain.FakeRepo{}, &mock.RunnerFactory{
+	cache := db.NewMemory()
+	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
 			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
@@ -159,7 +205,7 @@ func TestStatusJobChain(t *testing.T) {
 		},
 	}
 
-	err := cache.Add(api.cacheDb(), "4", &mock.Traverser{
+	err := cache.Add(API_DB, "4", &mock.Traverser{
 		StatusResp: chainStatus,
 	})
 	if err != nil {

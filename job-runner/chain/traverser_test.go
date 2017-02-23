@@ -7,14 +7,14 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/square/spincycle/job-runner/cache"
+	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/test/mock"
 )
 
 // Return an error when we try to get the first job of the chain.
 func TestRunErrorNoFirstJob(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": &mock.Runner{},
@@ -26,7 +26,7 @@ func TestRunErrorNoFirstJob(t *testing.T) {
 		AdjacencyList: map[string][]string{},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, cache.NewLocalCache())
+	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
 
 	err := traverser.Run()
 	if err == nil {
@@ -36,7 +36,7 @@ func TestRunErrorNoFirstJob(t *testing.T) {
 
 // All jobs in the chain complete successfully.
 func TestRunComplete(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
@@ -54,7 +54,7 @@ func TestRunComplete(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, cache.NewLocalCache())
+	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
 
 	err := traverser.Run()
 	if err != nil {
@@ -67,7 +67,7 @@ func TestRunComplete(t *testing.T) {
 
 // Not all jobs in the chain complete successfully.
 func TestRunNotComplete(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
@@ -85,7 +85,7 @@ func TestRunNotComplete(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, cache.NewLocalCache())
+	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
 
 	err := traverser.Run()
 	if err != nil {
@@ -101,7 +101,7 @@ func TestRunNotComplete(t *testing.T) {
 
 // Unknown job state should not cause the traverser to panic when running.
 func TestJobUnknownState(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
@@ -122,7 +122,7 @@ func TestJobUnknownState(t *testing.T) {
 	for _, job := range c.JobChain.Jobs {
 		job.State = proto.STATE_UNKNOWN
 	}
-	traverser := NewTraverser(chainRepo, rf, c, cache.NewLocalCache())
+	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
 
 	if err := traverser.Run(); err != nil {
 		t.Errorf("err = %s, expected nil", err)
@@ -134,7 +134,7 @@ func TestJobUnknownState(t *testing.T) {
 
 // Make sure jobData gets updated as we expect.
 func TestJobData(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{"k1": "v1", "k2": "v2"}),
@@ -152,7 +152,7 @@ func TestJobData(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, cache.NewLocalCache())
+	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
 	expectedJobData := map[string]string{"k1": "v9", "k2": "v2", "k3": "v3"}
 
 	err := traverser.Run()
@@ -166,7 +166,7 @@ func TestJobData(t *testing.T) {
 
 // Stop the traverser and all running jobs.
 func TestStop(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	runBlock := make(chan struct{})
 	stopChan := make(chan struct{})
 	rf := &mock.RunnerFactory{
@@ -186,7 +186,7 @@ func TestStop(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, cache.NewLocalCache())
+	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
 	traverser.stopChan = stopChan
 
 	// Start the traverser.
@@ -224,7 +224,7 @@ func TestStop(t *testing.T) {
 
 // Error getting a runner from the cache when calling Stop.
 func TestStopCacheError(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	runBlock := make(chan struct{})
 	stopChan := make(chan struct{})
 	rf := &mock.RunnerFactory{
@@ -236,7 +236,7 @@ func TestStopCacheError(t *testing.T) {
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	cache := &mock.Cache{
+	cache := &mock.Datastore{
 		GetAllResp: map[string]interface{}{"not a": "runner"},
 	}
 	traverser := NewTraverser(chainRepo, rf, c, cache)
@@ -261,7 +261,7 @@ func TestStopCacheError(t *testing.T) {
 
 // Get the status from all running jobs.
 func TestStatus(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	runBlock := make(chan struct{})
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
@@ -280,7 +280,7 @@ func TestStatus(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, cache.NewLocalCache())
+	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -302,9 +302,12 @@ func TestStatus(t *testing.T) {
 			proto.JobStatus{"job3", "job3 running", proto.STATE_RUNNING},
 		},
 	}
-	status := traverser.Status()
+	status, err := traverser.Status()
 	sort.Sort(status.JobStatuses)
 
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
 	if !reflect.DeepEqual(status, expectedStatus) {
 		t.Errorf("status = %v, expected %v", status, expectedStatus)
 	}
@@ -321,7 +324,7 @@ func TestStatus(t *testing.T) {
 
 // Error creating a job runner.
 func TestRunJobsRunnerError(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
@@ -332,7 +335,7 @@ func TestRunJobsRunnerError(t *testing.T) {
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, cache.NewLocalCache())
+	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
 
 	// Start consuming from the runJobChan
 	go traverser.runJobs()
@@ -350,7 +353,7 @@ func TestRunJobsRunnerError(t *testing.T) {
 
 // Error adding a runner to the cache.
 func TestRunJobsCacheAddError(t *testing.T) {
-	chainRepo := &FakeRepo{}
+	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
@@ -360,8 +363,8 @@ func TestRunJobsCacheAddError(t *testing.T) {
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	cache := &mock.Cache{
-		AddErr: mock.ErrCache,
+	cache := &mock.Datastore{
+		AddErr: mock.ErrDatastore,
 	}
 	traverser := NewTraverser(chainRepo, rf, c, cache)
 
