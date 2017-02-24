@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/proto"
 
 	log "github.com/Sirupsen/logrus"
 )
@@ -120,6 +121,10 @@ func (r *JobRunner) runJob(jobData map[string]string, errChan chan error) {
 	if err == nil && jobReturn.Error != nil {
 		err = jobReturn.Error
 	}
+
+	log.Infof("[chain=%d,job=%s]: Job Return - state: %s, exit code: %d, error message: %s, stdout: %s, "+
+		"stderr: %s.", r.requestId, r.job.Name(), proto.StateName[jobReturn.State], jobReturn.Exit,
+		jobReturn.Error, jobReturn.Stdout, jobReturn.Stderr)
 
 	// create a JobLogEntry and ship it off
 	// jle := NewJLE(jobData, jobReturn, err)
