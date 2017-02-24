@@ -120,8 +120,10 @@ func (t *traverser) Run() error {
 		if done {
 			close(t.runJobChan)
 			if complete {
+				log.Infof("[chain=%d]: Chain is done, all jobs finished successfully.", t.chain.RequestId())
 				t.chain.SetComplete()
 			} else {
+				log.Infof("[chain=%d]: Chain is done, some jobs failed.", t.chain.RequestId())
 				t.chain.SetIncomplete()
 			}
 			break
