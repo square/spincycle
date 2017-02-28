@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/garyburd/redigo/redis"
+	"github.com/go-test/deep"
 	"github.com/square/spincycle/proto"
 )
 
-func TestAddIntegration(t *testing.T) {
+func TestAdd(t *testing.T) {
 	repo := getCleanRepo()
 
 	conn := repo.connectionPool.Get()
@@ -17,32 +18,86 @@ func TestAddIntegration(t *testing.T) {
 
 	chain := buildEmptyChain()
 
-	repo.Add(chain)
+	var err error
+
+	err = repo.Add(chain)
+	if err != nil {
+		t.Errorf("error in Add: %v", err)
+	}
 
 	// # keys should be 1 after Add
 	keys, _ := redis.Strings(conn.Do("KEYS", "*"))
-
-	ct := len(keys)
-	if ct != 1 {
-		t.Errorf("Expected to add 1 chain, got %d", ct)
+	if len(keys) == 0 {
+		t.Error("No new keys created in Redis")
 	}
 
 	// should err when a Chain already exists
-	err := repo.Add(chain)
-	if err == nil {
-		t.Error("Expected duplicate error to be thrown")
+	err = repo.Add(chain)
+	if err != ErrKeyExists {
+		t.Error("Did not return expected duplicate key error")
 	}
 }
 
-func TestGetIntegration(t *testing.T) {
+func TestGetSet(t *testing.T) {
+	repo := getCleanRepo()
+
+	chain := buildEmptyChain()
+
+	var err error
+
+	// Should not exist before Set
+	ret, _ := repo.Get(chain.JobChain.RequestId)
+	if ret != nil {
+		t.Error("request id exists before SET is executed")
+	}
+
+	err = repo.Set(chain)
+	if err != nil {
+		t.Errorf("error in Set: %v", err)
+	}
+
+	c, err := repo.Get(chain.JobChain.RequestId)
+	if err != nil {
+		t.Errorf("error in Get: %v", err)
+	}
+
+	diff := deep.Equal(chain, c)
+	if diff != nil {
+		t.Error(diff)
+	}
 }
 
-func TestRemoveIntegration(t *testing.T) {
+func TestRemove(t *testing.T) {
+	repo := getCleanRepo()
+
+	conn := repo.connectionPool.Get()
+	defer conn.Close()
+
+	var err error
+
+	chain := buildEmptyChain()
+
+	repo.Set(chain)
+
+	err = repo.Remove(chain.JobChain.RequestId)
+	if err != nil {
+		t.Errorf("error in Remove: %v", err)
+	}
+
+	// # keys in redis should be back to 0
+	keys, err := redis.Strings(conn.Do("KEYS", "*"))
+	if len(keys) != 0 {
+		t.Errorf("Expected 0 keys in redis after remove, had %v", len(keys))
+	}
+
+	// We expect an error if the key doesn't exist
+	err = repo.Remove(chain.JobChain.RequestId)
+	if err != ErrKeyNotFound {
+		t.Error("Did not return expected key not found error")
+	}
 }
 
-func TestSetIntegration(t *testing.T) {
-}
-
+// buildEmptyChain returns a correctly-formed chain with a simple JobChain
 func buildEmptyChain() *chain {
 	jc := &proto.JobChain{
 		RequestId: 1,
