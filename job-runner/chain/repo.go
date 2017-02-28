@@ -37,6 +37,10 @@ func NewMemoryRepo() Repo {
 
 // Todo: implement this
 //func NewRedisRepo() Repo {}
+//
+// Questions/TODOs:
+//   - How do I pass in config info if this doesn't take any args?
+//   - I need to understand interfaces/pointers to interfaces
 
 func (r *repo) Get(id uint) (*chain, error) {
 	val, err := r.db.Get(REPO_DB, uintToStr(id))

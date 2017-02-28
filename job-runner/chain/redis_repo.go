@@ -44,6 +44,7 @@ type RedisRepo struct {
 }
 
 // NewRedisRepo builds a new Repo backed by redis
+//func NewRedisRepo(c RedisRepoConfig) (Repo, error) {
 func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 	// build connection pool
 	addr := c.Server + ":" + strconv.FormatUint(uint64(c.Port), 10)
