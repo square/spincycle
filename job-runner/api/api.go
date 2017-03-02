@@ -10,7 +10,6 @@ import (
 	"strconv"
 
 	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/router"
@@ -19,24 +18,23 @@ import (
 const (
 	API_ROOT           = "/api/v1/"
 	REQUEST_ID_PATTERN = "([0-9]+)"
-	API_DB             = "API"
 )
 
 type API struct {
 	Router        *router.Router
 	chainRepo     chain.Repo
 	runnerFactory runner.RunnerFactory
-	cache         db.Driver // in-memory cache for storing traversers
+	traverserRepo chain.TraverserRepo // Repo for keeping track of active traversers
 }
 
 var hostname func() (string, error) = os.Hostname
 
-func NewAPI(router *router.Router, chainRepo chain.Repo, runnerFactory runner.RunnerFactory, cache db.Driver) *API {
+func NewAPI(router *router.Router, chainRepo chain.Repo, runnerFactory runner.RunnerFactory) *API {
 	api := &API{
 		Router:        router,
 		chainRepo:     chainRepo,
 		runnerFactory: runnerFactory,
-		cache:         cache,
+		traverserRepo: chain.NewTraverserRepo(),
 	}
 
 	api.Router.AddRoute(API_ROOT+"job-chains", api.newJobChainHandler, "api-new-job-chain")
@@ -63,14 +61,19 @@ func (api *API) newJobChainHandler(ctx router.HTTPContext) {
 		}
 
 		c := chain.NewChain(&jobChain)
-		// Make sure the chain passed some basic tests.
-		err = c.Validate()
+		requestIdStr := strconv.FormatUint(uint64(c.RequestId()), 10)
+
+		// Create a new traverser.
+		traverser, err := chain.NewTraverser(api.chainRepo, api.runnerFactory, c)
 		if err != nil {
-			ctx.APIError(router.ErrBadRequest, "Invalid chain (error: %s)", err)
+			ctx.APIError(router.ErrBadRequest, "Problem creating traverser (error: %s)", err)
 		}
 
-		// Save the chain to the repo.
-		api.chainRepo.Set(c)
+		// Add the traverser to the repo.
+		err = api.traverserRepo.Add(requestIdStr, traverser)
+		if err != nil {
+			ctx.APIError(router.ErrBadRequest, err.Error())
+		}
 	default:
 		ctx.UnsupportedAPIMethod()
 	}
@@ -82,34 +85,23 @@ func (api *API) startJobChainHandler(ctx router.HTTPContext) {
 	switch ctx.Request.Method {
 	case "PUT":
 		requestIdStr := ctx.Arguments[1]
-		requestId, err := strconv.ParseUint(ctx.Arguments[1], 10, 0)
+
+		// Get the traverser from the repo.
+		traverser, err := api.traverserRepo.Get(requestIdStr)
 		if err != nil {
-			ctx.APIError(router.ErrInvalidParam, "Can't parse requestId (error: %s)", err)
+			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
 			return
-		}
-
-		// Get the chain from the repo.
-		c, err := api.chainRepo.Get(uint(requestId))
-		if err != nil {
-			ctx.APIError(router.ErrNotFound, err.Error())
-		}
-
-		// Create a traverser and add it to the cache.
-		traverser := chain.NewTraverser(api.chainRepo, api.runnerFactory, c, api.cache)
-		err = api.cache.Add(API_DB, requestIdStr, traverser)
-		if err != nil {
-			ctx.APIError(router.ErrBadRequest, err.Error())
 		}
 
 		// Set the location in the response header to point to this server.
 		ctx.Response.Header().Set("Location", chainLocation(requestIdStr, os.Hostname))
 
-		// Start the traverser, and remove it from the cache when it's
+		// Start the traverser, and remove it from the repo when it's
 		// done running. This could take a very long time to return,
 		// so we run it in a goroutine.
 		go func() {
 			traverser.Run()
-			api.cache.Delete(API_DB, requestIdStr)
+			api.traverserRepo.Remove(requestIdStr)
 		}()
 	default:
 		ctx.UnsupportedAPIMethod()
@@ -123,15 +115,10 @@ func (api *API) stopJobChainHandler(ctx router.HTTPContext) {
 	case "PUT":
 		requestIdStr := ctx.Arguments[1]
 
-		val, err := api.cache.Get(API_DB, requestIdStr)
+		// Get the traverser to the repo.
+		traverser, err := api.traverserRepo.Get(requestIdStr)
 		if err != nil {
-			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from cache (error: %s).", err.Error())
-			return
-		}
-
-		traverser, ok := val.(chain.Traverser)
-		if !ok {
-			ctx.APIError(router.ErrInternal, "Error retreiving traverser from cache.")
+			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
 			return
 		}
 
@@ -142,7 +129,7 @@ func (api *API) stopJobChainHandler(ctx router.HTTPContext) {
 			return
 		}
 
-		api.cache.Delete(API_DB, requestIdStr)
+		api.traverserRepo.Remove(requestIdStr)
 	default:
 		ctx.UnsupportedAPIMethod()
 	}
@@ -155,15 +142,10 @@ func (api *API) statusJobChainHandler(ctx router.HTTPContext) {
 	case "GET":
 		requestIdStr := ctx.Arguments[1]
 
-		val, err := api.cache.Get(API_DB, requestIdStr)
+		// Get the traverser to the repo.
+		traverser, err := api.traverserRepo.Get(requestIdStr)
 		if err != nil {
-			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from cache (error: %s).", err.Error())
-			return
-		}
-
-		traverser, ok := val.(chain.Traverser)
-		if !ok {
-			ctx.APIError(router.ErrInternal, "Error retreiving traverser from cache.")
+			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
 			return
 		}
 
