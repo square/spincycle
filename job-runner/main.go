@@ -8,7 +8,6 @@ import (
 
 	"github.com/square/spincycle/job-runner/app"
 	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job/external"
 )
@@ -23,7 +22,6 @@ func main() {
 		HTTPServer:    h,
 		RunnerFactory: runnerFactory,
 		ChainRepo:     chain.NewMemoryRepo(),
-		Cache:         db.NewMemory(),
 	})
 
 	err := http.ListenAndServe(":9999", h)

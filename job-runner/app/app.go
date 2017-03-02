@@ -7,7 +7,6 @@ import (
 
 	"github.com/square/spincycle/job-runner/api"
 	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/router"
 )
@@ -26,11 +25,10 @@ type Config struct {
 	HTTPServer    *http.ServeMux
 	RunnerFactory *runner.RealRunnerFactory
 	ChainRepo     chain.Repo
-	Cache         db.Driver
 }
 
 func New(cfg *Config) *App {
-	api := api.NewAPI(&router.Router{}, cfg.ChainRepo, cfg.RunnerFactory, cfg.Cache)
+	api := api.NewAPI(&router.Router{}, cfg.ChainRepo, cfg.RunnerFactory)
 
 	// If an http server is provided, register the API Router.
 	if cfg.HTTPServer != nil {
