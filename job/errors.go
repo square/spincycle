@@ -20,3 +20,11 @@ type ErrArgNotSet struct {
 func (e ErrArgNotSet) Error() string {
 	return fmt.Sprintf("%s not set in job args", e.Arg)
 }
+
+type ErrDataNotSet struct {
+	Key string
+}
+
+func (e ErrDataNotSet) Error() string {
+	return fmt.Sprintf("%s not set in job data", e.Key)
+}
