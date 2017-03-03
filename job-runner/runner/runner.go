@@ -20,7 +20,7 @@ type Runner interface {
 	// so "completes" means the returns on its own (isn't stopped) with no error
 	// and a zero exit. jobData from the previous job is passed to the job, and
 	// the job is free to write to it.
-	Run(jobData map[string]string) bool
+	Run(jobData map[string]interface{}) bool
 
 	// Stop stops the job if it's running. The job is responsible for stopping
 	// quickly becuase Stop blocks while waiting for the job to stop. Stop
@@ -54,7 +54,7 @@ func NewJobRunner(job job.Job, requestId uint) *JobRunner {
 	}
 }
 
-func (r *JobRunner) Run(jobData map[string]string) bool {
+func (r *JobRunner) Run(jobData map[string]interface{}) bool {
 	r.Lock()
 	log.Infof("[chain=%d,job=%s]: Starting the job.", r.requestId, r.job.Name())
 	errChan := make(chan error, 1) // must be buffered!
@@ -113,7 +113,7 @@ func (r *JobRunner) Status() string {
 // -------------------------------------------------------------------------- //
 
 // runJob runs a job and creates a job log entry when it's done.
-func (r *JobRunner) runJob(jobData map[string]string, errChan chan error) {
+func (r *JobRunner) runJob(jobData map[string]interface{}, errChan chan error) {
 	// job.Run is a blocking operation that could take a long time.
 	jobReturn, err := r.job.Run(jobData)
 

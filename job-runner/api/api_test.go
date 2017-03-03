@@ -18,6 +18,8 @@ import (
 	"github.com/square/spincycle/test/mock"
 )
 
+var noJobData = map[string]interface{}{}
+
 func TestNewJobChainValid(t *testing.T) {
 	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{})
 	jobChain := &proto.JobChain{
@@ -81,9 +83,9 @@ func TestNewJobChainInvalid(t *testing.T) {
 func TestStartJobChain(t *testing.T) {
 	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	})
 	jobChain := &proto.JobChain{
@@ -190,9 +192,9 @@ func TestStopJobChainNotRunning(t *testing.T) {
 func TestStatusJobChain(t *testing.T) {
 	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	})
 	chainStatus := proto.JobChainStatus{

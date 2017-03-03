@@ -49,7 +49,7 @@ type Job interface {
 	//
 	// Currently, the Job Runner only calls this method once. Resuming a job is
 	// not currently supported.
-	Run(jobData map[string]string) (Return, error)
+	Run(jobData map[string]interface{}) (Return, error)
 
 	// Stop stops a job. The Job Runner calls this method when stopping a job
 	// chain before it has completed. The job must respond to Stop while Run

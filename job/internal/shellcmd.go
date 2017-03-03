@@ -70,7 +70,7 @@ func (j *ShellCommand) Deserialize(bytes []byte) error {
 	return nil
 }
 
-func (j *ShellCommand) Run(jobData map[string]string) (job.Return, error) {
+func (j *ShellCommand) Run(jobData map[string]interface{}) (job.Return, error) {
 	// Set status before and after
 	j.setStatus("runnning " + j.Cmd)
 	defer j.setStatus("done running " + j.Cmd)
