@@ -26,7 +26,7 @@ type chain struct {
 
 	// Data shared between jobs. Any job in the chain can read from or write
 	// to this.
-	JobData map[string]string `json:"data"`
+	JobData map[string]interface{} `json:"data"`
 
 	// Protection for the chain.
 	*sync.RWMutex
@@ -43,7 +43,7 @@ func NewChain(jc *proto.JobChain) *chain {
 
 	return &chain{
 		JobChain: jc,
-		JobData:  make(map[string]string),
+		JobData:  map[string]interface{}{},
 		RWMutex:  &sync.RWMutex{},
 	}
 }
@@ -218,9 +218,9 @@ func (c *chain) Validate() error {
 
 // CurrentJobData returns a copy of the chains jobData as it exists when this
 // method is called.
-func (c *chain) CurrentJobData() map[string]string {
+func (c *chain) CurrentJobData() map[string]interface{} {
 	c.RLock() // -- lock
-	resp := make(map[string]string)
+	resp := make(map[string]interface{})
 	for k, v := range c.JobData {
 		resp[k] = v
 	}
@@ -230,7 +230,7 @@ func (c *chain) CurrentJobData() map[string]string {
 
 // AddJobData adds new data to the chain's jobData. It doesn't care if it
 // overwrites existing data.
-func (c *chain) AddJobData(newData map[string]string) {
+func (c *chain) AddJobData(newData map[string]interface{}) {
 	c.Lock() // -- lock
 	for k, v := range newData {
 		c.JobData[k] = v

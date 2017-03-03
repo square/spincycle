@@ -10,6 +10,8 @@ import (
 	"github.com/square/spincycle/test/mock"
 )
 
+var noJobData = map[string]interface{}{}
+
 // Return errors when creating a new Runner.
 func TestFactory(t *testing.T) {
 	// Making the job returns an error.
@@ -38,7 +40,7 @@ func TestRunError(t *testing.T) {
 	}
 	jr := runner.NewJobRunner(job, 3)
 
-	completed := jr.Run(make(map[string]string))
+	completed := jr.Run(noJobData)
 	if completed != false {
 		t.Errorf("completed = %t, expected false", completed)
 	}
@@ -46,11 +48,11 @@ func TestRunError(t *testing.T) {
 
 func TestRunSuccess(t *testing.T) {
 	job := &mock.Job{
-		AddedJobData: map[string]string{"some": "thing"},
+		AddedJobData: map[string]interface{}{"some": "thing"},
 	}
 	jr := runner.NewJobRunner(job, 3)
 
-	jobData := make(map[string]string)
+	jobData := make(map[string]interface{})
 
 	completed := jr.Run(jobData)
 	if completed != true {
@@ -58,7 +60,7 @@ func TestRunSuccess(t *testing.T) {
 	}
 
 	val, ok := jobData["some"]
-	if !ok || val != "thing" {
+	if !ok || val.(string) != "thing" {
 		t.Errorf("jobData is not what we expected")
 	}
 }
@@ -74,7 +76,7 @@ func TestRunStop(t *testing.T) {
 	// Run the job and let it block
 	completedChan := make(chan bool)
 	go func() {
-		completedChan <- jr.Run(make(map[string]string))
+		completedChan <- jr.Run(noJobData)
 	}()
 
 	// Sleep just a moment to let Run ^ run, then stop it

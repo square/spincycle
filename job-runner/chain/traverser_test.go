@@ -11,6 +11,8 @@ import (
 	"github.com/square/spincycle/test/mock"
 )
 
+var noJobData = map[string]interface{}{}
+
 // Return an error when we try to create an invalid chain.
 func TestRunErrorNoFirstJob(t *testing.T) {
 	chainRepo := NewMemoryRepo()
@@ -36,10 +38,10 @@ func TestRunComplete(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job4": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job4": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
@@ -70,10 +72,10 @@ func TestRunNotComplete(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job3": mock.NewRunner(false, "", nil, nil, map[string]string{}),
-			"job4": mock.NewRunner(false, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job3": mock.NewRunner(false, "", nil, nil, noJobData),
+			"job4": mock.NewRunner(false, "", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
@@ -107,10 +109,10 @@ func TestJobUnknownState(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job4": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job4": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
@@ -143,10 +145,10 @@ func TestJobData(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{"k1": "v1", "k2": "v2"}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{"k1": "v8"}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{"k3": "v3"}),
-			"job4": mock.NewRunner(true, "", nil, nil, map[string]string{"k1": "v9"}),
+			"job1": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v1", "k2": "v2"}),
+			"job2": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v8"}),
+			"job3": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k3": "v3"}),
+			"job4": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v9"}),
 		},
 	}
 	jc := &proto.JobChain{
@@ -162,7 +164,7 @@ func TestJobData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
-	expectedJobData := map[string]string{"k1": "v9", "k2": "v2", "k3": "v3"}
+	expectedJobData := map[string]interface{}{"k1": "v9", "k2": "v2", "k3": "v3"}
 
 	err = traverser.Run()
 	if err != nil {
@@ -180,10 +182,10 @@ func TestStop(t *testing.T) {
 	stopChan := make(chan struct{})
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, stopChan, map[string]string{}),
-			"job2": mock.NewRunner(true, "", runBlock, stopChan, map[string]string{}),
-			"job3": mock.NewRunner(true, "", runBlock, stopChan, map[string]string{}),
-			"job4": mock.NewRunner(true, "", nil, stopChan, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, stopChan, noJobData),
+			"job2": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
+			"job3": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
+			"job4": mock.NewRunner(true, "", nil, stopChan, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
@@ -241,7 +243,7 @@ func TestStopRepoError(t *testing.T) {
 	stopChan := make(chan struct{})
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", runBlock, stopChan, map[string]string{}),
+			"job1": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
@@ -282,10 +284,10 @@ func TestStatus(t *testing.T) {
 	runBlock := make(chan struct{})
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "job1 running", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "job2 running", runBlock, nil, map[string]string{}),
-			"job3": mock.NewRunner(true, "job3 running", runBlock, nil, map[string]string{}),
-			"job4": mock.NewRunner(true, "job4 running", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "job1 running", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "job2 running", runBlock, nil, noJobData),
+			"job3": mock.NewRunner(true, "job3 running", runBlock, nil, noJobData),
+			"job4": mock.NewRunner(true, "job4 running", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
@@ -347,7 +349,7 @@ func TestRunJobsRunnerError(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 		MakeErr: mock.ErrRunner,
 	}
@@ -379,7 +381,7 @@ func TestRunJobsRepoAddError(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
