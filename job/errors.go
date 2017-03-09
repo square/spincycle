@@ -49,5 +49,5 @@ func NewErrWrongDataType(key string, got, expect interface{}) ErrWrongDataType {
 }
 
 func (e ErrWrongDataType) Error() string {
-	return fmt.Sprintf("%s in job data is type %s, expected type %s", e.GotType, e.ExpectType)
+	return fmt.Sprintf("%s in job data is type %s, expected type %s", e.Key, e.GotType, e.ExpectType)
 }
