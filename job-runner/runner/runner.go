@@ -23,7 +23,7 @@ type Runner interface {
 	Run(jobData map[string]interface{}) bool
 
 	// Stop stops the job if it's running. The job is responsible for stopping
-	// quickly becuase Stop blocks while waiting for the job to stop. Stop
+	// quickly because Stop blocks while waiting for the job to stop. Stop
 	// returns the error from calling Stop interface method of the job.
 	Stop() error
 

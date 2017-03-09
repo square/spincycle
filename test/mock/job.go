@@ -78,7 +78,7 @@ func (j *Job) Type() string {
 	return j.TypeResp
 }
 
-// InitJobs initalizes some mock proto jobs.
+// InitJobs initializes some mock proto jobs.
 func InitJobs(count int) map[string]proto.Job {
 	jobs := make(map[string]proto.Job)
 	for i := 1; i <= count; i++ {

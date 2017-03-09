@@ -132,7 +132,7 @@ func (c *chain) JobIsReady(jobName string) bool {
 // can happen if all of the jobs in the chain or complete, or if some or all
 // of the jobs in the chain failed.
 //
-// A chain is complete if every job in it completed succesfully.
+// A chain is complete if every job in it completed successfully.
 func (c *chain) IsDone() (done bool, complete bool) {
 	done = true
 	complete = true
