@@ -43,13 +43,14 @@ type Job interface {
 	// Run runs the job using its interal data and the run-time jobData from
 	// previously-ran (upstream) jobs. Run can modify jobData. Run is expected
 	// to block, but the job must respond to Stop and Status while running.
-	// The returned error, if any, indicates a problem before or after running
-	// the job. The job error and exit code, if any, is returned in the Return
-	// structure.
+	// The final state of the job is returned in the Return structure, along
+	// with other things like the error and exit code (if there was one). The
+	// final state is the most imporant field because it is used by the JR to
+	// determine how to handle a job when it's done running.
 	//
 	// Currently, the Job Runner only calls this method once. Resuming a job is
 	// not currently supported.
-	Run(jobData map[string]interface{}) (Return, error)
+	Run(jobData map[string]interface{}) Return
 
 	// Stop stops a job. The Job Runner calls this method when stopping a job
 	// chain before it has completed. The job must respond to Stop while Run
@@ -80,13 +81,11 @@ type Factory interface {
 	Make(jobType, jobName string) (Job, error)
 }
 
-// Return represents return values and output from a job. State and Exit
-// indicate how the job completed. Success is STATE_COMPLETE and exit 0.
-// If the job completes with an error, the result is STATE_COMPLETE and a
-// non-zero Exit. Any other State indicates the job did not complete. Error
-// only indicates an internal Go error, not a job error. For example: an RPC
-// client connection error to indicate the job was never attempted because
-// the RPC server couldn't be reached.
+// Return represents return values and output from a job. State indicates
+// how the job completed. Success is STATE_COMPLETE. Exit, Error, and the
+// other fields do not impact the success or failure of a job - they are
+// only used for logging. If there was an error running a job, it is up to
+// that job to make sure it sets a Return State that is not STATE_COMPLETE.
 type Return struct {
 	State  byte   // proto/STATE_ const
 	Exit   int64  // Unix exit code

@@ -15,11 +15,11 @@ import (
 // A Runner runs and manages one job in a job chain. The job must implement
 // the Job interface (spincycle/job.Job).
 type Runner interface {
-	// Run runs the job, blocking until it has completed or when Stop is called.
-	// It returns true if the job completes, else false. Jobs are all or nothing
-	// so "completes" means the returns on its own (isn't stopped) with no error
-	// and a zero exit. jobData from the previous job is passed to the job, and
-	// the job is free to write to it.
+	// Run runs the job, blocking until it has completed or until Stop is called.
+	// It returns true if the job completes, else false. Jobs are all or nothing,
+	// so "completes" means the returns on its own (isn't stopped) with its
+	// state set to STATE_COMPLETE. jobData from the previous job is passed to
+	// the job, and the job is free to write to it.
 	Run(jobData map[string]interface{}) bool
 
 	// Stop stops the job if it's running. The job is responsible for stopping
@@ -57,8 +57,8 @@ func NewJobRunner(job job.Job, requestId uint) *JobRunner {
 func (r *JobRunner) Run(jobData map[string]interface{}) bool {
 	r.Lock()
 	log.Infof("[chain=%d,job=%s]: Starting the job.", r.requestId, r.job.Name())
-	errChan := make(chan error, 1) // must be buffered!
-	go r.runJob(jobData, errChan)
+	stateChan := make(chan byte, 1) // must be buffered!
+	go r.runJob(jobData, stateChan)
 	r.running = true
 	r.Unlock()
 
@@ -68,19 +68,20 @@ func (r *JobRunner) Run(jobData map[string]interface{}) bool {
 		r.Unlock()
 	}()
 
-	// Wait for job to complete or a call to Stop
+	// Wait for job to finish or a call to Stop
 	select {
-	case err := <-errChan: // job completed
-		if err != nil {
-			log.Errorf("[chain=%d,job=%s]: Error running job (error: %s).", r.requestId, r.job.Name(), err)
+	case state := <-stateChan: // job finished
+		switch state {
+		case proto.STATE_COMPLETE:
+			log.Infof("[chain=%d,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
+			return true
+		default:
+			log.Errorf("[chain=%d,job=%s]: Job did not complete successfully (state: %s).", r.requestId, r.job.Name(), state)
 			return false
 		}
 	case <-r.stopChan: // Stop called
 		return false
 	}
-
-	log.Infof("[chain=%d,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
-	return true
 }
 
 func (r *JobRunner) Stop() error {
@@ -113,14 +114,9 @@ func (r *JobRunner) Status() string {
 // -------------------------------------------------------------------------- //
 
 // runJob runs a job and creates a job log entry when it's done.
-func (r *JobRunner) runJob(jobData map[string]interface{}, errChan chan error) {
+func (r *JobRunner) runJob(jobData map[string]interface{}, stateChan chan byte) {
 	// job.Run is a blocking operation that could take a long time.
-	jobReturn, err := r.job.Run(jobData)
-
-	// do a better job handilng jobReturn
-	if err == nil && jobReturn.Error != nil {
-		err = jobReturn.Error
-	}
+	jobReturn := r.job.Run(jobData)
 
 	log.Infof("[chain=%d,job=%s]: Job Return - state: %s, exit code: %d, error message: %s, stdout: %s, "+
 		"stderr: %s.", r.requestId, r.job.Name(), proto.StateName[jobReturn.State], jobReturn.Exit,
@@ -130,5 +126,5 @@ func (r *JobRunner) runJob(jobData map[string]interface{}, errChan chan error) {
 	// jle := NewJLE(jobData, jobReturn, err)
 	// jle.Send()
 
-	errChan <- err
+	stateChan <- jobReturn.State
 }
