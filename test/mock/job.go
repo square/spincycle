@@ -30,7 +30,6 @@ type Job struct {
 	SerializeErr   error
 	DeserializeErr error
 	RunReturn      job.Return
-	RunErr         error
 	AddedJobData   map[string]interface{} // Data to add to jobData.
 	RunBlock       chan struct{}          // Channel that job.Run() will block on, if defined.
 	StopErr        error
@@ -51,7 +50,7 @@ func (j *Job) Deserialize(jobArgs []byte) error {
 	return j.DeserializeErr
 }
 
-func (j *Job) Run(jobData map[string]interface{}) (job.Return, error) {
+func (j *Job) Run(jobData map[string]interface{}) job.Return {
 	if j.RunBlock != nil {
 		<-j.RunBlock
 	}
@@ -59,7 +58,7 @@ func (j *Job) Run(jobData map[string]interface{}) (job.Return, error) {
 	for k, v := range j.AddedJobData {
 		jobData[k] = v
 	}
-	return j.RunReturn, j.RunErr
+	return j.RunReturn
 }
 
 func (j *Job) Stop() error {

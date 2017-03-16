@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/proto"
 )
 
 // //////////////////////////////////////////////////////////////////////////
@@ -70,10 +71,11 @@ func (j *ShellCommand) Deserialize(bytes []byte) error {
 	return nil
 }
 
-func (j *ShellCommand) Run(jobData map[string]interface{}) (job.Return, error) {
+func (j *ShellCommand) Run(jobData map[string]interface{}) job.Return {
 	// Set status before and after
 	j.setStatus("runnning " + j.Cmd)
 	defer j.setStatus("done running " + j.Cmd)
+	var ret job.Return
 
 	// Create the cmd to run
 	cmd := exec.Command(j.Cmd, j.Args...)
@@ -89,16 +91,23 @@ func (j *ShellCommand) Run(jobData map[string]interface{}) (job.Return, error) {
 	exit := int64(0)
 	err := cmd.Run()
 	if err != nil {
-		exit = 1
+		ret = job.Return{
+			State:  proto.STATE_FAIL,
+			Exit:   1,
+			Error:  err,
+			Stdout: stdout.String(),
+			Stderr: stderr.String(),
+		}
 	}
 
-	ret := job.Return{
+	ret = job.Return{
+		State:  proto.STATE_COMPLETE,
 		Exit:   exit,
 		Error:  err,
 		Stdout: stdout.String(),
 		Stderr: stderr.String(),
 	}
-	return ret, nil
+	return ret
 }
 
 func (j *ShellCommand) Stop() error {
