@@ -146,8 +146,8 @@ func TestJobData(t *testing.T) {
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v1", "k2": "v2"}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v8"}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k3": "v3"}),
+			"job2": mock.NewRunner(true, "", nil, nil, map[string]interface{}{}),
+			"job3": mock.NewRunner(true, "", nil, nil, map[string]interface{}{}),
 			"job4": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v9"}),
 		},
 	}
@@ -164,14 +164,15 @@ func TestJobData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
-	expectedJobData := map[string]interface{}{"k1": "v9", "k2": "v2", "k3": "v3"}
+	expectedJobData := map[string]interface{}{"k1": "v9", "k2": "v2"}
 
 	err = traverser.Run()
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	if !reflect.DeepEqual(c.JobData, expectedJobData) {
-		t.Errorf("jobData = %v, expected %v", c.JobData, expectedJobData)
+
+	if !reflect.DeepEqual(jc.Jobs["job4"].Data, expectedJobData) {
+		t.Errorf("job4 data = %v, expected %v", jc.Jobs["job4"].Data, expectedJobData)
 	}
 }
 

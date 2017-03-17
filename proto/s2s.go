@@ -13,6 +13,7 @@ type Job struct {
 	Type  string
 	Bytes []byte
 	State byte
+	Data  map[string]interface{}
 }
 
 type Jobs []Job
