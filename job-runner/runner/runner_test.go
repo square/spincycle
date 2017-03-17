@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/job-runner/runner"
+	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/test/mock"
 )
 
@@ -33,10 +35,9 @@ func TestFactory(t *testing.T) {
 	}
 }
 
-// Return an error when we try to create a new Runner for the job.
-func TestRunError(t *testing.T) {
+func TestRunFail(t *testing.T) {
 	job := &mock.Job{
-		RunErr: mock.ErrJob,
+		RunReturn: job.Return{State: proto.STATE_FAIL},
 	}
 	jr := runner.NewJobRunner(job, 3)
 
@@ -48,6 +49,7 @@ func TestRunError(t *testing.T) {
 
 func TestRunSuccess(t *testing.T) {
 	job := &mock.Job{
+		RunReturn:    job.Return{State: proto.STATE_COMPLETE},
 		AddedJobData: map[string]interface{}{"some": "thing"},
 	}
 	jr := runner.NewJobRunner(job, 3)

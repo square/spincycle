@@ -57,8 +57,8 @@ func NewJobRunner(job job.Job, requestId uint) *JobRunner {
 func (r *JobRunner) Run(jobData map[string]interface{}) bool {
 	r.Lock()
 	log.Infof("[chain=%d,job=%s]: Starting the job.", r.requestId, r.job.Name())
-	errChan := make(chan error, 1) // must be buffered!
-	go r.runJob(jobData, errChan)
+	stateChan := make(chan byte, 1) // must be buffered!
+	go r.runJob(jobData, stateChan)
 	r.running = true
 	r.Unlock()
 
@@ -68,19 +68,20 @@ func (r *JobRunner) Run(jobData map[string]interface{}) bool {
 		r.Unlock()
 	}()
 
-	// Wait for job to complete or a call to Stop
+	// Wait for job to finish or a call to Stop
 	select {
-	case err := <-errChan: // job completed
-		if err != nil {
-			log.Errorf("[chain=%d,job=%s]: Error running job (error: %s).", r.requestId, r.job.Name(), err)
+	case state := <-stateChan: // job finished
+		switch state {
+		case proto.STATE_COMPLETE:
+			log.Infof("[chain=%d,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
+			return true
+		default:
+			log.Errorf("[chain=%d,job=%s]: Job did not complete successfully (state: %s).", r.requestId, r.job.Name(), state)
 			return false
 		}
 	case <-r.stopChan: // Stop called
 		return false
 	}
-
-	log.Infof("[chain=%d,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
-	return true
 }
 
 func (r *JobRunner) Stop() error {
@@ -113,13 +114,11 @@ func (r *JobRunner) Status() string {
 // -------------------------------------------------------------------------- //
 
 // runJob runs a job and creates a job log entry when it's done.
-func (r *JobRunner) runJob(jobData map[string]interface{}, errChan chan error) {
+func (r *JobRunner) runJob(jobData map[string]interface{}, stateChan chan byte) {
 	// job.Run is a blocking operation that could take a long time.
 	jobReturn, err := r.job.Run(jobData)
-
-	// do a better job handilng jobReturn
-	if err == nil && jobReturn.Error != nil {
-		err = jobReturn.Error
+	if err != nil {
+		log.Errorf("[chain=%d,job=%s]: Error running job (error: %s).", r.requestId, r.job.Name(), err)
 	}
 
 	log.Infof("[chain=%d,job=%s]: Job Return - state: %s, exit code: %d, error message: %s, stdout: %s, "+
@@ -130,5 +129,5 @@ func (r *JobRunner) runJob(jobData map[string]interface{}, errChan chan error) {
 	// jle := NewJLE(jobData, jobReturn, err)
 	// jle.Send()
 
-	errChan <- err
+	stateChan <- jobReturn.State
 }
