@@ -3,6 +3,7 @@
 package router
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -19,7 +20,7 @@ type HTTPContext struct {
 
 // WriteJSON writes a response as the JSON object.
 func (ctx HTTPContext) WriteJSON(v interface{}) error {
-	out, err := marshal(v)
+	out, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		http.Error(ctx.Response, "Error while encoding JSON.", http.StatusInternalServerError)
 		return err

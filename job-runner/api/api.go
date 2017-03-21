@@ -1,6 +1,8 @@
 // Copyright 2017, Square, Inc.
 
-// Package api implements api route handling.
+// Package api provides controllers for each API endpoint. Controllers are
+// "dumb wiring"; there is little to no application logic in this package.
+// Controllers call and coordinate other packages to satisfy the API endpoint.
 package api
 
 import (
