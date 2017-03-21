@@ -60,6 +60,7 @@ func (api *API) newJobChainHandler(ctx router.HTTPContext) {
 		err := decoder.Decode(&jobChain)
 		if err != nil {
 			ctx.APIError(router.ErrInternal, "Can't decode request body (error: %s)", err)
+			return
 		}
 
 		c := chain.NewChain(&jobChain)
@@ -69,12 +70,14 @@ func (api *API) newJobChainHandler(ctx router.HTTPContext) {
 		traverser, err := chain.NewTraverser(api.chainRepo, api.runnerFactory, c)
 		if err != nil {
 			ctx.APIError(router.ErrBadRequest, "Problem creating traverser (error: %s)", err)
+			return
 		}
 
 		// Add the traverser to the repo.
 		err = api.traverserRepo.Add(requestIdStr, traverser)
 		if err != nil {
 			ctx.APIError(router.ErrBadRequest, err.Error())
+			return
 		}
 	default:
 		ctx.UnsupportedAPIMethod()

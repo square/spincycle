@@ -140,6 +140,13 @@ func (t *traverser) Run() error {
 
 		// If the job completed successfully, add its next jobs to
 		// runJobChan. If it didn't complete successfully, do nothing.
+		// Also, pass a copy of the job's jobData to all next jobs.
+		//
+		// It is important to note that when a job has multiple parent
+		// jobs, it will get its jobData from whichever parent finishes
+		// last. Therefore, a job should never rely on jobData that was
+		// created during an unrelated sequence at any time earlier in
+		// the chain.
 		switch job.State {
 		case proto.STATE_COMPLETE:
 			for _, nextJob := range t.chain.NextJobs(job.Name) {
@@ -149,6 +156,11 @@ func (t *traverser) Run() error {
 						t.chain.RequestId(), job.Name, nextJob.Name)
 					// Set the state of the job in the chain to "Running".
 					t.chain.SetJobState(nextJob.Name, proto.STATE_RUNNING)
+
+					// Copy the jobData from the job that just finished to the next job.
+					for k, v := range job.Data {
+						nextJob.Data[k] = v
+					}
 
 					t.runJobChan <- nextJob // add the job to the run queue
 				} else {
@@ -257,15 +269,8 @@ func (t *traverser) runJobs() {
 			default:
 			}
 
-			// Get a copy of the current jobData.
-			currentJobData := t.chain.CurrentJobData()
-
 			// Run the job. This is a blocking operation that could take a long time.
-			completed := jr.Run(currentJobData)
-
-			// Merge the current jobData (which at this point it has potentially been
-			// modified by the job) bach into the chain's jobData.
-			t.chain.AddJobData(currentJobData)
+			completed := jr.Run(j.Data)
 
 			if completed {
 				j.State = proto.STATE_COMPLETE

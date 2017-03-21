@@ -44,8 +44,10 @@ type Job interface {
 	// previously-ran (upstream) jobs. Run can modify jobData. Run is expected
 	// to block, but the job must respond to Stop and Status while running.
 	// The returned error, if any, indicates a problem before or after running
-	// the job. The job error and exit code, if any, is returned in the Return
-	// structure.
+	// the job. The final state of the job is returned in the Return structure,
+	// along with other things like the error and exit code (if there was one).
+	// The final state is the most imporant field because it is used by the JR
+	// to determine how to handle a job when it's done running.
 	//
 	// Currently, the Job Runner only calls this method once. Resuming a job is
 	// not currently supported.

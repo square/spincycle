@@ -248,31 +248,6 @@ func TestIsDoneComplete(t *testing.T) {
 	}
 }
 
-func TestCurrentJobData(t *testing.T) {
-	jc := &proto.JobChain{}
-	c := NewChain(jc)
-	expectedJobData := map[string]interface{}{"k1": "v1"}
-	c.JobData = expectedJobData
-
-	jobData := c.CurrentJobData()
-	if !reflect.DeepEqual(jobData, expectedJobData) {
-		t.Errorf("jobData = %v, want %v", jobData, expectedJobData)
-	}
-}
-
-func TestAddJobData(t *testing.T) {
-	jc := &proto.JobChain{}
-	c := NewChain(jc)
-	c.JobData = map[string]interface{}{"k1": "v1", "k2": "v2"}
-
-	expectedJobData := map[string]interface{}{"k1": "v7", "k2": "v2", "k3": "v3"}
-
-	c.AddJobData(map[string]interface{}{"k1": "v7", "k3": "v3"})
-	if !reflect.DeepEqual(c.JobData, expectedJobData) {
-		t.Errorf("jobData = %v, want %v", c.JobData, expectedJobData)
-	}
-}
-
 func TestSetJobState(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(1),
