@@ -7,13 +7,26 @@ import (
 )
 
 var (
+	// ErrUnknownJobType is returned by a job.Factory when the factory cannot
+	// make the requested job type.
 	ErrUnknownJobType = errors.New("unknown job type")
-	ErrJobNotFound    = errors.New("job not found")
-	ErrNilJob         = errors.New("nil job")
-	ErrConnectTimeout = errors.New("connect timeout")
-	ErrRunTimeout     = errors.New("run timeout")
+
+	// ErrJobNotFound is returned by a job.Repo when the repo doesn't contain
+	// the requested job by name.
+	ErrJobNotFound = errors.New("job not found")
+
+	// ErrRunTimeout should be returned by a job when it times out.
+	ErrRunTimeout = errors.New("run timeout")
 )
 
+// ErrArgNotSet should be returned by a job when a required key is not set in jobArgs.
+// For example:
+//
+//   val, ok := jobArgs["srcHost"]
+//   if !ok {
+//     return job.ErrArgNotSet{"srcHost"}
+//   }
+//
 type ErrArgNotSet struct {
 	Arg string
 }
@@ -24,6 +37,7 @@ func (e ErrArgNotSet) Error() string {
 
 // --------------------------------------------------------------------------
 
+// ErrDataNotSet should be returned by a job when a required key is not set in jobData.
 type ErrDataNotSet struct {
 	Key string
 }
@@ -34,6 +48,16 @@ func (e ErrDataNotSet) Error() string {
 
 // --------------------------------------------------------------------------
 
+// ErrWrongDataType should be returned by a job when a jobData value is not
+// the expected type. For example:
+//
+//   type Cluster struct { ... }
+//   v := jobData["cluster"]
+//   cluster, ok := v.(Cluster)
+//   if !ok {
+//     return job.NewErrWrongDataType("cluster", v, Cluster{})
+//   }
+//
 type ErrWrongDataType struct {
 	Key        string
 	GotType    reflect.Type

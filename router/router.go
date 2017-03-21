@@ -1,18 +1,39 @@
 // Copyright 2017, Square, Inc.
 
-// Package router provides advanced routing logic, which can be used on top of standard net/http MUX.
+// Package router provides routing logic and implements the http.Handler interface.
 package router
 
 import (
-	"encoding/json"
 	"net/http"
 	"regexp"
 	"strings"
 )
 
+// ErrorResponse is a structured error returned in HTTP endpoints returning JSON.
+type ErrorResponse struct {
+	Message string `json:"message"` // human-readable message.
+	Type    string `json:"type"`    // enum-like object.
+}
+
+const (
+	ErrNotFound     = "not_found"
+	ErrMissingParam = "bad_request.missing_parameter"
+	ErrInvalidParam = "bad_request.invalid_parameter"
+	ErrBadRequest   = "bad_request"
+	ErrInternal     = "internal_server_error"
+)
+
+var errorCodes = map[string]int{
+	ErrNotFound:     http.StatusNotFound,
+	ErrMissingParam: http.StatusBadRequest,
+	ErrInvalidParam: http.StatusBadRequest,
+	ErrBadRequest:   http.StatusBadRequest,
+	ErrInternal:     http.StatusInternalServerError,
+}
+
 const section = "([^/]*)"
 
-// Route - A single route, matched by regex.
+// Route represents a single endpoint matched by regex.
 type Route struct {
 	Name    string            // API endpoint name.
 	Pattern *regexp.Regexp    // URL Path to match against.
@@ -41,8 +62,6 @@ func (router *Router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		handler.ServeHTTP(rw, req)
 		return
 	}
-
-	// Fallback
 	http.NotFound(rw, req)
 }
 
@@ -65,9 +84,4 @@ func (router *Router) Handler(req *http.Request) (h http.Handler, pattern string
 	}
 
 	return nil, ""
-}
-
-// helper function to marshal results to JSON
-func marshal(v interface{}) ([]byte, error) {
-	return json.MarshalIndent(v, "", "  ")
 }
