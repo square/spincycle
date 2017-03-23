@@ -9,11 +9,11 @@ import (
 )
 
 type Job struct {
-	Name  string
-	Type  string
-	Bytes []byte
-	State byte
-	Data  map[string]interface{}
+	Name  string                 `json:"name"`
+	Type  string                 `json:"type"`
+	Bytes []byte                 `json:"bytes"`
+	State byte                   `json:"state"`
+	Data  map[string]interface{} `json:"data"`
 }
 
 type Jobs []Job
@@ -29,17 +29,17 @@ type JobChain struct {
 }
 
 type JobStatus struct {
-	Name   string
-	Status string // Live status response from a running job.
-	State  byte   // The state that a job is in (ex: running, pending, etc.).
+	Name   string `json:"name"`
+	Status string `json:"status"` // Live status response from a running job.
+	State  byte   `json:"state"`  // The state that a job is in (ex: running, pending, etc.).
 }
 
 type JobStatuses []JobStatus
 
 // This is how the JR sends statuses back to the RM.
 type JobChainStatus struct {
-	RequestId   uint
-	JobStatuses JobStatuses
+	RequestId   uint        `json:"requestId"`
+	JobStatuses JobStatuses `json:"jobStatuses"`
 }
 
 // Function needed to implement sorting on Jobs.
