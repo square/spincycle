@@ -15,9 +15,7 @@ import (
 
 func main() {
 	// Make the API
-	runnerFactory := &runner.RealRunnerFactory{
-		JobFactory: external.JobFactory,
-	}
+	runnerFactory := runner.NewRunnerFactory(external.JobFactory)
 	chainRepo := chain.NewMemoryRepo()
 	api := api.NewAPI(&router.Router{}, chainRepo, runnerFactory)
 
