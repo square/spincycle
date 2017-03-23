@@ -11,11 +11,11 @@ import (
 // Job represents one job in a job chain. Jobs are identified by Name, which
 // must be unique within a job chain.
 type Job struct {
-	Name  string                 // unique name
-	Type  string                 // user-specific job type
-	Bytes []byte                 // return value of Job.Serialize method
-	State byte                   // STATE_* const
-	Data  map[string]interface{} // job-specific data during Job.Run
+	Name  string                 `json:"name"`  // unique name
+	Type  string                 `json:"type"`  // user-specific job type
+	Bytes []byte                 `json:"bytes"` // return value of Job.Serialize method
+	State byte                   `json:"state"` // STATE_* const
+	Data  map[string]interface{} `json:"data"`  // job-specific data during Job.Run
 }
 
 // JobChain represents a directed acyclic graph of jobs for one request.
@@ -31,15 +31,15 @@ type JobChain struct {
 
 // JobStatus represents the status of one job in a job chain.
 type JobStatus struct {
-	Name   string // unique name
-	Status string // stdout of job, if any
-	State  byte   // STATE_* const
+	Name   string `json:"name"`   // unique name
+	Status string `json:"status"` // stdout of job, if any
+	State  byte   `json:"state"`  // STATE_* const
 }
 
 // JobChainStatus represents the status of a job chain reported by the Job Runner.
 type JobChainStatus struct {
-	RequestId   uint
-	JobStatuses JobStatuses
+	RequestId   uint        `json:"requestId"`
+	JobStatuses JobStatuses `json:"jobStatuses"`
 }
 
 // JobStatuses are a list of job status sorted by job name.
