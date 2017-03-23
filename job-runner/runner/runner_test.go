@@ -22,9 +22,7 @@ func TestFactory(t *testing.T) {
 		JobToReturn: job,
 		MakeErr:     mock.ErrJob,
 	}
-	rf := runner.RealRunnerFactory{
-		JobFactory: jf,
-	}
+	rf := runner.NewRunnerFactory(jf)
 
 	jr, err := rf.Make("jtype", "jname", []byte{}, 3)
 	if err != mock.ErrJob {

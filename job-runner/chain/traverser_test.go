@@ -18,8 +18,8 @@ func TestRunErrorNoFirstJob(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{},
-			"job2": &mock.Runner{},
+			"job1": {},
+			"job2": {},
 		},
 	}
 	jc := &proto.JobChain{
@@ -47,9 +47,9 @@ func TestRunComplete(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -81,9 +81,9 @@ func TestRunNotComplete(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -118,9 +118,9 @@ func TestJobUnknownState(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2"},
-			"job2": []string{"job3"},
-			"job3": []string{},
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {},
 		},
 	}
 	c := NewChain(jc)
@@ -154,9 +154,9 @@ func TestJobData(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -192,9 +192,9 @@ func TestStop(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -294,9 +294,9 @@ func TestStatus(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)

@@ -11,6 +11,7 @@ var (
 	ErrConflict = errors.New("chain already exists in repo")
 )
 
+// Repo stores and provides thread-safe access to job chains.
 type Repo interface {
 	Get(uint) (*chain, error)
 	Add(*chain) error

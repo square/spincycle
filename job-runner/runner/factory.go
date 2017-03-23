@@ -14,13 +14,20 @@ type RunnerFactory interface {
 	Make(jobType, jobName string, jobBytes []byte, requestId uint) (Runner, error)
 }
 
-type RealRunnerFactory struct {
-	JobFactory job.Factory
+type runnerFactory struct {
+	jobFactory job.Factory
 }
 
-func (f *RealRunnerFactory) Make(jobType, jobName string, jobBytes []byte, requestId uint) (Runner, error) {
+// NewRunnerFactory makes a RunnerFactory.
+func NewRunnerFactory(jobFactory job.Factory) RunnerFactory {
+	return &runnerFactory{
+		jobFactory: jobFactory,
+	}
+}
+
+func (f *runnerFactory) Make(jobType, jobName string, jobBytes []byte, requestId uint) (Runner, error) {
 	// Instantiate a "blank" job of the given type
-	job, err := f.JobFactory.Make(jobType, jobName)
+	job, err := f.jobFactory.Make(jobType, jobName)
 	if err != nil {
 		return nil, err
 	}

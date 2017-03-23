@@ -22,6 +22,7 @@ const (
 	REQUEST_ID_PATTERN = "([0-9]+)"
 )
 
+// API provides controllers for endpoints it registers with a router.
 type API struct {
 	Router        *router.Router
 	chainRepo     chain.Repo
@@ -31,6 +32,7 @@ type API struct {
 
 var hostname func() (string, error) = os.Hostname
 
+// NewAPI makes a new API.
 func NewAPI(router *router.Router, chainRepo chain.Repo, runnerFactory runner.RunnerFactory) *API {
 	api := &API{
 		Router:        router,

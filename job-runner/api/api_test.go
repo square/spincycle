@@ -26,8 +26,8 @@ func TestNewJobChainValid(t *testing.T) {
 		RequestId: uint(4),
 		Jobs:      mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2"},
-			"job2": []string{"job3"},
+			"job1": {"job2"},
+			"job2": {"job3"},
 		},
 	}
 	payload, err := json.Marshal(jobChain)
@@ -56,9 +56,9 @@ func TestNewJobChainInvalid(t *testing.T) {
 		RequestId: uint(4),
 		Jobs:      mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2"},
-			"job2": []string{"job3"},
-			"job3": []string{"job1"},
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job1"},
 		},
 	}
 	payload, err := json.Marshal(jobChain)
@@ -92,8 +92,8 @@ func TestStartJobChain(t *testing.T) {
 		RequestId: uint(4),
 		Jobs:      mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2"},
-			"job2": []string{"job3"},
+			"job1": {"job2"},
+			"job2": {"job3"},
 		},
 	}
 	c := chain.NewChain(jobChain)

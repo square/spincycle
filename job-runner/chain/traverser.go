@@ -9,7 +9,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
-// A traverser provides the ability to run a job chain while respecting the
+// A Traverser provides the ability to run a job chain while respecting the
 // dependencies between the jobs.
 type Traverser interface {
 	// Run traverses a job chain and runs all of the jobs in it. It starts by
@@ -87,6 +87,7 @@ func NewTraverser(chainRepo Repo, rf runner.RunnerFactory, chain *chain) (*trave
 	}, nil
 }
 
+// Run runs all jobs in the chain and blocks until all jobs complete or a job fails.
 func (t *traverser) Run() error {
 	log.Infof("[chain=%d]: Starting the chain traverser.", t.chain.RequestId())
 	firstJob, err := t.chain.FirstJob()
@@ -177,6 +178,7 @@ func (t *traverser) Run() error {
 	return nil
 }
 
+// Stop stops the traverser if it's running.
 func (t *traverser) Stop() error {
 	log.Infof("[chain=%d]: Stopping the traverser and all jobs.", t.chain.RequestId())
 
@@ -198,6 +200,7 @@ func (t *traverser) Stop() error {
 	return nil
 }
 
+// Status returns the status of currently running jobs in the chain.
 func (t *traverser) Status() (proto.JobChainStatus, error) {
 	log.Infof("[chain=%d]: Getting the status of all running jobs.", t.chain.RequestId())
 	var jobChainStatus proto.JobChainStatus

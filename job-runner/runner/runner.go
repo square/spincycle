@@ -1,6 +1,6 @@
 // Copyright 2017, Square, Inc.
 
-// Packege runner implements running a job.
+// Package runner implements running a job.
 package runner
 
 import (
@@ -76,7 +76,7 @@ func (r *JobRunner) Run(jobData map[string]interface{}) bool {
 			log.Infof("[chain=%d,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
 			return true
 		default:
-			log.Errorf("[chain=%d,job=%s]: Job did not complete successfully (state: %s).", r.requestId, r.job.Name(), state)
+			log.Errorf("[chain=%d,job=%s]: Job did not complete successfully (state: %s).", r.requestId, r.job.Name(), proto.StateName[state])
 			return false
 		}
 	case <-r.stopChan: // Stop called

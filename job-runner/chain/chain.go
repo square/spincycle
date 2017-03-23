@@ -13,9 +13,18 @@ import (
 )
 
 var (
-	ErrFirstJob             = errors.New("chain does not have exactly one first job")
-	ErrLastJob              = errors.New("chain does not have exactly one last job")
-	ErrCyclic               = errors.New("chain is cyclic")
+	// ErrFirstJob means the job chain doesn't have only one job with zero indegrees.
+	// This is usually an error in the adjacency list.
+	ErrFirstJob = errors.New("chain does not have exactly one first job")
+
+	// ErrLastJob means the job chain doesn't have only one job with zero outdegrees.
+	// This is usually an error in the adjacency list.
+	ErrLastJob = errors.New("chain does not have exactly one last job")
+
+	// ErrCyclic means the graph has a cycle.
+	ErrCyclic = errors.New("chain is cyclic")
+
+	// ErrInvalidAdjacencyList means the adjacency list refers to a nonexistent job.
 	ErrInvalidAdjacencyList = errors.New("chain does not have a valid adjacency list")
 )
 
@@ -55,8 +64,7 @@ func (c *chain) FirstJob() (proto.Job, error) {
 	}
 
 	if len(jobNames) != 1 {
-		err := ErrFirstJob
-		return proto.Job{}, err
+		return proto.Job{}, ErrFirstJob
 	}
 
 	return c.JobChain.Jobs[jobNames[0]], nil
@@ -73,8 +81,7 @@ func (c *chain) LastJob() (proto.Job, error) {
 	}
 
 	if len(jobNames) != 1 {
-		err := ErrLastJob
-		return proto.Job{}, err
+		return proto.Job{}, ErrLastJob
 	}
 
 	return c.JobChain.Jobs[jobNames[0]], nil
@@ -265,7 +272,7 @@ func (c *chain) SetIncomplete() {
 // indegreeCounts finds the indegree for each job in the chain.
 func (c *chain) indegreeCounts() map[string]int {
 	indegreeCounts := make(map[string]int)
-	for job, _ := range c.JobChain.Jobs {
+	for job := range c.JobChain.Jobs {
 		indegreeCounts[job] = 0
 	}
 
@@ -283,7 +290,7 @@ func (c *chain) indegreeCounts() map[string]int {
 // outdegreeCounts finds the outdegree for each job in the chain.
 func (c *chain) outdegreeCounts() map[string]int {
 	outdegreeCounts := make(map[string]int)
-	for job, _ := range c.JobChain.Jobs {
+	for job := range c.JobChain.Jobs {
 		outdegreeCounts[job] = len(c.JobChain.AdjacencyList[job])
 	}
 
@@ -318,7 +325,7 @@ func (c *chain) isAcyclic() bool {
 
 		// Get a job from the queue.
 		var curJob string
-		for k, _ := range queue {
+		for k := range queue {
 			curJob = k
 		}
 		delete(queue, curJob)
