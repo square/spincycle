@@ -165,7 +165,7 @@ func TestNewJobChain(t *testing.T) {
 	jc := proto.JobChain{
 		RequestId: 3,
 		Jobs: map[string]proto.Job{
-			"job1": proto.Job{
+			"job1": {
 				Name:  "job1",
 				Type:  "type1",
 				Bytes: []byte{1, 2, 3, 4, 5},
@@ -173,7 +173,7 @@ func TestNewJobChain(t *testing.T) {
 			},
 		},
 		AdjacencyList: map[string][]string{
-			"job1": []string{},
+			"job1": {},
 		},
 		State: 4,
 	}
