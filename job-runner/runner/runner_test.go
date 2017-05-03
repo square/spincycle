@@ -6,9 +6,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/job-runner/runner"
+	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/test/mock"
 )
+
+var noJobData = map[string]interface{}{}
 
 // Return errors when creating a new Runner.
 func TestFactory(t *testing.T) {
@@ -18,9 +22,7 @@ func TestFactory(t *testing.T) {
 		JobToReturn: job,
 		MakeErr:     mock.ErrJob,
 	}
-	rf := runner.RealRunnerFactory{
-		JobFactory: jf,
-	}
+	rf := runner.NewRunnerFactory(jf)
 
 	jr, err := rf.Make("jtype", "jname", []byte{}, 3)
 	if err != mock.ErrJob {
@@ -31,14 +33,13 @@ func TestFactory(t *testing.T) {
 	}
 }
 
-// Return an error when we try to create a new Runner for the job.
-func TestRunError(t *testing.T) {
+func TestRunFail(t *testing.T) {
 	job := &mock.Job{
-		RunErr: mock.ErrJob,
+		RunReturn: job.Return{State: proto.STATE_FAIL},
 	}
 	jr := runner.NewJobRunner(job, 3)
 
-	completed := jr.Run(make(map[string]string))
+	completed := jr.Run(noJobData)
 	if completed != false {
 		t.Errorf("completed = %t, expected false", completed)
 	}
@@ -46,11 +47,12 @@ func TestRunError(t *testing.T) {
 
 func TestRunSuccess(t *testing.T) {
 	job := &mock.Job{
-		AddedJobData: map[string]string{"some": "thing"},
+		RunReturn:    job.Return{State: proto.STATE_COMPLETE},
+		AddedJobData: map[string]interface{}{"some": "thing"},
 	}
 	jr := runner.NewJobRunner(job, 3)
 
-	jobData := make(map[string]string)
+	jobData := make(map[string]interface{})
 
 	completed := jr.Run(jobData)
 	if completed != true {
@@ -58,7 +60,7 @@ func TestRunSuccess(t *testing.T) {
 	}
 
 	val, ok := jobData["some"]
-	if !ok || val != "thing" {
+	if !ok || val.(string) != "thing" {
 		t.Errorf("jobData is not what we expected")
 	}
 }
@@ -74,7 +76,7 @@ func TestRunStop(t *testing.T) {
 	// Run the job and let it block
 	completedChan := make(chan bool)
 	go func() {
-		completedChan <- jr.Run(make(map[string]string))
+		completedChan <- jr.Run(noJobData)
 	}()
 
 	// Sleep just a moment to let Run ^ run, then stop it

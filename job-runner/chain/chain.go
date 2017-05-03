@@ -13,9 +13,18 @@ import (
 )
 
 var (
-	ErrFirstJob             = errors.New("chain does not have exactly one first job")
-	ErrLastJob              = errors.New("chain does not have exactly one last job")
-	ErrCyclic               = errors.New("chain is cyclic")
+	// ErrFirstJob means the job chain doesn't have only one job with zero indegrees.
+	// This is usually an error in the adjacency list.
+	ErrFirstJob = errors.New("chain does not have exactly one first job")
+
+	// ErrLastJob means the job chain doesn't have only one job with zero outdegrees.
+	// This is usually an error in the adjacency list.
+	ErrLastJob = errors.New("chain does not have exactly one last job")
+
+	// ErrCyclic means the graph has a cycle.
+	ErrCyclic = errors.New("chain is cyclic")
+
+	// ErrInvalidAdjacencyList means the adjacency list refers to a nonexistent job.
 	ErrInvalidAdjacencyList = errors.New("chain does not have a valid adjacency list")
 )
 
@@ -23,10 +32,6 @@ var (
 type chain struct {
 	// The jobchain.
 	JobChain *proto.JobChain `json:"jobChain"`
-
-	// Data shared between jobs. Any job in the chain can read from or write
-	// to this.
-	JobData map[string]string `json:"data"`
 
 	// Protection for the chain.
 	*sync.RWMutex
@@ -38,12 +43,12 @@ func NewChain(jc *proto.JobChain) *chain {
 	// Set the state of all jobs in the chain to "Pending".
 	for _, job := range jc.Jobs {
 		job.State = proto.STATE_PENDING
+		job.Data = map[string]interface{}{}
 		jc.Jobs[job.Name] = job
 	}
 
 	return &chain{
 		JobChain: jc,
-		JobData:  make(map[string]string),
 		RWMutex:  &sync.RWMutex{},
 	}
 }
@@ -59,8 +64,7 @@ func (c *chain) FirstJob() (proto.Job, error) {
 	}
 
 	if len(jobNames) != 1 {
-		err := ErrFirstJob
-		return proto.Job{}, err
+		return proto.Job{}, ErrFirstJob
 	}
 
 	return c.JobChain.Jobs[jobNames[0]], nil
@@ -77,8 +81,7 @@ func (c *chain) LastJob() (proto.Job, error) {
 	}
 
 	if len(jobNames) != 1 {
-		err := ErrLastJob
-		return proto.Job{}, err
+		return proto.Job{}, ErrLastJob
 	}
 
 	return c.JobChain.Jobs[jobNames[0]], nil
@@ -132,7 +135,7 @@ func (c *chain) JobIsReady(jobName string) bool {
 // can happen if all of the jobs in the chain or complete, or if some or all
 // of the jobs in the chain failed.
 //
-// A chain is complete if every job in it completed succesfully.
+// A chain is complete if every job in it completed successfully.
 func (c *chain) IsDone() (done bool, complete bool) {
 	done = true
 	complete = true
@@ -216,28 +219,6 @@ func (c *chain) Validate() error {
 	return nil
 }
 
-// CurrentJobData returns a copy of the chains jobData as it exists when this
-// method is called.
-func (c *chain) CurrentJobData() map[string]string {
-	c.RLock() // -- lock
-	resp := make(map[string]string)
-	for k, v := range c.JobData {
-		resp[k] = v
-	}
-	c.RUnlock() // -- unlock
-	return resp
-}
-
-// AddJobData adds new data to the chain's jobData. It doesn't care if it
-// overwrites existing data.
-func (c *chain) AddJobData(newData map[string]string) {
-	c.Lock() // -- lock
-	for k, v := range newData {
-		c.JobData[k] = v
-	}
-	c.Unlock() // -- unlock
-}
-
 // RequestId returns the request id of the job chain.
 func (c *chain) RequestId() uint {
 	return c.JobChain.RequestId
@@ -291,7 +272,7 @@ func (c *chain) SetIncomplete() {
 // indegreeCounts finds the indegree for each job in the chain.
 func (c *chain) indegreeCounts() map[string]int {
 	indegreeCounts := make(map[string]int)
-	for job, _ := range c.JobChain.Jobs {
+	for job := range c.JobChain.Jobs {
 		indegreeCounts[job] = 0
 	}
 
@@ -309,7 +290,7 @@ func (c *chain) indegreeCounts() map[string]int {
 // outdegreeCounts finds the outdegree for each job in the chain.
 func (c *chain) outdegreeCounts() map[string]int {
 	outdegreeCounts := make(map[string]int)
-	for job, _ := range c.JobChain.Jobs {
+	for job := range c.JobChain.Jobs {
 		outdegreeCounts[job] = len(c.JobChain.AdjacencyList[job])
 	}
 
@@ -344,7 +325,7 @@ func (c *chain) isAcyclic() bool {
 
 		// Get a job from the queue.
 		var curJob string
-		for k, _ := range queue {
+		for k := range queue {
 			curJob = k
 		}
 		delete(queue, curJob)

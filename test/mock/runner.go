@@ -25,15 +25,15 @@ func (f *RunnerFactory) Make(jobType, jobName string, jobBytes []byte, requestId
 type Runner struct {
 	runCompleted bool
 	statusResp   string
-	runBlock     chan struct{}     // Channel that Runner.Run() will block on, if defined.
-	stopChan     chan struct{}     // Channel used to stop a blocked Runner.Run().
-	jobData      map[string]string // The jobData that this runner will set.
+	runBlock     chan struct{}          // Channel that Runner.Run() will block on, if defined.
+	stopChan     chan struct{}          // Channel used to stop a blocked Runner.Run().
+	jobData      map[string]interface{} // The jobData that this runner will set.
 	// --
 	running     bool // true when Run is running
 	*sync.Mutex      // guards running
 }
 
-func NewRunner(runCompleted bool, statusResp string, runBlock, stopChan chan struct{}, jobData map[string]string) *Runner {
+func NewRunner(runCompleted bool, statusResp string, runBlock, stopChan chan struct{}, jobData map[string]interface{}) *Runner {
 	return &Runner{
 		runCompleted: runCompleted,
 		statusResp:   statusResp,
@@ -45,7 +45,7 @@ func NewRunner(runCompleted bool, statusResp string, runBlock, stopChan chan str
 	}
 }
 
-func (r *Runner) Run(jobData map[string]string) bool {
+func (r *Runner) Run(jobData map[string]interface{}) bool {
 	r.Lock() // -- lock
 	r.running = true
 	r.Unlock() // -- unlock

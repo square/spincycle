@@ -7,18 +7,19 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/test/mock"
 )
 
-// Return an error when we try to get the first job of the chain.
+var noJobData = map[string]interface{}{}
+
+// Return an error when we try to create an invalid chain.
 func TestRunErrorNoFirstJob(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{},
-			"job2": &mock.Runner{},
+			"job1": {},
+			"job2": {},
 		},
 	}
 	jc := &proto.JobChain{
@@ -26,9 +27,7 @@ func TestRunErrorNoFirstJob(t *testing.T) {
 		AdjacencyList: map[string][]string{},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
-
-	err := traverser.Run()
+	_, err := NewTraverser(chainRepo, rf, c)
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -39,24 +38,27 @@ func TestRunComplete(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job4": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job4": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
 
-	err := traverser.Run()
+	err = traverser.Run()
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -70,24 +72,27 @@ func TestRunNotComplete(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job3": mock.NewRunner(false, "", nil, nil, map[string]string{}),
-			"job4": mock.NewRunner(false, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job3": mock.NewRunner(false, "", nil, nil, noJobData),
+			"job4": mock.NewRunner(false, "", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
 
-	err := traverser.Run()
+	err = traverser.Run()
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -104,27 +109,30 @@ func TestJobUnknownState(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{}),
-			"job4": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
+			"job4": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2"},
-			"job2": []string{"job3"},
-			"job3": []string{},
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {},
 		},
 	}
 	c := NewChain(jc)
 	for _, job := range c.JobChain.Jobs {
 		job.State = proto.STATE_UNKNOWN
 	}
-	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
 
-	if err := traverser.Run(); err != nil {
+	if err = traverser.Run(); err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 	if c.JobChain.State != proto.STATE_COMPLETE {
@@ -137,30 +145,34 @@ func TestJobData(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{"k1": "v1", "k2": "v2"}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]string{"k1": "v8"}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]string{"k3": "v3"}),
-			"job4": mock.NewRunner(true, "", nil, nil, map[string]string{"k1": "v9"}),
+			"job1": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v1", "k2": "v2"}),
+			"job2": mock.NewRunner(true, "", nil, nil, map[string]interface{}{}),
+			"job3": mock.NewRunner(true, "", nil, nil, map[string]interface{}{}),
+			"job4": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v9"}),
 		},
 	}
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
-	expectedJobData := map[string]string{"k1": "v9", "k2": "v2", "k3": "v3"}
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
+	expectedJobData := map[string]interface{}{"k1": "v9", "k2": "v2"}
 
-	err := traverser.Run()
+	err = traverser.Run()
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	if !reflect.DeepEqual(c.JobData, expectedJobData) {
-		t.Errorf("jobData = %v, expected %v", c.JobData, expectedJobData)
+
+	if !reflect.DeepEqual(jc.Jobs["job4"].Data, expectedJobData) {
+		t.Errorf("job4 data = %v, expected %v", jc.Jobs["job4"].Data, expectedJobData)
 	}
 }
 
@@ -171,22 +183,25 @@ func TestStop(t *testing.T) {
 	stopChan := make(chan struct{})
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, stopChan, map[string]string{}),
-			"job2": mock.NewRunner(true, "", runBlock, stopChan, map[string]string{}),
-			"job3": mock.NewRunner(true, "", runBlock, stopChan, map[string]string{}),
-			"job4": mock.NewRunner(true, "", nil, stopChan, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, stopChan, noJobData),
+			"job2": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
+			"job3": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
+			"job4": mock.NewRunner(true, "", nil, stopChan, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
 	traverser.stopChan = stopChan
 
 	// Start the traverser.
@@ -222,24 +237,29 @@ func TestStop(t *testing.T) {
 	}
 }
 
-// Error getting a runner from the cache when calling Stop.
-func TestStopCacheError(t *testing.T) {
+// Error getting a runner from the repo when calling Stop.
+func TestStopRepoError(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	runBlock := make(chan struct{})
 	stopChan := make(chan struct{})
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", runBlock, stopChan, map[string]string{}),
+			"job1": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	cache := &mock.Datastore{
+	runnerRepo := NewRunnerRepo()
+	runnerRepo.Store = &mock.KVStore{
 		GetAllResp: map[string]interface{}{"not a": "runner"},
 	}
-	traverser := NewTraverser(chainRepo, rf, c, cache)
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
+	traverser.runnerRepo = runnerRepo
 	traverser.stopChan = stopChan
 
 	// Start the traverser.
@@ -252,10 +272,10 @@ func TestStopCacheError(t *testing.T) {
 		}
 	}
 
-	err := traverser.Stop()
+	err = traverser.Stop()
 
-	if err != nil {
-		t.Errorf("err = %s, expected nil", err)
+	if err == nil {
+		t.Errorf("err = nil, expected %s", ErrInvalidRunner)
 	}
 }
 
@@ -265,22 +285,25 @@ func TestStatus(t *testing.T) {
 	runBlock := make(chan struct{})
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "job1 running", nil, nil, map[string]string{}),
-			"job2": mock.NewRunner(true, "job2 running", runBlock, nil, map[string]string{}),
-			"job3": mock.NewRunner(true, "job3 running", runBlock, nil, map[string]string{}),
-			"job4": mock.NewRunner(true, "job4 running", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "job1 running", nil, nil, noJobData),
+			"job2": mock.NewRunner(true, "job2 running", runBlock, nil, noJobData),
+			"job3": mock.NewRunner(true, "job3 running", runBlock, nil, noJobData),
+			"job4": mock.NewRunner(true, "job4 running", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -327,7 +350,7 @@ func TestRunJobsRunnerError(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 		MakeErr: mock.ErrRunner,
 	}
@@ -335,7 +358,10 @@ func TestRunJobsRunnerError(t *testing.T) {
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	traverser := NewTraverser(chainRepo, rf, c, db.NewMemory())
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
 
 	// Start consuming from the runJobChan
 	go traverser.runJobs()
@@ -351,22 +377,27 @@ func TestRunJobsRunnerError(t *testing.T) {
 	}
 }
 
-// Error adding a runner to the cache.
-func TestRunJobsCacheAddError(t *testing.T) {
+// Error adding a runner to the repo.
+func TestRunJobsRepoAddError(t *testing.T) {
 	chainRepo := NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]string{}),
+			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	}
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	cache := &mock.Datastore{
-		AddErr: mock.ErrDatastore,
+	runnerRepo := NewRunnerRepo()
+	runnerRepo.Store = &mock.KVStore{
+		AddErr: mock.ErrKVStore,
 	}
-	traverser := NewTraverser(chainRepo, rf, c, cache)
+	traverser, err := NewTraverser(chainRepo, rf, c)
+	if err != nil {
+		t.Fatalf("err = %s, expected nil", err)
+	}
+	traverser.runnerRepo = runnerRepo
 
 	// Start consuming from the runJobChan
 	go traverser.runJobs()

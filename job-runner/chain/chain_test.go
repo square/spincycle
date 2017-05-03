@@ -16,9 +16,9 @@ func TestFirstJobMultiple(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job3"},
-			"job2": []string{"job3"},
-			"job3": []string{"job4"},
+			"job1": {"job3"},
+			"job2": {"job3"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -33,9 +33,9 @@ func TestFirstJobOne(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -55,7 +55,7 @@ func TestLastJobMultiple(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
+			"job1": {"job2", "job3"},
 		},
 	}
 	c := NewChain(jc)
@@ -70,9 +70,9 @@ func TestLastJobOne(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -92,9 +92,9 @@ func TestNextJobs(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -119,9 +119,9 @@ func TestPreviousJobs(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -146,9 +146,9 @@ func TestJobIsReady(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -175,8 +175,8 @@ func TestIsDoneJobRunning(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -196,8 +196,8 @@ func TestIsDoneNotComplete(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -229,8 +229,8 @@ func TestIsDoneComplete(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -245,31 +245,6 @@ func TestIsDoneComplete(t *testing.T) {
 
 	if done != expectedDone || complete != expectedComplete {
 		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
-	}
-}
-
-func TestCurrentJobData(t *testing.T) {
-	jc := &proto.JobChain{}
-	c := NewChain(jc)
-	expectedJobData := map[string]string{"k1": "v1"}
-	c.JobData = expectedJobData
-
-	jobData := c.CurrentJobData()
-	if !reflect.DeepEqual(jobData, expectedJobData) {
-		t.Errorf("jobData = %v, want %v", jobData, expectedJobData)
-	}
-}
-
-func TestAddJobData(t *testing.T) {
-	jc := &proto.JobChain{}
-	c := NewChain(jc)
-	c.JobData = map[string]string{"k1": "v1", "k2": "v2"}
-
-	expectedJobData := map[string]string{"k1": "v7", "k2": "v2", "k3": "v3"}
-
-	c.AddJobData(map[string]string{"k1": "v7", "k3": "v3"})
-	if !reflect.DeepEqual(c.JobData, expectedJobData) {
-		t.Errorf("jobData = %v, want %v", c.JobData, expectedJobData)
 	}
 }
 
@@ -331,13 +306,13 @@ func TestIndegreeCounts(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(9),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4", "job5"},
-			"job3": []string{"job5", "job6"},
-			"job4": []string{"job6", "job7"},
-			"job5": []string{"job6"},
-			"job6": []string{"job8"},
-			"job7": []string{"job8"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4", "job5"},
+			"job3": {"job5", "job6"},
+			"job4": {"job6", "job7"},
+			"job5": {"job6"},
+			"job6": {"job8"},
+			"job7": {"job8"},
 		},
 	}
 	c := NewChain(jc)
@@ -364,12 +339,12 @@ func TestOutdegreeCounts(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(7),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4", "job5", "job6"},
-			"job3": []string{"job5", "job6"},
-			"job4": []string{"job5", "job6"},
-			"job5": []string{"job6"},
-			"job6": []string{"job7"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4", "job5", "job6"},
+			"job3": {"job5", "job6"},
+			"job4": {"job5", "job6"},
+			"job5": {"job6"},
+			"job6": {"job7"},
 		},
 	}
 	c := NewChain(jc)
@@ -395,9 +370,9 @@ func TestIsAcyclic(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
@@ -413,10 +388,10 @@ func TestIsAcyclic(t *testing.T) {
 	jc = &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job4"},
-			"job4": []string{"job1"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job4"},
+			"job4": {"job1"},
 		},
 	}
 	c = NewChain(jc)
@@ -432,11 +407,11 @@ func TestIsAcyclic(t *testing.T) {
 	jc = &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4"},
-			"job3": []string{"job5"},
-			"job4": []string{"job5"},
-			"job5": []string{"job2", "job6"},
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job5"},
+			"job4": {"job5"},
+			"job5": {"job2", "job6"},
 		},
 	}
 	c = NewChain(jc)
@@ -452,9 +427,9 @@ func TestIsAcyclic(t *testing.T) {
 	jc = &proto.JobChain{
 		Jobs: mock.InitJobs(5),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job3"},
-			"job2": []string{"job3"},
-			"job3": []string{"job4", "job5"},
+			"job1": {"job3"},
+			"job2": {"job3"},
+			"job3": {"job4", "job5"},
 		},
 	}
 	c = NewChain(jc)
@@ -472,7 +447,7 @@ func TestValidateAdjacencyList(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(2),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
+			"job1": {"job2", "job3"},
 		},
 	}
 	c := NewChain(jc)
@@ -488,8 +463,8 @@ func TestValidateAdjacencyList(t *testing.T) {
 	jc = &proto.JobChain{
 		Jobs: mock.InitJobs(2),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2"},
-			"job7": []string{},
+			"job1": {"job2"},
+			"job7": {},
 		},
 	}
 	c = NewChain(jc)
@@ -505,8 +480,8 @@ func TestValidateAdjacencyList(t *testing.T) {
 	jc = &proto.JobChain{
 		Jobs: mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
-			"job1": []string{"job2"},
-			"job2": []string{"job3"},
+			"job1": {"job2"},
+			"job2": {"job3"},
 		},
 	}
 	c = NewChain(jc)

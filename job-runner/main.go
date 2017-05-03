@@ -6,26 +6,24 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/square/spincycle/job-runner/app"
+	"github.com/square/spincycle/job-runner/api"
 	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/db"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job/external"
+	"github.com/square/spincycle/router"
 )
 
 func main() {
-	runnerFactory := &runner.RealRunnerFactory{
-		JobFactory: external.JobFactory,
-	}
+	// Make the API
+	runnerFactory := runner.NewRunnerFactory(external.JobFactory)
+	chainRepo := chain.NewMemoryRepo()
+	api := api.NewAPI(&router.Router{}, chainRepo, runnerFactory)
 
+	// Make an HTTP server using API
 	h := http.NewServeMux()
-	app.New(&app.Config{
-		HTTPServer:    h,
-		RunnerFactory: runnerFactory,
-		ChainRepo:     chain.NewMemoryRepo(),
-		Cache:         db.NewMemory(),
-	})
+	h.Handle("/api/", api.Router)
 
+	// Listen and serve
 	err := http.ListenAndServe(":9999", h)
 	log.Fatal(err)
 }
