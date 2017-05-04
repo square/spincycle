@@ -11,13 +11,6 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-// A RedisConnectionPool is used for pooling redis connections.
-type RedisConnectionPool interface {
-	ActiveCount() int
-	Close() error
-	Get() redis.Conn
-}
-
 // RedisRepoConfig contains all info necessary to build a RedisRepo.
 type RedisRepoConfig struct {
 	Server      string        // Redis server name/ip
@@ -28,13 +21,13 @@ type RedisRepoConfig struct {
 }
 
 type RedisRepo struct {
-	ConnectionPool RedisConnectionPool // connection pool
-	Conf           RedisRepoConfig     // config this Repo was built with
+	ConnectionPool *redis.Pool     // redis connection pool
+	Conf           RedisRepoConfig // config this Repo was built with
 }
 
 // NewRedisRepo builds a new Repo backed by redis
 func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
-	// build connection pool
+	// Build connection pool.
 	addr := fmt.Sprintf("%s:%d", c.Server, c.Port)
 
 	pool := &redis.Pool{
@@ -42,7 +35,7 @@ func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 		IdleTimeout: c.IdleTimeout,
 		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", addr) },
 
-		// ping if connection's old and tear down if there's an error
+		// Ping if connection's old and tear down if there's an error.
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {
 			if time.Since(t) < time.Minute {
 				return nil
@@ -52,20 +45,17 @@ func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 		},
 	}
 
-	// is a ping test even worth it since we define TestOnBorrow above?
 	r := &RedisRepo{
 		ConnectionPool: pool,
 		Conf:           c,
 	}
 
-	err := r.ping()
-
-	return r, err
+	return r, r.ping() // Make sure we can ping the redis.
 }
 
 // Add adds a chain to redis and returns any error encountered.  It returns an
 // error if there is already a Chain with the same RequestId. Keys are of the
-// form "#{RedisRepo.conf.Prefix}::#{CHAIN_KEY}::#{RequestId}"
+// form "#{RedisRepo.conf.Prefix}::#{CHAIN_KEY}::#{RequestId}".
 func (r *RedisRepo) Add(chain *chain) error {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
@@ -90,7 +80,7 @@ func (r *RedisRepo) Add(chain *chain) error {
 }
 
 // Set writes a chain to redis, overwriting any if it exists. Returns any
-// errors encountered
+// errors encountered.
 func (r *RedisRepo) Set(chain *chain) error {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
@@ -106,7 +96,7 @@ func (r *RedisRepo) Set(chain *chain) error {
 	return err
 }
 
-// Get takes a Chain RequestId and retrieves that Chain from redis
+// Get takes a Chain RequestId and retrieves that Chain from redis.
 func (r *RedisRepo) Get(id uint) (*chain, error) {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
@@ -119,23 +109,21 @@ func (r *RedisRepo) Get(id uint) (*chain, error) {
 	}
 
 	var chain *chain
-
 	err = json.Unmarshal(data, &chain)
 	if err != nil {
 		return nil, err
 	}
-	chain.RWMutex = &sync.RWMutex{} // need to initialize the mutex
+	chain.RWMutex = &sync.RWMutex{} // Need to initialize the mutex
 
 	return chain, nil
 }
 
-// Remove takes a Chain RequestId and deletes that Chain from redis
+// Remove takes a Chain RequestId and deletes that Chain from redis.
 func (r *RedisRepo) Remove(id uint) error {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
 	key := r.fmtIdKey(id)
-
 	num, err := redis.Uint64(conn.Do("DEL", key))
 	if err != nil {
 		return err
@@ -152,7 +140,7 @@ func (r *RedisRepo) Remove(id uint) error {
 	}
 }
 
-// ping grabs a single connection and runs a PING against the redis server
+// ping grabs a single connection and runs a PING against the redis server.
 func (r *RedisRepo) ping() error {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
@@ -162,13 +150,13 @@ func (r *RedisRepo) ping() error {
 }
 
 // fmtIdKey takes a Chain RequestId and returns the key where that Chain is
-// stored in redis
+// stored in redis.
 func (r *RedisRepo) fmtIdKey(id uint) string {
 	return fmt.Sprintf("%s::%s::%d", r.Conf.Prefix, CHAIN_KEY, id)
 }
 
 // fmtChainKey takes a Chain and returns the key where that Chain is stored in
-// redis
+// redis.
 func (r *RedisRepo) fmtChainKey(chain *chain) string {
 	return r.fmtIdKey(chain.JobChain.RequestId)
 }

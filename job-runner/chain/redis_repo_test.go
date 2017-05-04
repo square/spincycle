@@ -13,6 +13,8 @@ import (
 	"github.com/square/spincycle/proto"
 )
 
+// initRedis will setup a test redis instance, and build a chain.RedisRepo that
+// is configured to talk to the test redis instance.
 func initRedis() (*miniredis.Miniredis, *chain.RedisRepo) {
 	redis, err := miniredis.Run()
 	if err != nil {
