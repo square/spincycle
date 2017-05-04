@@ -5,11 +5,16 @@ package chain
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
+
+// ChainKey is the keyspace for serialized Chains
+const CHAIN_KEY = "ChainById"
 
 var (
 	ErrKeyExists           = errors.New("key already exists in redis")
@@ -17,8 +22,14 @@ var (
 	ErrMultipleKeysDeleted = errors.New("multiple keys deleted from redis")
 )
 
-// RedisRepoConfig contains all info necessary to build a RedisRepo. Use
-// NewRedisRepoConfig() to create one for use.
+// A RedisConnectionPool is used for pooling redis connections.
+type RedisConnectionPool interface {
+	ActiveCount() int
+	Close() error
+	Get() redis.Conn
+}
+
+// RedisRepoConfig contains all info necessary to build a RedisRepo.
 type RedisRepoConfig struct {
 	Server      string        // Redis server name/ip
 	Port        uint          // Redis server port
@@ -27,24 +38,12 @@ type RedisRepoConfig struct {
 	IdleTimeout time.Duration // passed to redis.Pool
 }
 
-// NewRedisRepoConfig provides a RedisRepoConfig with defaults set. You must
-// set Server
-func NewRedisRepoConfig() RedisRepoConfig {
-	return RedisRepoConfig{
-		Port:        6379,
-		Prefix:      "SpinCycle::ChainRepo",
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
-	}
-}
-
 type RedisRepo struct {
-	connectionPool *redis.Pool      // Redis connection pool
-	conf           *RedisRepoConfig // config this Repo was built with
+	ConnectionPool RedisConnectionPool // connection pool
+	Conf           RedisRepoConfig     // config this Repo was built with
 }
 
 // NewRedisRepo builds a new Repo backed by redis
-//func NewRedisRepo(c RedisRepoConfig) (Repo, error) {
 func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 	// build connection pool
 	addr := c.Server + ":" + strconv.FormatUint(uint64(c.Port), 10)
@@ -66,8 +65,8 @@ func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 
 	// is a ping test even worth it since we define TestOnBorrow above?
 	r := &RedisRepo{
-		connectionPool: pool,
-		conf:           &c,
+		ConnectionPool: pool,
+		Conf:           c,
 	}
 
 	err := r.ping()
@@ -77,9 +76,9 @@ func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 
 // Add adds a chain to redis and returns any error encountered.  It returns an
 // error if there is already a Chain with the same RequestId. Keys are of the
-// form "#{RedisRepo.conf.Prefix}::#{ChainKey}::#{RequestId}"
+// form "#{RedisRepo.conf.Prefix}::#{CHAIN_KEY}::#{RequestId}"
 func (r *RedisRepo) Add(chain *chain) error {
-	conn := r.connectionPool.Get()
+	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
 	marshalled, err := json.Marshal(chain)
@@ -104,7 +103,7 @@ func (r *RedisRepo) Add(chain *chain) error {
 // Set writes a chain to redis, overwriting any if it exists. Returns any
 // errors encountered
 func (r *RedisRepo) Set(chain *chain) error {
-	conn := r.connectionPool.Get()
+	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
 	marshalled, err := json.Marshal(chain)
@@ -120,7 +119,7 @@ func (r *RedisRepo) Set(chain *chain) error {
 
 // Get takes a Chain RequestId and retrieves that Chain from redis
 func (r *RedisRepo) Get(id uint) (*chain, error) {
-	conn := r.connectionPool.Get()
+	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
 	key := r.fmtIdKey(id)
@@ -136,13 +135,14 @@ func (r *RedisRepo) Get(id uint) (*chain, error) {
 	if err != nil {
 		return nil, err
 	}
+	chain.RWMutex = &sync.RWMutex{} // need to initialize the mutex
 
 	return chain, nil
 }
 
 // Remove takes a Chain RequestId and deletes that Chain from redis
 func (r *RedisRepo) Remove(id uint) error {
-	conn := r.connectionPool.Get()
+	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
 	key := r.fmtIdKey(id)
@@ -165,24 +165,20 @@ func (r *RedisRepo) Remove(id uint) error {
 
 // ping grabs a single connection and runs a PING against the redis server
 func (r *RedisRepo) ping() error {
-	conn := r.connectionPool.Get()
+	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
 	_, err := conn.Do("PING")
 	return err
 }
 
-// ChainKey is the keyspace for serialized Chains
-const ChainKey = "ChainById"
-
 // fmtIdKey takes a Chain RequestId and returns the key where that Chain is
 // stored in redis
 func (r *RedisRepo) fmtIdKey(id uint) string {
-	s := strconv.FormatUint(uint64(id), 10)
-	return r.conf.Prefix + "::" + ChainKey + "::" + s
+	return fmt.Sprintf("%s::%s::%d", r.Conf.Prefix, CHAIN_KEY, id)
 }
 
-// fmtIdKey takes a Chain and returns the key where that Chain is stored in
+// fmtChainKey takes a Chain and returns the key where that Chain is stored in
 // redis
 func (r *RedisRepo) fmtChainKey(chain *chain) string {
 	return r.fmtIdKey(chain.JobChain.RequestId)
