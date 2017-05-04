@@ -12,6 +12,16 @@
 			"Rev": "d26492970760ca5d33129d2d799e34be5c4782eb"
 		},
 		{
+			"ImportPath": "github.com/alicebob/miniredis",
+			"Comment": "2.1.0",
+			"Rev": "995ba133bd8fe5dae5a34732bd99f558b0b60e1a"
+		},
+		{
+			"ImportPath": "github.com/alicebob/miniredis/server",
+			"Comment": "2.1.0",
+			"Rev": "995ba133bd8fe5dae5a34732bd99f558b0b60e1a"
+		},
+		{
 			"ImportPath": "github.com/garyburd/redigo/internal",
 			"Rev": "a47585eaae68b1d14b02940d2af1b9194f3caa9c"
 		},

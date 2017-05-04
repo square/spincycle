@@ -4,22 +4,11 @@ package chain
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
-)
-
-// ChainKey is the keyspace for serialized Chains
-const CHAIN_KEY = "ChainById"
-
-var (
-	ErrKeyExists           = errors.New("key already exists in redis")
-	ErrKeyNotFound         = errors.New("key not found in redis")
-	ErrMultipleKeysDeleted = errors.New("multiple keys deleted from redis")
 )
 
 // A RedisConnectionPool is used for pooling redis connections.
@@ -46,7 +35,7 @@ type RedisRepo struct {
 // NewRedisRepo builds a new Repo backed by redis
 func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 	// build connection pool
-	addr := c.Server + ":" + strconv.FormatUint(uint64(c.Port), 10)
+	addr := fmt.Sprintf("%s:%d", c.Server, c.Port)
 
 	pool := &redis.Pool{
 		MaxIdle:     c.MaxIdle,
@@ -94,7 +83,7 @@ func (r *RedisRepo) Add(chain *chain) error {
 	}
 
 	if ct != 1 {
-		return ErrKeyExists
+		return ErrConflict
 	}
 
 	return nil
@@ -154,12 +143,12 @@ func (r *RedisRepo) Remove(id uint) error {
 
 	switch num {
 	case 0:
-		return ErrKeyNotFound
+		return ErrNotFound
 	case 1:
 		return nil // Success!
 	default:
 		// It's bad if we ever reach this
-		return ErrMultipleKeysDeleted
+		return ErrMultipleDeleted
 	}
 }
 
