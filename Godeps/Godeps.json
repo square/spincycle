@@ -1,7 +1,7 @@
 {
 	"ImportPath": "github.com/square/spincycle",
 	"GoVersion": "go1.7",
-	"GodepVersion": "v79",
+	"GodepVersion": "v77",
 	"Packages": [
 		"./..."
 	],
@@ -10,6 +10,18 @@
 			"ImportPath": "github.com/Sirupsen/logrus",
 			"Comment": "v0.11.0",
 			"Rev": "d26492970760ca5d33129d2d799e34be5c4782eb"
+		},
+		{
+			"ImportPath": "github.com/garyburd/redigo/internal",
+			"Rev": "a47585eaae68b1d14b02940d2af1b9194f3caa9c"
+		},
+		{
+			"ImportPath": "github.com/garyburd/redigo/redis",
+			"Rev": "a47585eaae68b1d14b02940d2af1b9194f3caa9c"
+		},
+		{
+			"ImportPath": "github.com/go-test/deep",
+			"Rev": "64dede292689f3a95b6fa7fb6f3efec6c2fecf06"
 		},
 		{
 			"ImportPath": "golang.org/x/sys/unix",
