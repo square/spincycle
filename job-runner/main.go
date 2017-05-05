@@ -14,9 +14,21 @@ import (
 )
 
 func main() {
+	// Make a chain repo.
+	chainRepo := chain.NewMemoryRepo()
+	// We could alternatively make a redis-backed chain repo with something
+	// like the following:
+	//
+	// redisConf := chain.RedisRepoConfig{
+	// 	Server:      "localhost",
+	// 	Port:        6379,
+	// 	Prefix:      "SpinCycle::ChainRepo",
+	// 	IdleTimeout: 240 * time.Second,
+	// }
+	// chainRepo := chain.NewRedisRepo(redisConf)
+
 	// Make the API
 	runnerFactory := runner.NewRunnerFactory(external.JobFactory)
-	chainRepo := chain.NewMemoryRepo()
 	api := api.NewAPI(&router.Router{}, chainRepo, runnerFactory)
 
 	// Make an HTTP server using API
