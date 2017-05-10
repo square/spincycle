@@ -28,7 +28,7 @@ func main() {
 	// chainRepo := chain.NewRedisRepo(redisConf)
 
 	// Make the API
-	runnerFactory := runner.NewRunnerFactory(external.JobFactory)
+	runnerFactory := runner.NewFactory(external.JobFactory)
 	api := api.NewAPI(&router.Router{}, chainRepo, runnerFactory)
 
 	// Make an HTTP server using API
