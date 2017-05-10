@@ -45,10 +45,10 @@ type traverser struct {
 	chainRepo Repo
 
 	// Factory for creating Runners.
-	rf runner.RunnerFactory
+	runnerFactory runner.Factory
 
 	// Repo for keeping track of active Runners.
-	runnerRepo RunnerRepo
+	runnerRepo runner.Repo
 
 	// Used to stop a running traverser.
 	stopChan chan struct{}
@@ -61,7 +61,7 @@ type traverser struct {
 }
 
 // NewTraverser creates a new traverser for a job chain.
-func NewTraverser(chainRepo Repo, rf runner.RunnerFactory, chain *chain) (*traverser, error) {
+func NewTraverser(cr Repo, rf runner.Factory, rr runner.Repo, chain *chain) (*traverser, error) {
 	// Validate the chain.
 	log.Infof("[chain=%d]: Validating the chain.", chain.RequestId())
 	err := chain.Validate()
@@ -71,19 +71,19 @@ func NewTraverser(chainRepo Repo, rf runner.RunnerFactory, chain *chain) (*trave
 
 	// Save the chain to the repo.
 	log.Infof("[chain=%d]: Saving the chain to the repo.", chain.RequestId())
-	err = chainRepo.Set(chain)
+	err = cr.Set(chain)
 	if err != nil {
 		return nil, err
 	}
 
 	return &traverser{
-		chain:       chain,
-		chainRepo:   chainRepo,
-		rf:          rf,
-		runnerRepo:  NewRunnerRepo(),
-		stopChan:    make(chan struct{}),
-		runJobChan:  make(chan proto.Job),
-		doneJobChan: make(chan proto.Job),
+		chain:         chain,
+		chainRepo:     cr,
+		runnerFactory: rf,
+		runnerRepo:    rr,
+		stopChan:      make(chan struct{}),
+		runJobChan:    make(chan proto.Job),
+		doneJobChan:   make(chan proto.Job),
 	}, nil
 }
 
@@ -239,7 +239,7 @@ func (t *traverser) runJobs() {
 			defer func() { t.doneJobChan <- j }() // send the job to doneJobChan when done
 
 			// Create a job runner.
-			jr, err := t.rf.Make(j.Type, j.Name, j.Bytes, t.chain.RequestId())
+			jr, err := t.runnerFactory.Make(j.Type, j.Name, j.Bytes, t.chain.RequestId())
 			if err != nil {
 				log.Errorf("[chain=%d,job=%s]: Error creating runner (error: %s).",
 					t.chain.RequestId(), j.Name, err)

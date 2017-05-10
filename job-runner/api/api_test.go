@@ -98,7 +98,7 @@ func TestStartJobChain(t *testing.T) {
 	}
 	c := chain.NewChain(jobChain)
 
-	traverser, err := chain.NewTraverser(api.chainRepo, api.runnerFactory, c)
+	traverser, err := chain.NewTraverser(api.chainRepo, api.runnerFactory, api.runnerRepo, c)
 	if err != nil {
 		t.Fatal(err)
 	}

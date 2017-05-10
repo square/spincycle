@@ -7,6 +7,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/test/mock"
 )
@@ -22,12 +23,13 @@ func TestRunErrorNoFirstJob(t *testing.T) {
 			"job2": {},
 		},
 	}
+	rr := runner.NewRepo()
 	jc := &proto.JobChain{
 		Jobs:          mock.InitJobs(2),
 		AdjacencyList: map[string][]string{},
 	}
 	c := NewChain(jc)
-	_, err := NewTraverser(chainRepo, rf, c)
+	_, err := NewTraverser(chainRepo, rf, rr, c)
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -44,6 +46,7 @@ func TestRunComplete(t *testing.T) {
 			"job4": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	}
+	rr := runner.NewRepo()
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -53,7 +56,7 @@ func TestRunComplete(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, rr, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
@@ -78,6 +81,7 @@ func TestRunNotComplete(t *testing.T) {
 			"job4": mock.NewRunner(false, "", nil, nil, noJobData),
 		},
 	}
+	rr := runner.NewRepo()
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -87,7 +91,7 @@ func TestRunNotComplete(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, rr, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
@@ -115,6 +119,7 @@ func TestJobUnknownState(t *testing.T) {
 			"job4": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	}
+	rr := runner.NewRepo()
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
@@ -127,7 +132,7 @@ func TestJobUnknownState(t *testing.T) {
 	for _, job := range c.JobChain.Jobs {
 		job.State = proto.STATE_UNKNOWN
 	}
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, rr, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
@@ -151,6 +156,7 @@ func TestJobData(t *testing.T) {
 			"job4": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v9"}),
 		},
 	}
+	rr := runner.NewRepo()
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -160,7 +166,7 @@ func TestJobData(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, rr, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
@@ -189,6 +195,7 @@ func TestStop(t *testing.T) {
 			"job4": mock.NewRunner(true, "", nil, stopChan, noJobData),
 		},
 	}
+	rr := runner.NewRepo()
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -198,7 +205,7 @@ func TestStop(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, rr, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
@@ -251,15 +258,14 @@ func TestStopRepoError(t *testing.T) {
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	runnerRepo := NewRunnerRepo()
+	runnerRepo := runner.NewRepo()
 	runnerRepo.Store = &mock.KVStore{
 		GetAllResp: map[string]interface{}{"not a": "runner"},
 	}
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, runnerRepo, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
-	traverser.runnerRepo = runnerRepo
 	traverser.stopChan = stopChan
 
 	// Start the traverser.
@@ -275,7 +281,7 @@ func TestStopRepoError(t *testing.T) {
 	err = traverser.Stop()
 
 	if err == nil {
-		t.Errorf("err = nil, expected %s", ErrInvalidRunner)
+		t.Errorf("err = nil, expected %s", runner.ErrInvalidRunner)
 	}
 }
 
@@ -291,6 +297,7 @@ func TestStatus(t *testing.T) {
 			"job4": mock.NewRunner(true, "job4 running", nil, nil, noJobData),
 		},
 	}
+	rr := runner.NewRepo()
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -300,7 +307,7 @@ func TestStatus(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, rr, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
@@ -354,11 +361,12 @@ func TestRunJobsRunnerError(t *testing.T) {
 		},
 		MakeErr: mock.ErrRunner,
 	}
+	rr := runner.NewRepo()
 	jc := &proto.JobChain{
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, rr, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
@@ -389,15 +397,14 @@ func TestRunJobsRepoAddError(t *testing.T) {
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	runnerRepo := NewRunnerRepo()
+	runnerRepo := runner.NewRepo()
 	runnerRepo.Store = &mock.KVStore{
 		AddErr: mock.ErrKVStore,
 	}
-	traverser, err := NewTraverser(chainRepo, rf, c)
+	traverser, err := NewTraverser(chainRepo, rf, runnerRepo, c)
 	if err != nil {
 		t.Fatalf("err = %s, expected nil", err)
 	}
-	traverser.runnerRepo = runnerRepo
 
 	// Start consuming from the runJobChan
 	go traverser.runJobs()

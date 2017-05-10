@@ -26,18 +26,20 @@ const (
 type API struct {
 	Router        *router.Router
 	chainRepo     chain.Repo
-	runnerFactory runner.RunnerFactory
+	runnerFactory runner.Factory
+	runnerRepo    runner.Repo
 	traverserRepo chain.TraverserRepo // Repo for keeping track of active traversers
 }
 
 var hostname func() (string, error) = os.Hostname
 
 // NewAPI makes a new API.
-func NewAPI(router *router.Router, chainRepo chain.Repo, runnerFactory runner.RunnerFactory) *API {
+func NewAPI(router *router.Router, chainRepo chain.Repo, runnerFactory runner.Factory) *API {
 	api := &API{
 		Router:        router,
 		chainRepo:     chainRepo,
 		runnerFactory: runnerFactory,
+		runnerRepo:    runner.NewRepo(),
 		traverserRepo: chain.NewTraverserRepo(),
 	}
 
@@ -69,7 +71,7 @@ func (api *API) newJobChainHandler(ctx router.HTTPContext) {
 		requestIdStr := strconv.FormatUint(uint64(c.RequestId()), 10)
 
 		// Create a new traverser.
-		traverser, err := chain.NewTraverser(api.chainRepo, api.runnerFactory, c)
+		traverser, err := chain.NewTraverser(api.chainRepo, api.runnerFactory, api.runnerRepo, c)
 		if err != nil {
 			ctx.APIError(router.ErrBadRequest, "Problem creating traverser (error: %s)", err)
 			return

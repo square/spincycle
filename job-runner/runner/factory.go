@@ -6,26 +6,26 @@ import (
 	"github.com/square/spincycle/job"
 )
 
-// A RunnerFactory makes a Runner for one job of the given type, re-created
+// A Factory makes a Runner for one job of the given type, re-created
 // with the given bytes, and associated with the given request ID. The job
 // name is only used for testing with a mock RunnerFactory. An error is returned
 // if the job fails to instantiate or re-create itself.
-type RunnerFactory interface {
+type Factory interface {
 	Make(jobType, jobName string, jobBytes []byte, requestId uint) (Runner, error)
 }
 
-type runnerFactory struct {
+type factory struct {
 	jobFactory job.Factory
 }
 
 // NewRunnerFactory makes a RunnerFactory.
-func NewRunnerFactory(jobFactory job.Factory) RunnerFactory {
-	return &runnerFactory{
+func NewFactory(jobFactory job.Factory) Factory {
+	return &factory{
 		jobFactory: jobFactory,
 	}
 }
 
-func (f *runnerFactory) Make(jobType, jobName string, jobBytes []byte, requestId uint) (Runner, error) {
+func (f *factory) Make(jobType, jobName string, jobBytes []byte, requestId uint) (Runner, error) {
 	// Instantiate a "blank" job of the given type
 	job, err := f.jobFactory.Make(jobType, jobName)
 	if err != nil {
