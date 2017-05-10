@@ -23,7 +23,7 @@ type Job struct {
 type JobChain struct {
 	RequestId     string              `json:"requestId"`     // unique identifier for the chain
 	Jobs          map[string]Job      `json:"jobs"`          // Job.Name => job
-	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Name => next jobs
+	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Name => next []Job.Name
 	State         byte                `json:"state"`         // STATE_* const
 	StartTime     time.Time           `json:"startTime"`     // when the chain started running
 	EndTime       time.Time           `json:"endTime"`       // when the chain ended running
