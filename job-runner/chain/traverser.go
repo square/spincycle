@@ -81,7 +81,8 @@ func (f *traverserFactory) Make(jobChain proto.JobChain) (Traverser, error) {
 	// for the chain: running, cleaning up, removing from repo when done, etc.
 	// And traverser and chain have the same lifespan: traverser is done when
 	// chain is done.
-	return NewTraverser(chain, f.chainRepo, f.runnerFactory, f.runnerRepo)
+	tr := NewTraverser(chain, f.chainRepo, f.runnerFactory, f.runnerRepo)
+	return tr, nil
 }
 
 // A traverser represents a job chain and everything needed to traverse it.
@@ -109,7 +110,7 @@ type traverser struct {
 }
 
 // NewTraverser creates a new traverser for a job chain.
-func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rr runner.Repo) (*traverser, error) {
+func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rr runner.Repo) *traverser {
 	return &traverser{
 		chain:         chain,
 		chainRepo:     cr,
@@ -118,7 +119,7 @@ func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rr runner.Repo) (*tr
 		stopChan:      make(chan struct{}),
 		runJobChan:    make(chan proto.Job),
 		doneJobChan:   make(chan proto.Job),
-	}, nil
+	}
 }
 
 // Run runs all jobs in the chain and blocks until all jobs complete or a job fails.
