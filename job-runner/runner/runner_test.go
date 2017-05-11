@@ -24,7 +24,7 @@ func TestFactory(t *testing.T) {
 	}
 	rf := runner.NewFactory(jf)
 
-	jr, err := rf.Make("jtype", "jname", []byte{}, 3)
+	jr, err := rf.Make("jtype", "jname", []byte{}, "abc")
 	if err != mock.ErrJob {
 		t.Errorf("err = nil, expected %s", mock.ErrJob)
 	}
@@ -37,7 +37,7 @@ func TestRunFail(t *testing.T) {
 	job := &mock.Job{
 		RunReturn: job.Return{State: proto.STATE_FAIL},
 	}
-	jr := runner.NewJobRunner(job, 3)
+	jr := runner.NewJobRunner(job, "abc")
 
 	completed := jr.Run(noJobData)
 	if completed != false {
@@ -50,7 +50,7 @@ func TestRunSuccess(t *testing.T) {
 		RunReturn:    job.Return{State: proto.STATE_COMPLETE},
 		AddedJobData: map[string]interface{}{"some": "thing"},
 	}
-	jr := runner.NewJobRunner(job, 3)
+	jr := runner.NewJobRunner(job, "abc")
 
 	jobData := make(map[string]interface{})
 
@@ -71,7 +71,7 @@ func TestRunStop(t *testing.T) {
 	job := &mock.Job{
 		RunBlock: runBlock,
 	}
-	jr := runner.NewJobRunner(job, 3)
+	jr := runner.NewJobRunner(job, "abc")
 
 	// Run the job and let it block
 	completedChan := make(chan bool)
@@ -97,7 +97,7 @@ func TestRunStatus(t *testing.T) {
 	job := &mock.Job{
 		StatusResp: expectedStatus,
 	}
-	jr := runner.NewJobRunner(job, 3)
+	jr := runner.NewJobRunner(job, "abc")
 
 	status := jr.Status()
 	if status != expectedStatus {

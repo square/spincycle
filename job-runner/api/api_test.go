@@ -9,10 +9,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"reflect"
 	"testing"
 
+	"github.com/go-test/deep"
 	"github.com/square/spincycle/job-runner/chain"
+	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/router"
 	"github.com/square/spincycle/test/mock"
@@ -20,40 +21,35 @@ import (
 
 var noJobData = map[string]interface{}{}
 
-func TestNewJobChainValid(t *testing.T) {
-	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{})
-	jobChain := &proto.JobChain{
-		RequestId: uint(4),
-		Jobs:      mock.InitJobs(3),
-		AdjacencyList: map[string][]string{
-			"job1": {"job2"},
-			"job2": {"job3"},
-		},
-	}
-	payload, err := json.Marshal(jobChain)
-	if err != nil {
-		t.Fatal(err)
-	}
+var noRunnersFactory = &mock.RunnerFactory{}
+var defaultTraverserFactory chain.TraverserFactory
+var defaultTraverserRepo chain.TraverserRepo
+var defaultAPI *API
+var defaultServer *httptest.Server
 
-	h := httptest.NewServer(api.Router)
-	defer h.Close()
-
-	res, err := http.Post(h.URL+API_ROOT+"job-chains", "application/json; charset=utf-8", bytes.NewBuffer(payload))
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-
-	if res.StatusCode != 200 {
-		t.Errorf("response status = %d, expected 200", res.StatusCode)
-	}
+func setup(rf runner.Factory) {
+	defaultTraverserFactory = chain.NewTraverserFactory(chain.NewMemoryRepo(), rf, runner.NewRepo())
+	defaultTraverserRepo = chain.NewTraverserRepo()
+	defaultAPI = NewAPI(&router.Router{}, defaultTraverserFactory, defaultTraverserRepo)
+	defaultServer = httptest.NewServer(defaultAPI.Router)
 }
 
+func teardown() {
+	defaultServer.CloseClientConnections()
+	defaultServer.Close()
+}
+
+// //////////////////////////////////////////////////////////////////////////
+// Tests
+// //////////////////////////////////////////////////////////////////////////
+
 func TestNewJobChainInvalid(t *testing.T) {
-	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{})
+	setup(noRunnersFactory)
+	defer teardown()
+
 	// The chain is cyclic.
 	jobChain := &proto.JobChain{
-		RequestId: uint(4),
+		RequestId: "abc",
 		Jobs:      mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2"},
@@ -66,10 +62,7 @@ func TestNewJobChainInvalid(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := httptest.NewServer(api.Router)
-	defer h.Close()
-
-	res, err := http.Post(h.URL+API_ROOT+"job-chains", "application/json; charset=utf-8", bytes.NewBuffer(payload))
+	res, err := http.Post(defaultServer.URL+API_ROOT+"job-chains", "application/json; charset=utf-8", bytes.NewBuffer(payload))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,36 +74,41 @@ func TestNewJobChainInvalid(t *testing.T) {
 }
 
 func TestStartJobChain(t *testing.T) {
-	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{
+	// Start default API with a job runner that can make these mock jobs:
+	setup(&mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
 			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
 			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	})
+	defer teardown()
+
+	// First create job chain: job1 -> job2 -> job3
 	jobChain := &proto.JobChain{
-		RequestId: uint(4),
+		RequestId: "def",
 		Jobs:      mock.InitJobs(3),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2"},
 			"job2": {"job3"},
 		},
 	}
-	c := chain.NewChain(jobChain)
-
-	traverser, err := chain.NewTraverser(api.chainRepo, api.runnerFactory, api.runnerRepo, c)
+	payload, err := json.Marshal(jobChain)
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = api.traverserRepo.Add("4", traverser)
+	res, err := http.Post(defaultServer.URL+API_ROOT+"job-chains", "application/json; charset=utf-8", bytes.NewBuffer(payload))
 	if err != nil {
 		t.Fatal(err)
 	}
+	res.Body.Close()
 
-	h := httptest.NewServer(api.Router)
-	defer h.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("response status = %d, expected 200", res.StatusCode)
+	}
 
-	url, err := url.Parse(h.URL + API_ROOT + "job-chains/4/start")
+	// Then start the job chain we just created
+	url, err := url.Parse(defaultServer.URL + API_ROOT + "job-chains/" + jobChain.RequestId + "/start")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,29 +116,28 @@ func TestStartJobChain(t *testing.T) {
 		Method: "PUT",
 		URL:    url,
 	}
-	res, err := (&http.Client{}).Do(req)
+	res, err = (&http.Client{}).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	res.Body.Close()
 
 	if res.StatusCode != 200 {
+		t.Log(url)
 		t.Errorf("response status = %d, expected 200", res.StatusCode)
 	}
 }
 
 func TestStopJobChain(t *testing.T) {
-	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}})
+	setup(&mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}})
+	defer teardown()
 
-	err := api.traverserRepo.Add("4", &mock.Traverser{})
+	err := defaultAPI.traverserRepo.Add("4", &mock.Traverser{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	h := httptest.NewServer(api.Router)
-	defer h.Close()
-
-	url, err := url.Parse(h.URL + API_ROOT + "job-chains/4/stop")
+	url, err := url.Parse(defaultServer.URL + API_ROOT + "job-chains/4/stop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,19 +155,17 @@ func TestStopJobChain(t *testing.T) {
 		t.Errorf("response status = %d, expected 200", res.StatusCode)
 	}
 
-	_, err = api.traverserRepo.Get("4")
+	_, err = defaultAPI.traverserRepo.Get("4")
 	if err == nil {
 		t.Errorf("Traverser was not removed from the repo as expected.")
 	}
 }
 
 func TestStopJobChainNotRunning(t *testing.T) {
-	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}})
+	setup(&mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}})
+	defer teardown()
 
-	h := httptest.NewServer(api.Router)
-	defer h.Close()
-
-	url, err := url.Parse(h.URL + API_ROOT + "job-chains/4/stop")
+	url, err := url.Parse(defaultServer.URL + API_ROOT + "job-chains/4/stop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,32 +185,31 @@ func TestStopJobChainNotRunning(t *testing.T) {
 }
 
 func TestStatusJobChain(t *testing.T) {
-	api := NewAPI(&router.Router{}, chain.NewMemoryRepo(), &mock.RunnerFactory{
+	setup(&mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
 			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
 			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
 		},
 	})
+	defer teardown()
+
 	chainStatus := proto.JobChainStatus{
-		RequestId: uint(4),
+		RequestId: "ghi",
 		JobStatuses: proto.JobStatuses{
 			proto.JobStatus{"job2", "", proto.STATE_FAIL},
 			proto.JobStatus{"job3", "95% complete", proto.STATE_RUNNING},
 		},
 	}
 
-	err := api.traverserRepo.Add("4", &mock.Traverser{
+	err := defaultAPI.traverserRepo.Add("4", &mock.Traverser{
 		StatusResp: chainStatus,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	h := httptest.NewServer(api.Router)
-	defer h.Close()
-
-	res, err := http.Get(h.URL + API_ROOT + "job-chains/4/status")
+	res, err := http.Get(defaultServer.URL + API_ROOT + "job-chains/4/status")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,14 +219,12 @@ func TestStatusJobChain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var actualResponse proto.JobChainStatus
-	if err := json.Unmarshal(bytes, &actualResponse); err != nil {
+	var gotStatus proto.JobChainStatus
+	if err := json.Unmarshal(bytes, &gotStatus); err != nil {
 		t.Fatal(err)
 	}
 
-	expectedResponse := chainStatus
-
-	if !reflect.DeepEqual(actualResponse, expectedResponse) {
-		t.Errorf("actual response = %v, expected %v", actualResponse, expectedResponse)
+	if diff := deep.Equal(gotStatus, chainStatus); diff != nil {
+		t.Error(diff)
 	}
 }

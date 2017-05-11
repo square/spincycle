@@ -1,3 +1,5 @@
+// Copyright 2017, Square, Inc.
+
 // Package client provides an HTTP client for interacting with the Job Runner (JR) API.
 package client
 
@@ -16,11 +18,11 @@ type JRClient interface {
 	// NewJobChain takes a job chain and sends it to the JR.
 	NewJobChain(proto.JobChain) error
 	// StartRequest starts the job chain that corresponds to a given request Id.
-	StartRequest(uint) error
+	StartRequest(string) error
 	// StopRequest stops the job chain that corresponds to a given request Id.
-	StopRequest(uint) error
+	StopRequest(string) error
 	// RequestStatus gets the status of the job chain that corresponds to a given request Id.
-	RequestStatus(uint) (*proto.JobChainStatus, error)
+	RequestStatus(string) (*proto.JobChainStatus, error)
 }
 
 type jrClient struct {
@@ -60,9 +62,9 @@ func (c *jrClient) NewJobChain(jobChain proto.JobChain) error {
 	return nil
 }
 
-func (c *jrClient) StartRequest(requestId uint) error {
+func (c *jrClient) StartRequest(requestId string) error {
 	// PUT /api/v1/job-chains/${requestId}/start
-	url := fmt.Sprintf(c.baseUrl+"/api/v1/job-chains/%d/start", requestId)
+	url := fmt.Sprintf(c.baseUrl+"/api/v1/job-chains/%s/start", requestId)
 
 	// Make the request.
 	resp, body, err := c.put(url)
@@ -78,9 +80,9 @@ func (c *jrClient) StartRequest(requestId uint) error {
 	return nil
 }
 
-func (c *jrClient) StopRequest(requestId uint) error {
+func (c *jrClient) StopRequest(requestId string) error {
 	// PUT /api/v1/job-chains/${requestId}/stop
-	url := fmt.Sprintf(c.baseUrl+"/api/v1/job-chains/%d/stop", requestId)
+	url := fmt.Sprintf(c.baseUrl+"/api/v1/job-chains/%s/stop", requestId)
 
 	// Make the request.
 	resp, body, err := c.put(url)
@@ -95,9 +97,9 @@ func (c *jrClient) StopRequest(requestId uint) error {
 	return nil
 }
 
-func (c *jrClient) RequestStatus(requestId uint) (*proto.JobChainStatus, error) {
+func (c *jrClient) RequestStatus(requestId string) (*proto.JobChainStatus, error) {
 	// GET /api/v1/job-chains/${requestId}/status
-	url := fmt.Sprintf(c.baseUrl+"/api/v1/job-chains/%d/status", requestId)
+	url := fmt.Sprintf(c.baseUrl+"/api/v1/job-chains/%s/status", requestId)
 
 	// Make the request.
 	resp, body, err := c.get(url)

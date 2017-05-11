@@ -24,14 +24,19 @@ func TestRunErrorNoFirstJob(t *testing.T) {
 		},
 	}
 	rr := runner.NewRepo()
-	jc := &proto.JobChain{
+	f := NewTraverserFactory(chainRepo, rf, rr)
+
+	jc := proto.JobChain{
+		RequestId:     "abc",
 		Jobs:          mock.InitJobs(2),
 		AdjacencyList: map[string][]string{},
 	}
-	c := NewChain(jc)
-	_, err := NewTraverser(chainRepo, rf, rr, c)
+	tr, err := f.Make(jc)
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
+	}
+	if tr != nil {
+		t.Errorf("got non-nil Traverser, expected nil on error")
 	}
 }
 
@@ -56,12 +61,9 @@ func TestRunComplete(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, rr, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, rr)
 
-	err = traverser.Run()
+	err := traverser.Run()
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -91,12 +93,9 @@ func TestRunNotComplete(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, rr, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, rr)
 
-	err = traverser.Run()
+	err := traverser.Run()
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -132,12 +131,9 @@ func TestJobUnknownState(t *testing.T) {
 	for _, job := range c.JobChain.Jobs {
 		job.State = proto.STATE_UNKNOWN
 	}
-	traverser, err := NewTraverser(chainRepo, rf, rr, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, rr)
 
-	if err = traverser.Run(); err != nil {
+	if err := traverser.Run(); err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 	if c.JobChain.State != proto.STATE_COMPLETE {
@@ -166,13 +162,11 @@ func TestJobData(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, rr, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, rr)
+
 	expectedJobData := map[string]interface{}{"k1": "v9", "k2": "v2"}
 
-	err = traverser.Run()
+	err := traverser.Run()
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -205,10 +199,7 @@ func TestStop(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, rr, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, rr)
 	traverser.stopChan = stopChan
 
 	// Start the traverser.
@@ -262,10 +253,7 @@ func TestStopRepoError(t *testing.T) {
 	runnerRepo.Store = &mock.KVStore{
 		GetAllResp: map[string]interface{}{"not a": "runner"},
 	}
-	traverser, err := NewTraverser(chainRepo, rf, runnerRepo, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, runnerRepo)
 	traverser.stopChan = stopChan
 
 	// Start the traverser.
@@ -278,7 +266,7 @@ func TestStopRepoError(t *testing.T) {
 		}
 	}
 
-	err = traverser.Stop()
+	err := traverser.Stop()
 
 	if err == nil {
 		t.Errorf("err = nil, expected %s", runner.ErrInvalidRunner)
@@ -307,10 +295,7 @@ func TestStatus(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, rr, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, rr)
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -366,10 +351,7 @@ func TestRunJobsRunnerError(t *testing.T) {
 		Jobs: mock.InitJobs(1),
 	}
 	c := NewChain(jc)
-	traverser, err := NewTraverser(chainRepo, rf, rr, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, rr)
 
 	// Start consuming from the runJobChan
 	go traverser.runJobs()
@@ -401,10 +383,7 @@ func TestRunJobsRepoAddError(t *testing.T) {
 	runnerRepo.Store = &mock.KVStore{
 		AddErr: mock.ErrKVStore,
 	}
-	traverser, err := NewTraverser(chainRepo, rf, runnerRepo, c)
-	if err != nil {
-		t.Fatalf("err = %s, expected nil", err)
-	}
+	traverser := NewTraverser(c, chainRepo, rf, runnerRepo)
 
 	// Start consuming from the runJobChan
 	go traverser.runJobs()

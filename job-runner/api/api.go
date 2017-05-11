@@ -9,38 +9,32 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/router"
 )
 
 const (
 	API_ROOT           = "/api/v1/"
-	REQUEST_ID_PATTERN = "([0-9]+)"
+	REQUEST_ID_PATTERN = "([A-Za-z0-9]+)"
 )
 
 // API provides controllers for endpoints it registers with a router.
 type API struct {
-	Router        *router.Router
-	chainRepo     chain.Repo
-	runnerFactory runner.Factory
-	runnerRepo    runner.Repo
-	traverserRepo chain.TraverserRepo // Repo for keeping track of active traversers
+	Router           *router.Router
+	traverserFactory chain.TraverserFactory
+	traverserRepo    chain.TraverserRepo
 }
 
 var hostname func() (string, error) = os.Hostname
 
 // NewAPI makes a new API.
-func NewAPI(router *router.Router, chainRepo chain.Repo, runnerFactory runner.Factory) *API {
+func NewAPI(router *router.Router, tf chain.TraverserFactory, tr chain.TraverserRepo) *API {
 	api := &API{
-		Router:        router,
-		chainRepo:     chainRepo,
-		runnerFactory: runnerFactory,
-		runnerRepo:    runner.NewRepo(),
-		traverserRepo: chain.NewTraverserRepo(),
+		Router:           router,
+		traverserFactory: tf,
+		traverserRepo:    tr,
 	}
 
 	api.Router.AddRoute(API_ROOT+"job-chains", api.newJobChainHandler, "api-new-job-chain")
@@ -67,18 +61,15 @@ func (api *API) newJobChainHandler(ctx router.HTTPContext) {
 			return
 		}
 
-		c := chain.NewChain(&jobChain)
-		requestIdStr := strconv.FormatUint(uint64(c.RequestId()), 10)
-
-		// Create a new traverser.
-		traverser, err := chain.NewTraverser(api.chainRepo, api.runnerFactory, api.runnerRepo, c)
+		// Create a new traverser
+		t, err := api.traverserFactory.Make(jobChain)
 		if err != nil {
 			ctx.APIError(router.ErrBadRequest, "Problem creating traverser (error: %s)", err)
 			return
 		}
 
-		// Add the traverser to the repo.
-		err = api.traverserRepo.Add(requestIdStr, traverser)
+		// Save traverser, but don't start it yet
+		err = api.traverserRepo.Add(jobChain.RequestId, t)
 		if err != nil {
 			ctx.APIError(router.ErrBadRequest, err.Error())
 			return
@@ -93,24 +84,24 @@ func (api *API) newJobChainHandler(ctx router.HTTPContext) {
 func (api *API) startJobChainHandler(ctx router.HTTPContext) {
 	switch ctx.Request.Method {
 	case "PUT":
-		requestIdStr := ctx.Arguments[1]
+		requestId := ctx.Arguments[1]
 
 		// Get the traverser from the repo.
-		traverser, err := api.traverserRepo.Get(requestIdStr)
+		traverser, err := api.traverserRepo.Get(requestId)
 		if err != nil {
 			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
 			return
 		}
 
 		// Set the location in the response header to point to this server.
-		ctx.Response.Header().Set("Location", chainLocation(requestIdStr, os.Hostname))
+		ctx.Response.Header().Set("Location", chainLocation(requestId, os.Hostname))
 
 		// Start the traverser, and remove it from the repo when it's
 		// done running. This could take a very long time to return,
 		// so we run it in a goroutine.
 		go func() {
+			defer api.traverserRepo.Remove(requestId)
 			traverser.Run()
-			api.traverserRepo.Remove(requestIdStr)
 		}()
 	default:
 		ctx.UnsupportedAPIMethod()
@@ -122,10 +113,10 @@ func (api *API) startJobChainHandler(ctx router.HTTPContext) {
 func (api *API) stopJobChainHandler(ctx router.HTTPContext) {
 	switch ctx.Request.Method {
 	case "PUT":
-		requestIdStr := ctx.Arguments[1]
+		requestId := ctx.Arguments[1]
 
 		// Get the traverser to the repo.
-		traverser, err := api.traverserRepo.Get(requestIdStr)
+		traverser, err := api.traverserRepo.Get(requestId)
 		if err != nil {
 			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
 			return
@@ -138,7 +129,7 @@ func (api *API) stopJobChainHandler(ctx router.HTTPContext) {
 			return
 		}
 
-		api.traverserRepo.Remove(requestIdStr)
+		api.traverserRepo.Remove(requestId)
 	default:
 		ctx.UnsupportedAPIMethod()
 	}
@@ -149,10 +140,10 @@ func (api *API) stopJobChainHandler(ctx router.HTTPContext) {
 func (api *API) statusJobChainHandler(ctx router.HTTPContext) {
 	switch ctx.Request.Method {
 	case "GET":
-		requestIdStr := ctx.Arguments[1]
+		requestId := ctx.Arguments[1]
 
 		// Get the traverser to the repo.
-		traverser, err := api.traverserRepo.Get(requestIdStr)
+		traverser, err := api.traverserRepo.Get(requestId)
 		if err != nil {
 			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
 			return

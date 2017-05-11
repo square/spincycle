@@ -18,7 +18,7 @@ type RunnerFactory struct {
 	MakeErr         error
 }
 
-func (f *RunnerFactory) Make(jobType, jobName string, jobBytes []byte, requestId uint) (runner.Runner, error) {
+func (f *RunnerFactory) Make(jobType, jobName string, jobBytes []byte, requestId string) (runner.Runner, error) {
 	return f.RunnersToReturn[jobName], f.MakeErr
 }
 

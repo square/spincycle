@@ -3,8 +3,6 @@
 package chain
 
 import (
-	"strconv"
-
 	"github.com/square/spincycle/job-runner/kv"
 )
 
@@ -19,8 +17,8 @@ func NewMemoryRepo() *memoryRepo {
 	}
 }
 
-func (m *memoryRepo) Get(id uint) (*chain, error) {
-	val, err := m.Store.Get(uintToStr(id))
+func (m *memoryRepo) Get(id string) (*chain, error) {
+	val, err := m.Store.Get(id)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +32,7 @@ func (m *memoryRepo) Get(id uint) (*chain, error) {
 }
 
 func (m *memoryRepo) Add(chain *chain) error {
-	err := m.Store.Add(uintToStr(chain.RequestId()), chain)
+	err := m.Store.Add(chain.RequestId(), chain)
 	if err != nil {
 		return err
 	}
@@ -42,17 +40,11 @@ func (m *memoryRepo) Add(chain *chain) error {
 }
 
 func (m *memoryRepo) Set(chain *chain) error {
-	m.Store.Set(uintToStr(chain.RequestId()), chain)
+	m.Store.Set(chain.RequestId(), chain)
 	return nil
 }
 
-func (m *memoryRepo) Remove(id uint) error {
-	m.Store.Delete(uintToStr(id))
+func (m *memoryRepo) Remove(id string) error {
+	m.Store.Delete(id)
 	return nil
-}
-
-// ------------------------------------------------------------------------- //
-
-func uintToStr(id uint) string {
-	return strconv.FormatUint(uint64(id), 10)
 }

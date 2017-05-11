@@ -21,7 +21,7 @@ type Job struct {
 // JobChain represents a directed acyclic graph of jobs for one request.
 // Job chains are identified by RequestId, which must be globally unique.
 type JobChain struct {
-	RequestId     uint                `json:"requestId"`     // unique identifier for the chain
+	RequestId     string              `json:"requestId"`     // unique identifier for the chain
 	Jobs          map[string]Job      `json:"jobs"`          // Job.Name => job
 	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Name => next jobs
 	State         byte                `json:"state"`         // STATE_* const
@@ -38,7 +38,7 @@ type JobStatus struct {
 
 // JobChainStatus represents the status of a job chain reported by the Job Runner.
 type JobChainStatus struct {
-	RequestId   uint        `json:"requestId"`
+	RequestId   string      `json:"requestId"`
 	JobStatuses JobStatuses `json:"jobStatuses"`
 }
 
