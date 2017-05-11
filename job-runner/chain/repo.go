@@ -17,8 +17,8 @@ var (
 
 // Repo stores and provides thread-safe access to job chains.
 type Repo interface {
-	Get(uint) (*chain, error)
+	Get(string) (*chain, error)
 	Add(*chain) error
 	Set(*chain) error
-	Remove(uint) error
+	Remove(string) error
 }

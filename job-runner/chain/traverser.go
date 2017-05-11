@@ -3,10 +3,11 @@
 package chain
 
 import (
-	"github.com/square/spincycle/job-runner/runner"
-	"github.com/square/spincycle/proto"
+	"fmt"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/square/spincycle/job-runner/runner"
+	"github.com/square/spincycle/proto"
 )
 
 // A Traverser provides the ability to run a job chain while respecting the
@@ -36,6 +37,53 @@ type Traverser interface {
 	Status() (proto.JobChainStatus, error)
 }
 
+// A TraverserFactory makes new Traverser.
+type TraverserFactory interface {
+	Make(proto.JobChain) (Traverser, error)
+}
+
+type traverserFactory struct {
+	chainRepo     Repo
+	runnerFactory runner.Factory
+	runnerRepo    runner.Repo
+}
+
+func NewTraverserFactory(cr Repo, rf runner.Factory, rr runner.Repo) TraverserFactory {
+	return &traverserFactory{
+		chainRepo:     cr,
+		runnerFactory: rf,
+		runnerRepo:    rr,
+	}
+}
+
+// Make makes a Traverser for the given job chain. The chain is first validated
+// and saved to the chain repo.
+func (f *traverserFactory) Make(jobChain proto.JobChain) (Traverser, error) {
+	// Convert/wrap chain from proto to Go object
+	chain := NewChain(&jobChain)
+
+	// Validate the chain
+	log.Infof("[chain=%s]: Validating the chain.", chain.RequestId())
+	err := chain.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("invalid chain: %s", err)
+	}
+
+	// Save the chain. If this JR instance dies, another can recover the chain
+	// from the repo.
+	log.Infof("[chain=%s]: Saving the chain to the repo.", chain.RequestId())
+	err = f.chainRepo.Set(chain)
+	if err != nil {
+		return nil, fmt.Errorf("cannot save chain to repo: %s", err)
+	}
+
+	// Create and return a traverser for the chain. The traverser is responsible
+	// for the chain: running, cleaning up, removing from repo when done, etc.
+	// And traverser and chain have the same lifespan: traverser is done when
+	// chain is done.
+	return NewTraverser(chain, f.chainRepo, f.runnerFactory, f.runnerRepo)
+}
+
 // A traverser represents a job chain and everything needed to traverse it.
 type traverser struct {
 	// The chain that will be traversed.
@@ -61,21 +109,7 @@ type traverser struct {
 }
 
 // NewTraverser creates a new traverser for a job chain.
-func NewTraverser(cr Repo, rf runner.Factory, rr runner.Repo, chain *chain) (*traverser, error) {
-	// Validate the chain.
-	log.Infof("[chain=%d]: Validating the chain.", chain.RequestId())
-	err := chain.Validate()
-	if err != nil {
-		return nil, err
-	}
-
-	// Save the chain to the repo.
-	log.Infof("[chain=%d]: Saving the chain to the repo.", chain.RequestId())
-	err = cr.Set(chain)
-	if err != nil {
-		return nil, err
-	}
-
+func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rr runner.Repo) (*traverser, error) {
 	return &traverser{
 		chain:         chain,
 		chainRepo:     cr,
@@ -89,7 +123,7 @@ func NewTraverser(cr Repo, rf runner.Factory, rr runner.Repo, chain *chain) (*tr
 
 // Run runs all jobs in the chain and blocks until all jobs complete or a job fails.
 func (t *traverser) Run() error {
-	log.Infof("[chain=%d]: Starting the chain traverser.", t.chain.RequestId())
+	log.Infof("[chain=%s]: Starting the chain traverser.", t.chain.RequestId())
 	firstJob, err := t.chain.FirstJob()
 	if err != nil {
 		return err
@@ -109,7 +143,7 @@ func (t *traverser) Run() error {
 	t.chainRepo.Set(t.chain)
 
 	// Add the first job in the chain to the runJobChan.
-	log.Infof("[chain=%d]: Sending the first job (%s) to runJobChan.",
+	log.Infof("[chain=%s]: Sending the first job (%s) to runJobChan.",
 		t.chain.RequestId(), firstJob.Name)
 	t.runJobChan <- firstJob
 
@@ -130,10 +164,10 @@ func (t *traverser) Run() error {
 		if done {
 			close(t.runJobChan)
 			if complete {
-				log.Infof("[chain=%d]: Chain is done, all jobs finished successfully.", t.chain.RequestId())
+				log.Infof("[chain=%s]: Chain is done, all jobs finished successfully.", t.chain.RequestId())
 				t.chain.SetComplete()
 			} else {
-				log.Infof("[chain=%d]: Chain is done, some jobs failed.", t.chain.RequestId())
+				log.Infof("[chain=%s]: Chain is done, some jobs failed.", t.chain.RequestId())
 				t.chain.SetIncomplete()
 			}
 			break
@@ -153,7 +187,7 @@ func (t *traverser) Run() error {
 			for _, nextJob := range t.chain.NextJobs(job.Name) {
 				// Check to make sure the job is ready to run.
 				if t.chain.JobIsReady(nextJob.Name) {
-					log.Infof("[chain=%d,job=%s]: Next job %s is ready to run. Enqueuing it.",
+					log.Infof("[chain=%s,job=%s]: Next job %s is ready to run. Enqueuing it.",
 						t.chain.RequestId(), job.Name, nextJob.Name)
 					// Set the state of the job in the chain to "Running".
 					t.chain.SetJobState(nextJob.Name, proto.STATE_RUNNING)
@@ -165,12 +199,12 @@ func (t *traverser) Run() error {
 
 					t.runJobChan <- nextJob // add the job to the run queue
 				} else {
-					log.Infof("[chain=%d,job=%s]: Next job %s is not ready to run. "+
+					log.Infof("[chain=%s,job=%s]: Next job %s is not ready to run. "+
 						"Not enqueuing it.", t.chain.RequestId(), job.Name, nextJob.Name)
 				}
 			}
 		default:
-			log.Infof("[chain=%d,job=%s]: Job did not complete successfully, so not "+
+			log.Infof("[chain=%s,job=%s]: Job did not complete successfully, so not "+
 				"enqueuing its next jobs.", t.chain.RequestId(), job.Name)
 		}
 	}
@@ -180,7 +214,7 @@ func (t *traverser) Run() error {
 
 // Stop stops the traverser if it's running.
 func (t *traverser) Stop() error {
-	log.Infof("[chain=%d]: Stopping the traverser and all jobs.", t.chain.RequestId())
+	log.Infof("[chain=%s]: Stopping the traverser and all jobs.", t.chain.RequestId())
 
 	// Get all of the runners for this traverser from the repo. Only runners that are
 	// in the repo will be stopped.
@@ -202,7 +236,7 @@ func (t *traverser) Stop() error {
 
 // Status returns the status of currently running jobs in the chain.
 func (t *traverser) Status() (proto.JobChainStatus, error) {
-	log.Infof("[chain=%d]: Getting the status of all running jobs.", t.chain.RequestId())
+	log.Infof("[chain=%s]: Getting the status of all running jobs.", t.chain.RequestId())
 	var jobChainStatus proto.JobChainStatus
 	var jobStatuses []proto.JobStatus
 
@@ -241,7 +275,7 @@ func (t *traverser) runJobs() {
 			// Create a job runner.
 			jr, err := t.runnerFactory.Make(j.Type, j.Name, j.Bytes, t.chain.RequestId())
 			if err != nil {
-				log.Errorf("[chain=%d,job=%s]: Error creating runner (error: %s).",
+				log.Errorf("[chain=%s,job=%s]: Error creating runner (error: %s).",
 					t.chain.RequestId(), j.Name, err)
 				j.State = proto.STATE_FAIL
 				return
@@ -251,7 +285,7 @@ func (t *traverser) runJobs() {
 			// methods on the traverser.
 			err = t.runnerRepo.Add(j.Name, jr)
 			if err != nil {
-				log.Errorf("[chain=%d,job=%s]: Error adding runner to the repo (error: %s).",
+				log.Errorf("[chain=%s,job=%s]: Error adding runner to the repo (error: %s).",
 					t.chain.RequestId(), j.Name, err)
 				j.State = proto.STATE_FAIL
 				return
@@ -265,7 +299,7 @@ func (t *traverser) runJobs() {
 			// unbounded even though we want to stop the traverser.
 			select {
 			case <-t.stopChan:
-				log.Errorf("[chain=%d,job=%s]: stopChan was closed. Bailing out before running.",
+				log.Errorf("[chain=%s,job=%s]: stopChan was closed. Bailing out before running.",
 					t.chain.RequestId(), j.Name)
 				j.State = proto.STATE_FAIL
 				return

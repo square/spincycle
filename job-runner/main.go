@@ -14,8 +14,9 @@ import (
 )
 
 func main() {
-	// Make a chain repo.
-	chainRepo := chain.NewMemoryRepo()
+	// //////////////////////////////////////////////////////////////////////
+	// Chain repo
+	// //////////////////////////////////////////////////////////////////////
 	// We could alternatively make a redis-backed chain repo with something
 	// like the following:
 	//
@@ -26,16 +27,26 @@ func main() {
 	// 	IdleTimeout: 240 * time.Second,
 	// }
 	// chainRepo := chain.NewRedisRepo(redisConf)
+	chainRepo := chain.NewMemoryRepo()
 
-	// Make the API
+	// //////////////////////////////////////////////////////////////////////
+	// Runner factory and repo
+	// //////////////////////////////////////////////////////////////////////
 	runnerFactory := runner.NewFactory(external.JobFactory)
-	api := api.NewAPI(&router.Router{}, chainRepo, runnerFactory)
+	runnerRepo := runner.NewRepo()
 
-	// Make an HTTP server using API
+	// //////////////////////////////////////////////////////////////////////
+	// Traverser repo and factory
+	// //////////////////////////////////////////////////////////////////////
+	trRepo := chain.NewTraverserRepo()
+	trFactory := chain.NewTraverserFactory(chainRepo, runnerFactory, runnerRepo)
+
+	// //////////////////////////////////////////////////////////////////////
+	// API
+	// //////////////////////////////////////////////////////////////////////
+	api := api.NewAPI(&router.Router{}, trFactory, trRepo)
 	h := http.NewServeMux()
 	h.Handle("/api/", api.Router)
-
-	// Listen and serve
 	err := http.ListenAndServe(":9999", h)
 	log.Fatal(err)
 }

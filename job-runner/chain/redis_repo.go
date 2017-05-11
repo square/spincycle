@@ -97,7 +97,7 @@ func (r *RedisRepo) Set(chain *chain) error {
 }
 
 // Get takes a Chain RequestId and retrieves that Chain from redis.
-func (r *RedisRepo) Get(id uint) (*chain, error) {
+func (r *RedisRepo) Get(id string) (*chain, error) {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
@@ -119,7 +119,7 @@ func (r *RedisRepo) Get(id uint) (*chain, error) {
 }
 
 // Remove takes a Chain RequestId and deletes that Chain from redis.
-func (r *RedisRepo) Remove(id uint) error {
+func (r *RedisRepo) Remove(id string) error {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
@@ -151,7 +151,7 @@ func (r *RedisRepo) ping() error {
 
 // fmtIdKey takes a Chain RequestId and returns the key where that Chain is
 // stored in redis.
-func (r *RedisRepo) fmtIdKey(id uint) string {
+func (r *RedisRepo) fmtIdKey(id string) string {
 	return fmt.Sprintf("%s::%s::%d", r.Conf.Prefix, CHAIN_KEY, id)
 }
 

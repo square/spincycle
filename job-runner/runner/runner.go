@@ -35,7 +35,7 @@ type Runner interface {
 // A JobRunner represents all information needed to run a job.
 type JobRunner struct {
 	job       job.Job // job to run
-	requestId uint    // for logging
+	requestId string  // for logging
 	// --
 	stopChan    chan struct{} // used on Stop
 	running     bool          // true when Run is running
@@ -43,7 +43,7 @@ type JobRunner struct {
 }
 
 // NewJobRunner returns a JobRunner for a job.
-func NewJobRunner(job job.Job, requestId uint) *JobRunner {
+func NewJobRunner(job job.Job, requestId string) *JobRunner {
 	return &JobRunner{
 		job:       job,
 		requestId: requestId,
@@ -56,7 +56,7 @@ func NewJobRunner(job job.Job, requestId uint) *JobRunner {
 
 func (r *JobRunner) Run(jobData map[string]interface{}) bool {
 	r.Lock()
-	log.Infof("[chain=%d,job=%s]: Starting the job.", r.requestId, r.job.Name())
+	log.Infof("[chain=%s,job=%s]: Starting the job.", r.requestId, r.job.Name())
 	stateChan := make(chan byte, 1) // must be buffered!
 	go r.runJob(jobData, stateChan)
 	r.running = true
@@ -73,10 +73,10 @@ func (r *JobRunner) Run(jobData map[string]interface{}) bool {
 	case state := <-stateChan: // job finished
 		switch state {
 		case proto.STATE_COMPLETE:
-			log.Infof("[chain=%d,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
+			log.Infof("[chain=%s,job=%s]: Job completed successfully.", r.requestId, r.job.Name())
 			return true
 		default:
-			log.Errorf("[chain=%d,job=%s]: Job did not complete successfully (state: %s).", r.requestId, r.job.Name(), proto.StateName[state])
+			log.Errorf("[chain=%s,job=%s]: Job did not complete successfully (state: %s).", r.requestId, r.job.Name(), proto.StateName[state])
 			return false
 		}
 	case <-r.stopChan: // Stop called
@@ -98,15 +98,15 @@ func (r *JobRunner) Stop() error {
 	// Stop is a blocking call that should return quickly.
 	err := r.job.Stop()
 	if err != nil {
-		log.Errorf("[chain=%d,job=%s]: Error stopping job (error: %s).", r.requestId, r.job.Name(), err)
+		log.Errorf("[chain=%s,job=%s]: Error stopping job (error: %s).", r.requestId, r.job.Name(), err)
 	} else {
-		log.Infof("[chain=%d,job=%s]: Job stopped successfully.", r.requestId, r.job.Name())
+		log.Infof("[chain=%s,job=%s]: Job stopped successfully.", r.requestId, r.job.Name())
 	}
 	return err
 }
 
 func (r *JobRunner) Status() string {
-	log.Infof("[chain=%d,job=%s]: Getting job status.", r.requestId, r.job.Name())
+	log.Infof("[chain=%s,job=%s]: Getting job status.", r.requestId, r.job.Name())
 	// job.Status is a blocking operation that is expected to return quickly.
 	return r.job.Status()
 }
@@ -118,10 +118,10 @@ func (r *JobRunner) runJob(jobData map[string]interface{}, stateChan chan byte) 
 	// job.Run is a blocking operation that could take a long time.
 	jobReturn, err := r.job.Run(jobData)
 	if err != nil {
-		log.Errorf("[chain=%d,job=%s]: Error running job (error: %s).", r.requestId, r.job.Name(), err)
+		log.Errorf("[chain=%s,job=%s]: Error running job (error: %s).", r.requestId, r.job.Name(), err)
 	}
 
-	log.Infof("[chain=%d,job=%s]: Job Return - state: %s, exit code: %d, error message: %s, stdout: %s, "+
+	log.Infof("[chain=%s,job=%s]: Job Return - state: %s, exit code: %d, error message: %s, stdout: %s, "+
 		"stderr: %s.", r.requestId, r.job.Name(), proto.StateName[jobReturn.State], jobReturn.Exit,
 		jobReturn.Error, jobReturn.Stdout, jobReturn.Stderr)
 

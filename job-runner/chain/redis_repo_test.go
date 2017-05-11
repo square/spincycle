@@ -42,7 +42,7 @@ func initRedis() (*miniredis.Miniredis, *chain.RedisRepo) {
 
 func initJc() *proto.JobChain {
 	return &proto.JobChain{
-		RequestId: 1,
+		RequestId: "abc",
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 		},

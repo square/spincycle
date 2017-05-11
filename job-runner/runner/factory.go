@@ -11,7 +11,7 @@ import (
 // name is only used for testing with a mock RunnerFactory. An error is returned
 // if the job fails to instantiate or re-create itself.
 type Factory interface {
-	Make(jobType, jobName string, jobBytes []byte, requestId uint) (Runner, error)
+	Make(jobType, jobName string, jobBytes []byte, requestId string) (Runner, error)
 }
 
 type factory struct {
@@ -25,7 +25,7 @@ func NewFactory(jobFactory job.Factory) Factory {
 	}
 }
 
-func (f *factory) Make(jobType, jobName string, jobBytes []byte, requestId uint) (Runner, error) {
+func (f *factory) Make(jobType, jobName string, jobBytes []byte, requestId string) (Runner, error) {
 	// Instantiate a "blank" job of the given type
 	job, err := f.jobFactory.Make(jobType, jobName)
 	if err != nil {

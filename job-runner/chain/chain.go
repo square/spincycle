@@ -220,7 +220,7 @@ func (c *chain) Validate() error {
 }
 
 // RequestId returns the request id of the job chain.
-func (c *chain) RequestId() uint {
+func (c *chain) RequestId() string {
 	return c.JobChain.RequestId
 }
 

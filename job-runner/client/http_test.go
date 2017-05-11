@@ -20,7 +20,7 @@ func TestStartRequest(t *testing.T) {
 	}))
 	c := client.NewJRClient(&http.Client{}, ts.URL)
 
-	err := c.StartRequest(3)
+	err := c.StartRequest("1")
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -36,13 +36,13 @@ func TestStartRequest(t *testing.T) {
 	}))
 	c = client.NewJRClient(&http.Client{}, ts.URL)
 
-	err = c.StartRequest(3)
+	err = c.StartRequest("1")
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 	ts.Close()
 
-	expectedPath := "/api/v1/job-chains/3/start"
+	expectedPath := "/api/v1/job-chains/1/start"
 	if path != expectedPath {
 		t.Errorf("url path = %s, expected %s", path, expectedPath)
 	}
@@ -59,7 +59,7 @@ func TestStopRequest(t *testing.T) {
 	}))
 	c := client.NewJRClient(&http.Client{}, ts.URL)
 
-	err := c.StopRequest(3)
+	err := c.StopRequest("2")
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -75,13 +75,13 @@ func TestStopRequest(t *testing.T) {
 	}))
 	c = client.NewJRClient(&http.Client{}, ts.URL)
 
-	err = c.StopRequest(3)
+	err = c.StopRequest("2")
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 	ts.Close()
 
-	expectedPath := "/api/v1/job-chains/3/stop"
+	expectedPath := "/api/v1/job-chains/2/stop"
 	if path != expectedPath {
 		t.Errorf("url path = %s, expected %s", path, expectedPath)
 	}
@@ -98,7 +98,7 @@ func TestRequestStatus(t *testing.T) {
 	}))
 	c := client.NewJRClient(&http.Client{}, ts.URL)
 
-	_, err := c.RequestStatus(3)
+	_, err := c.RequestStatus("3")
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -112,7 +112,7 @@ func TestRequestStatus(t *testing.T) {
 	}))
 	c = client.NewJRClient(&http.Client{}, ts.URL)
 
-	_, err = c.RequestStatus(3)
+	_, err = c.RequestStatus("3")
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -126,11 +126,11 @@ func TestRequestStatus(t *testing.T) {
 		method = r.Method
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "{\"requestId\":3,\"jobStatuses\":[{\"name\":\"job1\",\"status\":\"job is running...\",\"state\":5}]}")
+		fmt.Fprintln(w, "{\"requestId\":\"3\",\"jobStatuses\":[{\"name\":\"job1\",\"status\":\"job is running...\",\"state\":5}]}")
 	}))
 	c = client.NewJRClient(&http.Client{}, ts.URL)
 
-	status, err := c.RequestStatus(3)
+	status, err := c.RequestStatus("3")
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -153,7 +153,7 @@ func TestRequestStatus(t *testing.T) {
 				State:  5,
 			},
 		},
-		RequestId: 3,
+		RequestId: "3",
 	}
 	if diff := deep.Equal(status, expectedStatus); diff != nil {
 		t.Error(diff)
@@ -163,7 +163,7 @@ func TestRequestStatus(t *testing.T) {
 func TestNewJobChain(t *testing.T) {
 	// Make a job chain.
 	jc := proto.JobChain{
-		RequestId: 3,
+		RequestId: "4",
 		Jobs: map[string]proto.Job{
 			"job1": {
 				Name:  "job1",
