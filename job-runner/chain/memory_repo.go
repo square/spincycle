@@ -3,24 +3,24 @@
 package chain
 
 import (
-	"github.com/square/spincycle/job-runner/kv"
+	"github.com/orcaman/concurrent-map"
 )
 
 type memoryRepo struct {
-	kv.Store
+	cmap.ConcurrentMap
 }
 
-// NewMemoryRepo returns a repo that is backed by a memory kv store.
+// NewMemoryRepo returns a repo that is backed by a thread-safe map in memory.
 func NewMemoryRepo() *memoryRepo {
 	return &memoryRepo{
-		kv.NewStore(),
+		cmap.New(),
 	}
 }
 
 func (m *memoryRepo) Get(id string) (*chain, error) {
-	val, err := m.Store.Get(id)
-	if err != nil {
-		return nil, err
+	val, exists := m.ConcurrentMap.Get(id)
+	if !exists {
+		return nil, ErrNotFound
 	}
 
 	chain, ok := val.(*chain)
@@ -32,19 +32,19 @@ func (m *memoryRepo) Get(id string) (*chain, error) {
 }
 
 func (m *memoryRepo) Add(chain *chain) error {
-	err := m.Store.Add(chain.RequestId(), chain)
-	if err != nil {
-		return err
+	wasAbsent := m.ConcurrentMap.SetIfAbsent(chain.RequestId(), chain)
+	if !wasAbsent {
+		return ErrConflict
 	}
 	return nil
 }
 
 func (m *memoryRepo) Set(chain *chain) error {
-	m.Store.Set(chain.RequestId(), chain)
+	m.ConcurrentMap.Set(chain.RequestId(), chain)
 	return nil
 }
 
 func (m *memoryRepo) Remove(id string) error {
-	m.Store.Delete(id)
+	m.ConcurrentMap.Remove(id)
 	return nil
 }

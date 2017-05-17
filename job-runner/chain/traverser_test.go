@@ -1,34 +1,30 @@
 // Copyright 2017, Square, Inc.
 
-package chain
+package chain_test
 
 import (
-	"reflect"
 	"sort"
+	"sync"
 	"testing"
 
-	"github.com/square/spincycle/job-runner/runner"
+	"github.com/go-test/deep"
+	job "github.com/square/spincycle/job"
+	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/proto"
+	testutil "github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
 )
 
-var noJobData = map[string]interface{}{}
-
 // Return an error when we try to create an invalid chain.
 func TestRunErrorNoFirstJob(t *testing.T) {
-	chainRepo := NewMemoryRepo()
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": {},
-			"job2": {},
-		},
-	}
-	rr := runner.NewRepo()
-	f := NewTraverserFactory(chainRepo, rf, rr)
+	chainRepo := chain.NewMemoryRepo()
+	jf := &mock.JobFactory{}
+	rmClient := &mock.RMClient{}
+	f := chain.NewTraverserFactory(chainRepo, jf, rmClient)
 
 	jc := proto.JobChain{
 		RequestId:     "abc",
-		Jobs:          mock.InitJobs(2),
+		Jobs:          testutil.InitJobs(2),
 		AdjacencyList: map[string][]string{},
 	}
 	tr, err := f.Make(jc)
@@ -42,26 +38,38 @@ func TestRunErrorNoFirstJob(t *testing.T) {
 
 // All jobs in the chain complete successfully.
 func TestRunComplete(t *testing.T) {
-	chainRepo := NewMemoryRepo()
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job4": mock.NewRunner(true, "", nil, nil, noJobData),
+	requestId := "abc"
+	chainRepo := chain.NewMemoryRepo()
+	jf := &mock.JobFactory{
+		JobsToReturn: map[string]*mock.Job{
+			"job1": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job2": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job3": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job4": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
 		},
 	}
-	rr := runner.NewRepo()
+	var recvdjl proto.JobLog // record the last jl that gets sent to the RM
+	rmClient := &mock.RMClient{
+		CreateJLFunc: func(reqId string, jl proto.JobLog) error {
+			if reqId == requestId && jl.JobId == "job4" { // only check one of the jobs
+				recvdjl = jl
+				return nil
+			}
+			return mock.ErrRMClient
+		},
+	}
+
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		RequestId: requestId,
+		Jobs:      testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
-	traverser := NewTraverser(c, chainRepo, rf, rr)
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, jf, rmClient)
 
 	err := traverser.Run()
 	if err != nil {
@@ -70,30 +78,52 @@ func TestRunComplete(t *testing.T) {
 	if c.JobChain.State != proto.STATE_COMPLETE {
 		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
 	}
+
+	// Make sure the JL sent to the RM matches what we expect.
+	if recvdjl.RequestId != requestId {
+		t.Errorf("jl request id = %d, expected %d", recvdjl.RequestId, requestId)
+	}
+	if recvdjl.JobId != "job4" {
+		t.Errorf("jl job id = %d, expected %d", recvdjl.JobId, "job4")
+	}
+	if recvdjl.State != proto.STATE_COMPLETE {
+		t.Errorf("jl state = %d, expected %d", recvdjl.State, proto.STATE_COMPLETE)
+	}
+	if recvdjl.Error != "" {
+		t.Errorf("jl error = %d, expected an empty string", recvdjl.Error)
+	}
+	if recvdjl.StartedAt == nil || recvdjl.StartedAt.IsZero() {
+		t.Errorf("jl started at value is not a non-zero time")
+	}
+	if recvdjl.FinishedAt == nil || recvdjl.FinishedAt.IsZero() {
+		t.Errorf("jl finished at value is not a non-zero time")
+	}
 }
 
 // Not all jobs in the chain complete successfully.
 func TestRunNotComplete(t *testing.T) {
-	chainRepo := NewMemoryRepo()
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job3": mock.NewRunner(false, "", nil, nil, noJobData),
-			"job4": mock.NewRunner(false, "", nil, nil, noJobData),
+	chainRepo := chain.NewMemoryRepo()
+	jf := &mock.JobFactory{
+		JobsToReturn: map[string]*mock.Job{
+			"job1": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job2": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job3": &mock.Job{RunReturn: job.Return{State: proto.STATE_FAIL}},
+			"job4": &mock.Job{RunReturn: job.Return{State: proto.STATE_FAIL}},
 		},
 	}
-	rr := runner.NewRepo()
+	rmClient := &mock.RMClient{}
+
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		RequestId: "abc",
+		Jobs:      testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
-	traverser := NewTraverser(c, chainRepo, rf, rr)
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, jf, rmClient)
 
 	err := traverser.Run()
 	if err != nil {
@@ -109,29 +139,31 @@ func TestRunNotComplete(t *testing.T) {
 
 // Unknown job state should not cause the traverser to panic when running.
 func TestJobUnknownState(t *testing.T) {
-	chainRepo := NewMemoryRepo()
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job4": mock.NewRunner(true, "", nil, nil, noJobData),
+	chainRepo := chain.NewMemoryRepo()
+	jf := &mock.JobFactory{
+		JobsToReturn: map[string]*mock.Job{
+			"job1": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job2": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job3": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job4": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
 		},
 	}
-	rr := runner.NewRepo()
+	rmClient := &mock.RMClient{}
+
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(3),
+		RequestId: "abc",
+		Jobs:      testutil.InitJobs(3),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2"},
 			"job2": {"job3"},
 			"job3": {},
 		},
 	}
-	c := NewChain(jc)
-	for _, job := range c.JobChain.Jobs {
-		job.State = proto.STATE_UNKNOWN
+	c := chain.NewChain(jc)
+	for _, j := range c.JobChain.Jobs {
+		j.State = proto.STATE_UNKNOWN
 	}
-	traverser := NewTraverser(c, chainRepo, rf, rr)
+	traverser := chain.NewTraverser(c, chainRepo, jf, rmClient)
 
 	if err := traverser.Run(); err != nil {
 		t.Errorf("err = %s, expected nil", err)
@@ -143,26 +175,32 @@ func TestJobUnknownState(t *testing.T) {
 
 // Make sure jobData gets updated as we expect.
 func TestJobData(t *testing.T) {
-	chainRepo := NewMemoryRepo()
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v1", "k2": "v2"}),
-			"job2": mock.NewRunner(true, "", nil, nil, map[string]interface{}{}),
-			"job3": mock.NewRunner(true, "", nil, nil, map[string]interface{}{}),
-			"job4": mock.NewRunner(true, "", nil, nil, map[string]interface{}{"k1": "v9"}),
+	chainRepo := chain.NewMemoryRepo()
+	jf := &mock.JobFactory{
+		JobsToReturn: map[string]*mock.Job{
+			"job1": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE},
+				AddedJobData: map[string]interface{}{"k1": "v1", "k2": "v2"}},
+			"job2": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE},
+				AddedJobData: map[string]interface{}{}},
+			"job3": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE},
+				AddedJobData: map[string]interface{}{}},
+			"job4": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE},
+				AddedJobData: map[string]interface{}{"k1": "v9"}},
 		},
 	}
-	rr := runner.NewRepo()
+	rmClient := &mock.RMClient{}
+
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		RequestId: "abc",
+		Jobs:      testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
-	traverser := NewTraverser(c, chainRepo, rf, rr)
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, jf, rmClient)
 
 	expectedJobData := map[string]interface{}{"k1": "v9", "k2": "v2"}
 
@@ -171,36 +209,97 @@ func TestJobData(t *testing.T) {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
-	if !reflect.DeepEqual(jc.Jobs["job4"].Data, expectedJobData) {
-		t.Errorf("job4 data = %v, expected %v", jc.Jobs["job4"].Data, expectedJobData)
+	if diff := deep.Equal(jc.Jobs["job4"].Data, expectedJobData); diff != nil {
+		t.Error(diff)
+	}
+}
+
+// Error creating a job.
+func TestRunJobsRunnerError(t *testing.T) {
+	requestId := "abc"
+	chainRepo := chain.NewMemoryRepo()
+	jf := &mock.JobFactory{
+		JobsToReturn: map[string]*mock.Job{
+			"job1": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+		},
+		// This is what causes the error, even though the job returns STATE_COMPLETE
+		MakeErr: mock.ErrJob,
+	}
+	var recvdjl proto.JobLog // record the jl that gets sent to the RM
+	rmClient := &mock.RMClient{
+		CreateJLFunc: func(reqId string, jl proto.JobLog) error {
+			if reqId == requestId {
+				recvdjl = jl
+				return nil
+			}
+			return mock.ErrRMClient
+		},
+	}
+
+	jc := &proto.JobChain{
+		RequestId: requestId,
+		Jobs:      testutil.InitJobs(1),
+	}
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, jf, rmClient)
+
+	err := traverser.Run()
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+
+	if jc.State != proto.STATE_INCOMPLETE {
+		t.Errorf("chain state = %d, expected %d", jc.State, proto.STATE_INCOMPLETE)
+	}
+
+	// Make sure the JL sent to the RM matches what we expect.
+	if recvdjl.RequestId != requestId {
+		t.Errorf("jl request id = %d, expected %d", recvdjl.RequestId, requestId)
+	}
+	if recvdjl.JobId != "job1" {
+		t.Errorf("jl job id = %d, expected %d", recvdjl.JobId, "job1")
+	}
+	if recvdjl.State != proto.STATE_FAIL {
+		t.Errorf("jl state = %d, expected %d", recvdjl.State, proto.STATE_FAIL)
+	}
+	if recvdjl.Error == "" {
+		t.Errorf("jl error is empty, expected something")
+	}
+	if recvdjl.StartedAt == nil || recvdjl.StartedAt.IsZero() {
+		t.Errorf("jl started at value is not a non-zero time")
+	}
+	if recvdjl.FinishedAt == nil || recvdjl.FinishedAt.IsZero() {
+		t.Errorf("jl finished at value is not a non-zero time")
 	}
 }
 
 // Stop the traverser and all running jobs.
 func TestStop(t *testing.T) {
-	chainRepo := NewMemoryRepo()
+	chainRepo := chain.NewMemoryRepo()
 	runBlock := make(chan struct{})
-	stopChan := make(chan struct{})
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, stopChan, noJobData),
-			"job2": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
-			"job3": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
-			"job4": mock.NewRunner(true, "", nil, stopChan, noJobData),
+	var runWg sync.WaitGroup
+	runWg.Add(2)
+	jf := &mock.JobFactory{
+		JobsToReturn: map[string]*mock.Job{
+			"job1": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}},
+			"job2": &mock.Job{RunReturn: job.Return{State: proto.STATE_FAIL}, RunBlock: runBlock, RunWg: &runWg},
+			"job3": &mock.Job{RunReturn: job.Return{State: proto.STATE_FAIL}, RunBlock: runBlock, RunWg: &runWg},
+			"job4": &mock.Job{},
 		},
 	}
-	rr := runner.NewRepo()
+	rmClient := &mock.RMClient{}
+
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		RequestId: "abc",
+		Jobs:      testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
-	traverser := NewTraverser(c, chainRepo, rf, rr)
-	traverser.stopChan = stopChan
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, jf, rmClient)
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -209,15 +308,14 @@ func TestStop(t *testing.T) {
 		close(doneChan)
 	}()
 
-	// Wait until jobs 2 and 3 are running. They will run until we close the runBlock chan.
-	for {
-		if rf.RunnersToReturn["job2"].Running() == true && rf.RunnersToReturn["job3"].Running() == true {
-			break
-		}
-	}
+	// Wait until jobs 2 and 3 are running (until they call wg.Done()). They will run
+	// until we close the runBlock chan.
+	runWg.Wait()
 
 	traverser.Stop()
 
+	// Let jobs 2 and 3 finish.
+	close(runBlock)
 	// Wait for the traverser to finish.
 	<-doneChan
 
@@ -235,67 +333,35 @@ func TestStop(t *testing.T) {
 	}
 }
 
-// Error getting a runner from the repo when calling Stop.
-func TestStopRepoError(t *testing.T) {
-	chainRepo := NewMemoryRepo()
-	runBlock := make(chan struct{})
-	stopChan := make(chan struct{})
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", runBlock, stopChan, noJobData),
-		},
-	}
-	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(1),
-	}
-	c := NewChain(jc)
-	runnerRepo := runner.NewRepo()
-	runnerRepo.Store = &mock.KVStore{
-		GetAllResp: map[string]interface{}{"not a": "runner"},
-	}
-	traverser := NewTraverser(c, chainRepo, rf, runnerRepo)
-	traverser.stopChan = stopChan
-
-	// Start the traverser.
-	go func() { traverser.Run() }()
-
-	// Wait until job1 is running. It will run until we close the runBlock chan.
-	for {
-		if rf.RunnersToReturn["job1"].Running() == true {
-			break
-		}
-	}
-
-	err := traverser.Stop()
-
-	if err == nil {
-		t.Errorf("err = nil, expected %s", runner.ErrInvalidRunner)
-	}
-}
-
 // Get the status from all running jobs.
 func TestStatus(t *testing.T) {
-	chainRepo := NewMemoryRepo()
+	chainRepo := chain.NewMemoryRepo()
 	runBlock := make(chan struct{})
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "job1 running", nil, nil, noJobData),
-			"job2": mock.NewRunner(true, "job2 running", runBlock, nil, noJobData),
-			"job3": mock.NewRunner(true, "job3 running", runBlock, nil, noJobData),
-			"job4": mock.NewRunner(true, "job4 running", nil, nil, noJobData),
+	var runWg sync.WaitGroup
+	runWg.Add(2)
+	jf := &mock.JobFactory{
+		JobsToReturn: map[string]*mock.Job{
+			"job1": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}, StatusResp: "job1 running"},
+			"job2": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE},
+				RunBlock: runBlock, RunWg: &runWg, StatusResp: "job2 running"},
+			"job3": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE},
+				RunBlock: runBlock, RunWg: &runWg, StatusResp: "job3 running"},
+			"job4": &mock.Job{RunReturn: job.Return{State: proto.STATE_COMPLETE}, StatusResp: "job4 running"},
 		},
 	}
-	rr := runner.NewRepo()
+	rmClient := &mock.RMClient{}
+
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		RequestId: "abc",
+		Jobs:      testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
-	traverser := NewTraverser(c, chainRepo, rf, rr)
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, jf, rmClient)
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -304,14 +370,12 @@ func TestStatus(t *testing.T) {
 		close(doneChan)
 	}()
 
-	// Wait until jobs 2 and 3 are running. They will run until we close the runBlock chan.
-	for {
-		if rf.RunnersToReturn["job2"].Running() == true && rf.RunnersToReturn["job3"].Running() == true {
-			break
-		}
-	}
+	// Wait until jobs 2 and 3 are running (until they call wg.Done()). They will run
+	// until we close the runBlock chan.
+	runWg.Wait()
 
 	expectedStatus := proto.JobChainStatus{
+		RequestId: "abc",
 		JobStatuses: proto.JobStatuses{
 			proto.JobStatus{"job2", "job2 running", proto.STATE_RUNNING},
 			proto.JobStatus{"job3", "job3 running", proto.STATE_RUNNING},
@@ -323,8 +387,8 @@ func TestStatus(t *testing.T) {
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	if !reflect.DeepEqual(status, expectedStatus) {
-		t.Errorf("status = %v, expected %v", status, expectedStatus)
+	if diff := deep.Equal(status, expectedStatus); diff != nil {
+		t.Error(diff)
 	}
 
 	// Let jobs 2 and 3 finish.
@@ -334,67 +398,5 @@ func TestStatus(t *testing.T) {
 
 	if c.JobChain.State != proto.STATE_COMPLETE {
 		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
-	}
-}
-
-// Error creating a job runner.
-func TestRunJobsRunnerError(t *testing.T) {
-	chainRepo := NewMemoryRepo()
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
-		},
-		MakeErr: mock.ErrRunner,
-	}
-	rr := runner.NewRepo()
-	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(1),
-	}
-	c := NewChain(jc)
-	traverser := NewTraverser(c, chainRepo, rf, rr)
-
-	// Start consuming from the runJobChan
-	go traverser.runJobs()
-
-	// Pass a job to the run channel
-	traverser.runJobChan <- c.JobChain.Jobs["job1"]
-
-	// Wait to get a response on the done channel
-	resp := <-traverser.doneJobChan
-
-	if resp.State != proto.STATE_FAIL {
-		t.Errorf("job state = %d, expected %d", resp.State, proto.STATE_FAIL)
-	}
-}
-
-// Error adding a runner to the repo.
-func TestRunJobsRepoAddError(t *testing.T) {
-	chainRepo := NewMemoryRepo()
-	rf := &mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
-		},
-	}
-	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(1),
-	}
-	c := NewChain(jc)
-	runnerRepo := runner.NewRepo()
-	runnerRepo.Store = &mock.KVStore{
-		AddErr: mock.ErrKVStore,
-	}
-	traverser := NewTraverser(c, chainRepo, rf, runnerRepo)
-
-	// Start consuming from the runJobChan
-	go traverser.runJobs()
-
-	// Pass a job to the run channel
-	traverser.runJobChan <- c.JobChain.Jobs["job1"]
-
-	// Wait to get a response on the done channel
-	resp := <-traverser.doneJobChan
-
-	if resp.State != proto.STATE_FAIL {
-		t.Errorf("job state = %d, expected %d", resp.State, proto.STATE_FAIL)
 	}
 }

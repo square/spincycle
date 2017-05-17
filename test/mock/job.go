@@ -4,11 +4,9 @@ package mock
 
 import (
 	"errors"
-	"fmt"
-	"math/rand"
+	"sync"
 
 	"github.com/square/spincycle/job"
-	"github.com/square/spincycle/proto"
 )
 
 var (
@@ -16,12 +14,12 @@ var (
 )
 
 type JobFactory struct {
-	JobToReturn job.Job
-	MakeErr     error
+	JobsToReturn map[string]*Job // Keyed on job name.
+	MakeErr      error
 }
 
 func (f *JobFactory) Make(jobType, jobName string) (job.Job, error) {
-	return f.JobToReturn, f.MakeErr
+	return f.JobsToReturn[jobName], f.MakeErr
 }
 
 type Job struct {
@@ -32,6 +30,7 @@ type Job struct {
 	RunReturn      job.Return
 	RunErr         error
 	AddedJobData   map[string]interface{} // Data to add to jobData.
+	RunWg          *sync.WaitGroup        // WaitGroup that gets released from when a job starts running.
 	RunBlock       chan struct{}          // Channel that job.Run() will block on, if defined.
 	StopErr        error
 	StatusResp     string
@@ -39,7 +38,7 @@ type Job struct {
 	TypeResp       string
 }
 
-func (j *Job) Create(jobArgs map[string]string) error {
+func (j *Job) Create(jobArgs map[string]interface{}) error {
 	return j.CreateErr
 }
 
@@ -52,6 +51,9 @@ func (j *Job) Deserialize(jobArgs []byte) error {
 }
 
 func (j *Job) Run(jobData map[string]interface{}) (job.Return, error) {
+	if j.RunWg != nil {
+		j.RunWg.Done()
+	}
 	if j.RunBlock != nil {
 		<-j.RunBlock
 	}
@@ -76,19 +78,4 @@ func (j *Job) Name() string {
 
 func (j *Job) Type() string {
 	return j.TypeResp
-}
-
-// InitJobs initializes some mock proto jobs.
-func InitJobs(count int) map[string]proto.Job {
-	jobs := make(map[string]proto.Job)
-	for i := 1; i <= count; i++ {
-		bytes := make([]byte, 10)
-		rand.Read(bytes)
-		job := proto.Job{
-			Name:  fmt.Sprintf("job%d", i),
-			Bytes: bytes,
-		}
-		jobs[job.Name] = job
-	}
-	return jobs
 }

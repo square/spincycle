@@ -13,8 +13,8 @@ import (
 
 // RedisRepoConfig contains all info necessary to build a RedisRepo.
 type RedisRepoConfig struct {
-	Server      string        // Redis server name/ip
-	Port        uint          // Redis server port
+	Network     string        // Network for the redis server (ex: "tcp", "unix")
+	Address     string        // Address for the redis server (ex: "localhost:6379", "/path/to/redis.sock")
 	Prefix      string        // Prefix for redis keys
 	MaxIdle     int           // passed to redis.Pool
 	IdleTimeout time.Duration // passed to redis.Pool
@@ -28,12 +28,10 @@ type RedisRepo struct {
 // NewRedisRepo builds a new Repo backed by redis
 func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 	// Build connection pool.
-	addr := fmt.Sprintf("%s:%d", c.Server, c.Port)
-
 	pool := &redis.Pool{
 		MaxIdle:     c.MaxIdle,
 		IdleTimeout: c.IdleTimeout,
-		Dial:        func() (redis.Conn, error) { return redis.Dial("tcp", addr) },
+		Dial:        func() (redis.Conn, error) { return redis.Dial(c.Network, c.Address) },
 
 		// Ping if connection's old and tear down if there's an error.
 		TestOnBorrow: func(c redis.Conn, t time.Time) error {

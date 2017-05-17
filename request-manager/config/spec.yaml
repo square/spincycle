@@ -1,0 +1,17 @@
+sequences:
+  demo-shell-command:
+    args:
+      required:
+        - name: cmd
+        - name: args
+    nodes:
+      shell-command:
+        category: job
+        type: shell-command
+        args:
+          - expects: cmd
+            given: cmd
+          - expects: args
+            given: args
+        sets: []
+        deps: []

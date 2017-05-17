@@ -1,0 +1,88 @@
+// Copyright 2017, Square, Inc.
+
+package mock
+
+import (
+	"errors"
+
+	"github.com/square/spincycle/proto"
+)
+
+var (
+	ErrRMClient = errors.New("forced error in rm client")
+)
+
+type RMClient struct {
+	CreateRequestFunc func(string, map[string]interface{}) (string, error)
+	GetRequestFunc    func(string) (proto.Request, error)
+	StartRequestFunc  func(string) error
+	FinishRequestFunc func(string, byte) error
+	StopRequestFunc   func(string) error
+	RequestStatusFunc func(string) (proto.RequestStatus, error)
+	GetJobChainFunc   func(string) (proto.JobChain, error)
+	GetJLFunc         func(string, string) (proto.JobLog, error)
+	CreateJLFunc      func(string, proto.JobLog) error
+}
+
+func (c *RMClient) CreateRequest(requestId string, args map[string]interface{}) (string, error) {
+	if c.CreateRequestFunc != nil {
+		return c.CreateRequestFunc(requestId, args)
+	}
+	return "", nil
+}
+
+func (c *RMClient) GetRequest(requestId string) (proto.Request, error) {
+	if c.GetRequestFunc != nil {
+		return c.GetRequestFunc(requestId)
+	}
+	return proto.Request{}, nil
+}
+
+func (c *RMClient) StartRequest(requestId string) error {
+	if c.StartRequestFunc != nil {
+		return c.StartRequestFunc(requestId)
+	}
+	return nil
+}
+
+func (c *RMClient) FinishRequest(requestId string, state byte) error {
+	if c.FinishRequestFunc != nil {
+		return c.FinishRequestFunc(requestId, state)
+	}
+	return nil
+}
+
+func (c *RMClient) StopRequest(requestId string) error {
+	if c.StopRequestFunc != nil {
+		return c.StopRequestFunc(requestId)
+	}
+	return nil
+}
+
+func (c *RMClient) RequestStatus(requestId string) (proto.RequestStatus, error) {
+	if c.RequestStatusFunc != nil {
+		return c.RequestStatusFunc(requestId)
+	}
+	return proto.RequestStatus{}, nil
+}
+
+func (c *RMClient) GetJobChain(requestId string) (proto.JobChain, error) {
+	if c.GetJobChainFunc != nil {
+		return c.GetJobChainFunc(requestId)
+	}
+	return proto.JobChain{}, nil
+}
+
+func (c *RMClient) GetJL(requestId, jobId string) (proto.JobLog, error) {
+	if c.GetJLFunc != nil {
+		return c.GetJLFunc(requestId, jobId)
+	}
+	return proto.JobLog{}, nil
+}
+
+func (c *RMClient) CreateJL(requestId string, jl proto.JobLog) error {
+	if c.CreateJLFunc != nil {
+		return c.CreateJLFunc(requestId, jl)
+	}
+	return nil
+}

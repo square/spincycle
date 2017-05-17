@@ -23,7 +23,7 @@ type Job interface {
 	//
 	// This method is only called once by the Request Manager when constructing
 	// a job chain. Construction of the job chain fails if an error is returned.
-	Create(jobArgs map[string]string) error
+	Create(jobArgs map[string]interface{}) error
 
 	// Serialize returns all internal data needed to run later. The reciprocal
 	// method is Deserialize.

@@ -1,93 +1,63 @@
 // Copyright 2017, Square, Inc.
 
-package api
+package api_test
 
 import (
-	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
+	"os"
 	"testing"
 
 	"github.com/go-test/deep"
+	"github.com/orcaman/concurrent-map"
+	"github.com/square/spincycle/job-runner/api"
 	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/router"
+	testutil "github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
 )
 
-var noJobData = map[string]interface{}{}
+var (
+	server        *httptest.Server
+	traverserRepo cmap.ConcurrentMap
+)
 
-var noRunnersFactory = &mock.RunnerFactory{}
-var defaultTraverserFactory chain.TraverserFactory
-var defaultTraverserRepo chain.TraverserRepo
-var defaultAPI *API
-var defaultServer *httptest.Server
-
-func setup(rf runner.Factory) {
-	defaultTraverserFactory = chain.NewTraverserFactory(chain.NewMemoryRepo(), rf, runner.NewRepo())
-	defaultTraverserRepo = chain.NewTraverserRepo()
-	defaultAPI = NewAPI(&router.Router{}, defaultTraverserFactory, defaultTraverserRepo)
-	defaultServer = httptest.NewServer(defaultAPI.Router)
+func setup(traverserFactory *mock.TraverserFactory) {
+	traverserRepo = cmap.New()
+	api := api.NewAPI(traverserFactory, traverserRepo)
+	server = httptest.NewServer(api)
 }
 
-func teardown() {
-	defaultServer.CloseClientConnections()
-	defaultServer.Close()
+func cleanup() {
+	server.CloseClientConnections()
+	server.Close()
+}
+
+func baseURL() string {
+	if server != nil {
+		return server.URL + api.API_ROOT
+	}
+	return api.API_ROOT
 }
 
 // //////////////////////////////////////////////////////////////////////////
 // Tests
 // //////////////////////////////////////////////////////////////////////////
 
-func TestNewJobChainInvalid(t *testing.T) {
-	setup(noRunnersFactory)
-	defer teardown()
+func TestNewJobChainTraverserError(t *testing.T) {
+	// Force an error in creating a traverser.
+	tf := &mock.TraverserFactory{
+		MakeFunc: func(jc proto.JobChain) (chain.Traverser, error) {
+			return nil, mock.ErrTraverser
+		},
+	}
+	setup(tf)
+	defer cleanup()
 
-	// The chain is cyclic.
-	jobChain := &proto.JobChain{
+	jobChain := proto.JobChain{
 		RequestId: "abc",
-		Jobs:      mock.InitJobs(3),
-		AdjacencyList: map[string][]string{
-			"job1": {"job2"},
-			"job2": {"job3"},
-			"job3": {"job1"},
-		},
-	}
-	payload, err := json.Marshal(jobChain)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	res, err := http.Post(defaultServer.URL+API_ROOT+"job-chains", "application/json; charset=utf-8", bytes.NewBuffer(payload))
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-
-	if res.StatusCode != 400 {
-		t.Errorf("response status = %d, expected 200", res.StatusCode)
-	}
-}
-
-func TestStartJobChain(t *testing.T) {
-	// Start default API with a job runner that can make these mock jobs:
-	setup(&mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
-		},
-	})
-	defer teardown()
-
-	// First create job chain: job1 -> job2 -> job3
-	jobChain := &proto.JobChain{
-		RequestId: "def",
-		Jobs:      mock.InitJobs(3),
+		Jobs:      testutil.InitJobs(3),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2"},
 			"job2": {"job3"},
@@ -97,134 +67,190 @@ func TestStartJobChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := http.Post(defaultServer.URL+API_ROOT+"job-chains", "application/json; charset=utf-8", bytes.NewBuffer(payload))
+
+	statusCode, _, err := testutil.MakeHTTPRequest("POST", baseURL()+"job-chains", payload, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	res.Body.Close()
 
-	if res.StatusCode != 200 {
-		t.Fatalf("response status = %d, expected 200", res.StatusCode)
-	}
-
-	// Then start the job chain we just created
-	url, err := url.Parse(defaultServer.URL + API_ROOT + "job-chains/" + jobChain.RequestId + "/start")
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := &http.Request{
-		Method: "PUT",
-		URL:    url,
-	}
-	res, err = (&http.Client{}).Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-
-	if res.StatusCode != 200 {
-		t.Log(url)
-		t.Errorf("response status = %d, expected 200", res.StatusCode)
+	if statusCode != http.StatusInternalServerError {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusInternalServerError)
 	}
 }
 
-func TestStopJobChain(t *testing.T) {
-	setup(&mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}})
-	defer teardown()
+func TestNewJobChainMultipleTraverser(t *testing.T) {
+	setup(&mock.TraverserFactory{})
+	defer cleanup()
 
-	err := defaultAPI.traverserRepo.Add("4", &mock.Traverser{})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	url, err := url.Parse(defaultServer.URL + API_ROOT + "job-chains/4/stop")
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := &http.Request{
-		Method: "PUT",
-		URL:    url,
-	}
-	res, err := (&http.Client{}).Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-
-	if res.StatusCode != 200 {
-		t.Errorf("response status = %d, expected 200", res.StatusCode)
-	}
-
-	_, err = defaultAPI.traverserRepo.Get("4")
-	if err == nil {
-		t.Errorf("Traverser was not removed from the repo as expected.")
-	}
-}
-
-func TestStopJobChainNotRunning(t *testing.T) {
-	setup(&mock.RunnerFactory{RunnersToReturn: map[string]*mock.Runner{}})
-	defer teardown()
-
-	url, err := url.Parse(defaultServer.URL + API_ROOT + "job-chains/4/stop")
-	if err != nil {
-		t.Fatal(err)
-	}
-	req := &http.Request{
-		Method: "PUT",
-		URL:    url,
-	}
-	res, err := (&http.Client{}).Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	res.Body.Close()
-
-	if res.StatusCode != 404 {
-		t.Errorf("response status = %d, expected 404", res.StatusCode)
-	}
-}
-
-func TestStatusJobChain(t *testing.T) {
-	setup(&mock.RunnerFactory{
-		RunnersToReturn: map[string]*mock.Runner{
-			"job1": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job2": mock.NewRunner(true, "", nil, nil, noJobData),
-			"job3": mock.NewRunner(true, "", nil, nil, noJobData),
+	jobChain := proto.JobChain{
+		RequestId: "abc",
+		Jobs:      testutil.InitJobs(3),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
 		},
-	})
-	defer teardown()
+	}
+	payload, err := json.Marshal(jobChain)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert a key into the repo that will cause an "already exists" error.
+	traverserRepo.Set(jobChain.RequestId, "blah")
+
+	statusCode, _, err := testutil.MakeHTTPRequest("POST", baseURL()+"job-chains", payload, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if statusCode != http.StatusBadRequest {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusBadRequest)
+	}
+}
+
+func TestNewJobChainSuccess(t *testing.T) {
+	requestId := "abc"
+	setup(&mock.TraverserFactory{})
+	defer cleanup()
+
+	jobChain := proto.JobChain{
+		RequestId: requestId,
+		Jobs:      testutil.InitJobs(3),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+		},
+	}
+	payload, err := json.Marshal(jobChain)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	statusCode, headers, err := testutil.MakeHTTPRequest("POST", baseURL()+"job-chains", payload, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if statusCode != http.StatusOK {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
+	}
+
+	h, _ := os.Hostname()
+	expectedLocation := h + api.API_ROOT + "job-chains/" + requestId
+	if len(headers["Location"]) < 1 {
+		t.Errorf("location header not set at all")
+	} else {
+		if headers["Location"][0] != expectedLocation {
+			t.Errorf("location header = %s, expected %s", headers["Location"][0], expectedLocation)
+		}
+	}
+}
+
+func TestStopJobChainHandlerNotFoundError(t *testing.T) {
+	requestId := "abcd1234"
+	setup(&mock.TraverserFactory{})
+	defer cleanup()
+
+	// A key exists in the traverser repo, but the value isn't of type Traverser.
+	traverserRepo.Set(requestId, "blah")
+
+	statusCode, _, err := testutil.MakeHTTPRequest("PUT", baseURL()+"job-chains/"+requestId+"/stop", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if statusCode != http.StatusInternalServerError {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusInternalServerError)
+	}
+}
+
+func TestStopJobChainHandlerStopError(t *testing.T) {
+	requestId := "abcd1234"
+	setup(&mock.TraverserFactory{})
+	defer cleanup()
+
+	// Insert a mock traverser into the repo that will return an error on Stop.
+	trav := &mock.Traverser{StopErr: mock.ErrTraverser}
+	traverserRepo.Set(requestId, trav)
+
+	statusCode, _, err := testutil.MakeHTTPRequest("PUT", baseURL()+"job-chains/"+requestId+"/stop", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if statusCode != http.StatusInternalServerError {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusInternalServerError)
+	}
+}
+
+func TestStopJobChainHandlerSuccess(t *testing.T) {
+	requestId := "abcd1234"
+	setup(&mock.TraverserFactory{})
+	defer cleanup()
+
+	// Insert a mock traverser into the repo that will not return an error on Stop.
+	trav := &mock.Traverser{}
+	traverserRepo.Set(requestId, trav)
+
+	statusCode, _, err := testutil.MakeHTTPRequest("PUT", baseURL()+"job-chains/"+requestId+"/stop", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if statusCode != http.StatusOK {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
+	}
+}
+
+func TestStatusJobChainHandlerStatusError(t *testing.T) {
+	requestId := "abcd1234"
+	setup(&mock.TraverserFactory{})
+	defer cleanup()
+
+	// Insert a mock traverser into the repo that will return an error on Stop.
+	trav := &mock.Traverser{StatusErr: mock.ErrTraverser}
+	traverserRepo.Set(requestId, trav)
+
+	statusCode, _, err := testutil.MakeHTTPRequest("GET", baseURL()+"job-chains/"+requestId+"/status", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if statusCode != http.StatusInternalServerError {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusInternalServerError)
+	}
+}
+
+func TestStatusJobChainHandlerSuccess(t *testing.T) {
+	requestId := "abcd1234"
+	setup(&mock.TraverserFactory{})
+	defer cleanup()
 
 	chainStatus := proto.JobChainStatus{
-		RequestId: "ghi",
+		RequestId: requestId,
 		JobStatuses: proto.JobStatuses{
 			proto.JobStatus{"job2", "", proto.STATE_FAIL},
 			proto.JobStatus{"job3", "95% complete", proto.STATE_RUNNING},
 		},
 	}
 
-	err := defaultAPI.traverserRepo.Add("4", &mock.Traverser{
+	// Insert a mock traverser into the repo that will return a status object on Status.
+	trav := &mock.Traverser{
 		StatusResp: chainStatus,
-	})
+	}
+	traverserRepo.Set(requestId, trav)
+
+	var actualStatus proto.JobChainStatus
+	statusCode, _, err := testutil.MakeHTTPRequest("GET", baseURL()+"job-chains/"+requestId+"/status", nil, &actualStatus)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := http.Get(defaultServer.URL + API_ROOT + "job-chains/4/status")
-	if err != nil {
-		t.Fatal(err)
-	}
-	bytes, err := ioutil.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		t.Fatal(err)
+	if statusCode != http.StatusOK {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
 	}
 
-	var gotStatus proto.JobChainStatus
-	if err := json.Unmarshal(bytes, &gotStatus); err != nil {
-		t.Fatal(err)
-	}
-
-	if diff := deep.Equal(gotStatus, chainStatus); diff != nil {
+	if diff := deep.Equal(actualStatus, chainStatus); diff != nil {
 		t.Error(diff)
 	}
 }
