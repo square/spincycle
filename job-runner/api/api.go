@@ -8,6 +8,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/square/spincycle/job-runner/chain"
@@ -171,7 +172,8 @@ func (api *API) statusJobChainHandler(ctx router.HTTPContext) {
 // chainLocation returns the URL location of a job chain
 func chainLocation(requestId string, hostname func() (string, error)) string {
 	h, _ := hostname()
-	return h + API_ROOT + "job-chains/" + requestId
+	url, _ := url.Parse(h + API_ROOT + "job-chains/" + requestId)
+	return url.EscapedPath()
 }
 
 // marshal is a helper function to nicely print JSON.
