@@ -60,16 +60,19 @@ func NewShellCommand(jobName string) *ShellCommand {
 }
 
 // Create is a job.Job interface method.
-func (j *ShellCommand) Create(jobArgs map[string]string) error {
-	cmd := jobArgs[j.jobName+"_cmd"]
+func (j *ShellCommand) Create(jobArgs map[string]interface{}) error {
+	cmd, ok := jobArgs[j.jobName+"_cmd"].(string)
+	if !ok {
+		return errors.New("invalid command given by " + j.jobName + "_cmd")
+	}
 	if cmd == "" {
 		return errors.New(j.jobName + "_cmd is not set")
 	}
 	j.Cmd = cmd
 
 	args := jobArgs[j.jobName+"_args"]
-	if args != "" {
-		j.Args = strings.Split(args, ",")
+	if args != nil {
+		j.Args = strings.Split(args.(string), ",")
 	}
 
 	return nil

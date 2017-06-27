@@ -39,7 +39,7 @@ type Job struct {
 	TypeResp       string
 }
 
-func (j *Job) Create(jobArgs map[string]string) error {
+func (j *Job) Create(jobArgs map[string]interface{}) error {
 	return j.CreateErr
 }
 
