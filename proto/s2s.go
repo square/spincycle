@@ -22,8 +22,8 @@ type Job struct {
 // Job chains are identified by RequestId, which must be globally unique.
 type JobChain struct {
 	RequestId     string              `json:"requestId"`     // unique identifier for the chain
-	Jobs          map[string]Job      `json:"jobs"`          // Job.Id => job
-	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Id => next jobs
+	Jobs          map[string]Job      `json:"jobs"`          // Job.Name => job
+	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Name => next []Job.Name
 	State         byte                `json:"state"`         // STATE_* const
 }
 
