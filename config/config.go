@@ -1,7 +1,5 @@
 // Copyright 2017, Square, Inc.
 
-// Package config provides the ability to load config files into predefined
-// structures that are used by SpinCycle.
 package config
 
 import (
@@ -27,6 +25,10 @@ type RequestManager struct {
 	// The config that the RM will use to make a JR client with. The JR
 	// client is used for communicating with the JR.
 	JRClient HTTPClient `yaml:"jr_client"`
+
+	// The directory that holds all of the grapher spec files. This dir
+	// should not contain anything other than spec files.
+	SpecFileDir string `yaml:"spec_file_dir"`
 }
 
 // The config used by the Job Runner. This is read from in

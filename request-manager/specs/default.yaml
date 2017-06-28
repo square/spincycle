@@ -1,3 +1,7 @@
+# TODO: provide this noop jobe in spincycle/job/internal
+noop-node:
+  category: job
+  type: noop
 sequences:
   demo-shell-command:
     args:
@@ -9,9 +13,9 @@ sequences:
         category: job
         type: shell-command
         args:
-          - expects: cmd
+          - expected: cmd
             given: cmd
-          - expects: args
+          - expected: args
             given: args
         sets: []
         deps: []

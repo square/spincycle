@@ -351,15 +351,15 @@ func TestRequestStatusRunning(t *testing.T) {
 			"job7": []string{"job8"},
 		},
 	}
-	req := proto.Request{
-		State:    proto.STATE_RUNNING,
-		JobChain: &jc,
-	}
+	req := proto.Request{State: proto.STATE_RUNNING}
 	// Create a mock dbaccessor that returns a request and job statuses.
 	var recvdFinishedBurningEdges []string
 	dbAccessor := &mock.RequestDBAccessor{
 		GetRequestFunc: func(r string) (proto.Request, error) {
 			return req, nil
+		},
+		GetJobChainFunc: func(r string) (proto.JobChain, error) {
+			return jc, nil
 		},
 		GetRequestFinishedJobIdsFunc: func(req string) ([]string, error) {
 			// jobs 1, 2, 3, 4, 5, and 6 are finished running

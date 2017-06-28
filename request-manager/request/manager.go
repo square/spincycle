@@ -38,11 +38,11 @@ type Manager interface {
 	// RequestStatus returns the status of a request. If the request is running, or
 	// if it has already finished and some jobs failed, the proto.RequestStatus
 	// return struct will include the status of all "burning-edge" jobs. From the
-	// burning-edge jobs, one can infer the status of all other jobs (all children
-	// of a burning-edge job must be complete, and all ancestors of a burning-edge
-	// job must be pending). If the request hasn't started or it is finished and all
-	// jobs in it completed, the return struct won't include the status of any jobs
-	// (since they can be inferred to be pending or completed).
+	// burning-edge jobs, one can infer the status of all other jobs (all ancestors
+	// of a burning-edge job must be complete, and all children of a burning-edge
+	// job must be pending). If the request hasn't started, or if it is finished
+	// and all jobs in it completed, the return struct won't include the status of
+	// any jobs (since they can be inferred to be pending or completed).
 	RequestStatus(requestId string) (proto.RequestStatus, error)
 
 	// GetJobChain retrieves the job chain corresponding to the provided request id.
@@ -93,7 +93,10 @@ func (m *manager) CreateRequest(reqParams proto.CreateRequestParams) (proto.Requ
 	reqUuid := util.UUID()
 
 	// Make a copy of args so that the request resolver doesn't modify our version.
-	args := reqParams.Args
+	args := map[string]interface{}{}
+	for k, v := range reqParams.Args {
+		args[k] = v
+	}
 
 	// Resolve the request into a graph.
 	g, err := m.rr.CreateGraph(reqParams.Type, args)
@@ -298,13 +301,19 @@ func (m *manager) RequestStatus(requestId string) (proto.RequestStatus, error) {
 			finishedJobs[id] = struct{}{}
 		}
 
+		// Get the job chain from the db.
+		jc, err := m.db.GetJobChain(requestId)
+		if err != nil {
+			return reqStatus, err
+		}
+
 		// Figure out which finished jobs are at the burning edges of the
 		// chain. A finished job is only a burning edge if none of its
 		// adjacent jobs are in the finishedJobs or runningJobs maps.
 		var finishedBurningEdgeIds []string
 		for id := range finishedJobs {
 			isBurningEdge := true
-			for _, adjId := range req.JobChain.AdjacencyList[id] {
+			for _, adjId := range jc.AdjacencyList[id] {
 				if _, ok := finishedJobs[adjId]; ok {
 					isBurningEdge = false
 					break

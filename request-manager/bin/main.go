@@ -5,6 +5,7 @@ package main
 import (
 	"crypto/tls"
 	"database/sql"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -43,14 +44,25 @@ func main() {
 	// //////////////////////////////////////////////////////////////////////
 	// Request Resolver
 	// //////////////////////////////////////////////////////////////////////
-	seqSpecs, err := grapher.ReadConfigs("config/spec.yaml") // add your sequences to this file
-	if err != nil {
-		log.Fatalf("error reading sequence spec file: %s", err)
+	allGrapherCfgs := grapher.Config{
+		Sequences: map[string]*grapher.SequenceSpec{},
 	}
-	// The noop node given to the grapher is a shell-command that sleeps for 1 second.
-	rr := grapher.NewGrapher(external.JobFactory, "shell-command",
-		map[string]interface{}{"cmd": "sleep", "args": []string{"1"}})
-	rr.AllSequences = seqSpecs
+	// For each config in the cfg.SpecFileDir directory, read the file and
+	// then aggregate all of the resulting configs into a single struct.
+	files, _ := ioutil.ReadDir(cfg.SpecFileDir) // add your specs to this dir
+	for _, f := range files {
+		grapherCfg, err := grapher.ReadConfig(cfg.SpecFileDir + "/" + f.Name())
+		if err != nil {
+			log.Fatalf("error reading grapher config file %s: %s", f.Name(), err)
+		}
+		for k, v := range grapherCfg.Sequences {
+			allGrapherCfgs.Sequences[k] = v
+		}
+		if grapherCfg.NoopNode != nil {
+			allGrapherCfgs.NoopNode = grapherCfg.NoopNode
+		}
+	}
+	rr := grapher.NewGrapher(external.JobFactory, &allGrapherCfgs)
 
 	// //////////////////////////////////////////////////////////////////////
 	// Job Runner Client
