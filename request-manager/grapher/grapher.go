@@ -349,21 +349,20 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 			// All the graphs that make up this component
 			componentsForThisNode := []*Graph{}
 
-			// Copy the required args into a separate args map here.
-			// Do the necessary remapping here.
-			nodeArgsCopy, err := o.remapNodeArgs(n, nodeArgs)
-			if err != nil {
-				return nil, err
-			}
-
 			// If no repetition is needed, this loop will only execute once
 			for _, i := range iterateOver {
+
+				// Copy the required args into a separate args map here.
+				// Do the necessary remapping here.
+				nodeArgsCopy, err := o.remapNodeArgs(n, nodeArgs)
+				if err != nil {
+					return nil, err
+				}
 
 				// Add the iterator to the node args
 				nodeArgsCopy[iterator] = i
 
 				var g *Graph
-				var err error
 
 				if !n.isSequence() {
 
@@ -399,6 +398,13 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 
 				// Add the new job to the map of completed components
 				componentsForThisNode = append(componentsForThisNode, g)
+
+				// If the node (or sequence) was determined to set any args
+				// copy them from nodeArgsCopy into the main nodeArgs
+				err = o.setNodeArgs(n, nodeArgs, nodeArgsCopy)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			// If this component was repeated multiple times,
@@ -425,13 +431,6 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				components[n] = g
 			} else {
 				components[n] = componentsForThisNode[0]
-			}
-
-			// If the node (or sequence) was determined to set any args
-			// copy them from nodeArgsCopy into the main nodeArgs
-			err = o.setNodeArgs(n, nodeArgs, nodeArgsCopy)
-			if err != nil {
-				return nil, err
 			}
 
 			// After all subcomponents are built, remove the job from the jobsToBeDone array
