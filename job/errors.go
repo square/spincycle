@@ -75,3 +75,32 @@ func NewErrWrongDataType(key string, got, expect interface{}) ErrWrongDataType {
 func (e ErrWrongDataType) Error() string {
 	return fmt.Sprintf("%s in job data is type %s, expected type %s", e.Key, e.GotType, e.ExpectType)
 }
+
+// --------------------------------------------------------------------------
+
+// ErrWrongArgType should be returned by a job when a jobArgs value is not
+// the expected type. For example:
+//
+//   v := jobArgs["sliceOfStrings"]
+//   sliceOfStrings, ok := v.([]string])
+//   if !ok {
+//     return job.NewErrWrongArgType("sliceOfStrings", v, []string{})
+//   }
+//
+type ErrWrongArgType struct {
+	Key        string
+	GotType    reflect.Type
+	ExpectType reflect.Type
+}
+
+func NewErrWrongArgType(key string, got, expect interface{}) ErrWrongArgType {
+	return ErrWrongArgType{
+		Key:        key,
+		GotType:    reflect.TypeOf(got),
+		ExpectType: reflect.TypeOf(expect),
+	}
+}
+
+func (e ErrWrongArgType) Error() string {
+	return fmt.Sprintf("%s in job args is type %s, expected type %s", e.Key, e.GotType, e.ExpectType)
+}
