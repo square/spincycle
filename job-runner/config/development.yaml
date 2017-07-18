@@ -1,0 +1,6 @@
+---
+server:
+  listen_address: ":9999"
+rm_client:
+  server_url: "http://127.0.0.1:8888"
+chain_repo_type: memory

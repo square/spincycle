@@ -1,0 +1,9 @@
+---
+server:
+  listen_address: ":8888"
+db:
+  type: mysql
+  dsn: "root:@tcp(localhost:3306)/request_manager_development"
+jr_client:
+  server_url: "http://127.0.0.1:9999"
+spec_file_dir: "specs/"

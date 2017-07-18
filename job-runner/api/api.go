@@ -1,182 +1,196 @@
 // Copyright 2017, Square, Inc.
 
-// Package api provides controllers for each API endpoint. Controllers are
+// Package api provides controllers for each api endpoint. Controllers are
 // "dumb wiring"; there is little to no application logic in this package.
-// Controllers call and coordinate other packages to satisfy the API endpoint.
+// Controllers call and coordinate other packages to satisfy the api endpoint.
 package api
 
 import (
-	"encoding/json"
-	"fmt"
+	"errors"
+	"net/http"
 	"net/url"
 	"os"
 
+	"github.com/labstack/echo"
+	"github.com/labstack/echo/engine"
+	"github.com/labstack/echo/engine/standard"
+	"github.com/orcaman/concurrent-map"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/router"
 )
 
 const (
-	API_ROOT           = "/api/v1/"
-	REQUEST_ID_PATTERN = "([A-Za-z0-9]+)"
+	API_ROOT = "/api/v1/"
 )
 
-// API provides controllers for endpoints it registers with a router.
+var (
+	// Errors related to getting and setting traversers in the traverser repo.
+	ErrDuplicateTraverser = errors.New("traverser already exists")
+	ErrTraverserNotFound  = errors.New("traverser not found")
+	ErrInvalidTraverser   = errors.New("traverser found, but type is invalid")
+)
+
+// api provides controllers for endpoints it registers with a router.
 type API struct {
-	Router           *router.Router
+	// An echo web server.
+	echo *echo.Echo
+
+	// Factory for creating traversers.
 	traverserFactory chain.TraverserFactory
-	traverserRepo    chain.TraverserRepo
+
+	// Repo for storing and retrieving traversers.
+	traverserRepo cmap.ConcurrentMap
 }
 
-var hostname func() (string, error) = os.Hostname
-
-// NewAPI makes a new API.
-func NewAPI(router *router.Router, tf chain.TraverserFactory, tr chain.TraverserRepo) *API {
+// NewAPI cretes a new API struct. It initializes an echo web server within the
+// struct, and registers all of the API's routes with it.
+func NewAPI(traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap) *API {
 	api := &API{
-		Router:           router,
-		traverserFactory: tf,
-		traverserRepo:    tr,
+		echo:             echo.New(),
+		traverserFactory: traverserFactory,
+		traverserRepo:    traverserRepo,
 	}
 
-	api.Router.AddRoute(API_ROOT+"job-chains", api.newJobChainHandler, "api-new-job-chain")
-	api.Router.AddRoute(API_ROOT+"job-chains/"+REQUEST_ID_PATTERN+"/start", api.startJobChainHandler, "api-start-job-chain")
-	api.Router.AddRoute(API_ROOT+"job-chains/"+REQUEST_ID_PATTERN+"/stop", api.stopJobChainHandler, "api-stop-job-chain")
-	api.Router.AddRoute(API_ROOT+"job-chains/"+REQUEST_ID_PATTERN+"/status", api.statusJobChainHandler, "api-status-job-chain")
+	// //////////////////////////////////////////////////////////////////////
+	// Routes
+	// //////////////////////////////////////////////////////////////////////
+	// Create a new job chain and start running it.
+	api.echo.POST(API_ROOT+"job-chains", api.newJobChainHandler)
+	// Stop running a job chain.
+	api.echo.PUT(API_ROOT+"job-chains/:requestId/stop", api.stopJobChainHandler)
+	// Get the status of a job chain.
+	api.echo.GET(API_ROOT+"job-chains/:requestId/status", api.statusJobChainHandler)
 
 	return api
+}
+
+// ServeHTTP allows the API to statisfy the http.HandlerFunc interface.
+func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	es := standard.WithConfig(engine.Config{})
+	es.SetHandler(api.echo)
+	es.ServeHTTP(w, r)
+}
+
+// Use adds middleware to the echo web server in the API. See
+// https://echo.labstack.com/middleware for more details.
+func (api *API) Use(middleware ...echo.MiddlewareFunc) {
+	api.echo.Use(middleware...)
 }
 
 // ============================== CONTROLLERS ============================== //
 
 // POST <API_ROOT>/job-chains
 // Do some basic validation on a job chain, and, if it passes, add it to the
-// chain repo. If it doesn't pass, return the validation error.
-func (api *API) newJobChainHandler(ctx router.HTTPContext) {
-	switch ctx.Request.Method {
-	case "POST":
-		decoder := json.NewDecoder(ctx.Request.Body)
-		var jobChain proto.JobChain
-		err := decoder.Decode(&jobChain)
-		if err != nil {
-			ctx.APIError(router.ErrInternal, "Can't decode request body (error: %s)", err)
-			return
-		}
-
-		// Create a new traverser
-		t, err := api.traverserFactory.Make(jobChain)
-		if err != nil {
-			ctx.APIError(router.ErrBadRequest, "Problem creating traverser (error: %s)", err)
-			return
-		}
-
-		// Save traverser, but don't start it yet
-		err = api.traverserRepo.Add(jobChain.RequestId, t)
-		if err != nil {
-			ctx.APIError(router.ErrBadRequest, err.Error())
-			return
-		}
-	default:
-		ctx.UnsupportedAPIMethod()
+// chain repo. If it doesn't pass, return the validation error. Then start
+// running the job chain.
+func (api *API) newJobChainHandler(c echo.Context) error {
+	// Convert the payload into a proto.JobChain.
+	var jc proto.JobChain
+	if err := c.Bind(&jc); err != nil {
+		return err
 	}
-}
 
-// PUT <API_ROOT>/job-chains/{requestId}/start
-// Start the traverser for a job chain.
-func (api *API) startJobChainHandler(ctx router.HTTPContext) {
-	switch ctx.Request.Method {
-	case "PUT":
-		requestId := ctx.Arguments[1]
-
-		// Get the traverser from the repo.
-		traverser, err := api.traverserRepo.Get(requestId)
-		if err != nil {
-			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
-			return
-		}
-
-		// Set the location in the response header to point to this server.
-		ctx.Response.Header().Set("Location", chainLocation(requestId, os.Hostname))
-
-		// Start the traverser, and remove it from the repo when it's
-		// done running. This could take a very long time to return,
-		// so we run it in a goroutine.
-		go func() {
-			defer api.traverserRepo.Remove(requestId)
-			traverser.Run()
-		}()
-	default:
-		ctx.UnsupportedAPIMethod()
+	// Create a new traverser.
+	t, err := api.traverserFactory.Make(jc)
+	if err != nil {
+		return handleError(err)
 	}
+
+	// Save traverser to the repo.
+	wasAbsent := api.traverserRepo.SetIfAbsent(jc.RequestId, t)
+	if !wasAbsent {
+		return handleError(ErrDuplicateTraverser)
+	}
+
+	// Set the location in the response header to point to this server.
+	c.Response().Header().Set("Location", chainLocation(jc.RequestId, os.Hostname))
+
+	// Start the traverser, and remove it from the repo when it's
+	// done running. This could take a very long time to return,
+	// so we run it in a goroutine.
+	go func() {
+		defer api.traverserRepo.Remove(jc.RequestId)
+		t.Run()
+	}()
+
+	return nil
 }
 
 // PUT <API_ROOT>/job-chains/{requestId}/stop
 // Stop the traverser for a job chain.
-func (api *API) stopJobChainHandler(ctx router.HTTPContext) {
-	switch ctx.Request.Method {
-	case "PUT":
-		requestId := ctx.Arguments[1]
+func (api *API) stopJobChainHandler(c echo.Context) error {
+	requestId := c.Param("requestId")
 
-		// Get the traverser to the repo.
-		traverser, err := api.traverserRepo.Get(requestId)
-		if err != nil {
-			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
-			return
-		}
-
-		// This is expected to return quickly.
-		err = traverser.Stop()
-		if err != nil {
-			ctx.APIError(router.ErrInternal, "Can't stop the chain (error: %s)", err)
-			return
-		}
-
-		api.traverserRepo.Remove(requestId)
-	default:
-		ctx.UnsupportedAPIMethod()
+	// Get the traverser to the repo.
+	val, exists := api.traverserRepo.Get(requestId)
+	if !exists {
+		return handleError(ErrTraverserNotFound)
 	}
+	traverser, ok := val.(chain.Traverser)
+	if !ok {
+		return handleError(ErrInvalidTraverser)
+	}
+
+	// Stop the traverser. This is expected to return quickly.
+	err := traverser.Stop()
+	if err != nil {
+		return handleError(err)
+	}
+
+	// Remove the traverser from the repo.
+	api.traverserRepo.Remove(requestId)
+
+	return nil
 }
 
 // GET <API_ROOT>/job-chains/{requestId}/status
 // Get the status of a running job chain.
-func (api *API) statusJobChainHandler(ctx router.HTTPContext) {
-	switch ctx.Request.Method {
-	case "GET":
-		requestId := ctx.Arguments[1]
+func (api *API) statusJobChainHandler(c echo.Context) error {
+	requestId := c.Param("requestId")
 
-		// Get the traverser to the repo.
-		traverser, err := api.traverserRepo.Get(requestId)
-		if err != nil {
-			ctx.APIError(router.ErrNotFound, "Can't retrieve traverser from repo (error: %s).", err.Error())
-			return
-		}
-
-		// This is expected to return quickly.
-		statuses, err := traverser.Status()
-		if err != nil {
-			ctx.APIError(router.ErrInternal, "Can't get the chain's status (error: %s)", err)
-			return
-		}
-
-		if out, err := marshal(statuses); err != nil {
-			ctx.APIError(router.ErrInternal, "Can't encode response (error: %s)", err)
-		} else {
-			fmt.Fprintln(ctx.Response, string(out))
-		}
-	default:
-		ctx.UnsupportedAPIMethod()
+	// Get the traverser to the repo.
+	val, exists := api.traverserRepo.Get(requestId)
+	if !exists {
+		return handleError(ErrTraverserNotFound)
 	}
+	traverser, ok := val.(chain.Traverser)
+	if !ok {
+		return handleError(ErrInvalidTraverser)
+	}
+
+	// This is expected to return quickly.
+	statuses, err := traverser.Status()
+	if err != nil {
+		return handleError(err)
+	}
+
+	// Return the statuses.
+	return c.JSON(http.StatusOK, statuses)
 }
 
-// ========================================================================= //
+// ------------------------------------------------------------------------- //
+
+func handleError(err error) *echo.HTTPError {
+	switch err.(type) {
+	case chain.ErrInvalidChain:
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	default:
+		switch err {
+		case ErrTraverserNotFound:
+			return echo.NewHTTPError(http.StatusNotFound, err.Error())
+		case ErrDuplicateTraverser:
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		default:
+			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
+		}
+	}
+
+	return nil
+}
 
 // chainLocation returns the URL location of a job chain
 func chainLocation(requestId string, hostname func() (string, error)) string {
 	h, _ := hostname()
 	url, _ := url.Parse(h + API_ROOT + "job-chains/" + requestId)
 	return url.EscapedPath()
-}
-
-// marshal is a helper function to nicely print JSON.
-func marshal(v interface{}) ([]byte, error) {
-	return json.MarshalIndent(v, "", "  ")
 }

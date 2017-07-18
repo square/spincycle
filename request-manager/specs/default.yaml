@@ -1,0 +1,21 @@
+# TODO: provide this noop jobe in spincycle/job/internal
+noop-node:
+  category: job
+  type: noop
+sequences:
+  demo-shell-command:
+    args:
+      required:
+        - name: cmd
+        - name: args
+    nodes:
+      shell-command:
+        category: job
+        type: shell-command
+        args:
+          - expected: cmd
+            given: cmd
+          - expected: args
+            given: args
+        sets: []
+        deps: []

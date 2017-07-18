@@ -6,15 +6,14 @@ import (
 	"reflect"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/test/mock"
+	testutil "github.com/square/spincycle/test"
 )
 
 func TestFirstJobMultiple(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job3"},
 			"job2": {"job3"},
@@ -31,7 +30,7 @@ func TestFirstJobMultiple(t *testing.T) {
 
 func TestFirstJobOne(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -53,7 +52,7 @@ func TestFirstJobOne(t *testing.T) {
 
 func TestLastJobMultiple(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(3),
+		Jobs: testutil.InitJobs(3),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 		},
@@ -68,7 +67,7 @@ func TestLastJobMultiple(t *testing.T) {
 
 func TestLastJobOne(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -90,7 +89,7 @@ func TestLastJobOne(t *testing.T) {
 
 func TestNextJobs(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -117,7 +116,7 @@ func TestNextJobs(t *testing.T) {
 
 func TestPreviousJobs(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -144,7 +143,7 @@ func TestPreviousJobs(t *testing.T) {
 
 func TestJobIsReady(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -173,7 +172,7 @@ func TestJobIsReady(t *testing.T) {
 // When the chain is not done or complete.
 func TestIsDoneJobRunning(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -194,7 +193,7 @@ func TestIsDoneJobRunning(t *testing.T) {
 // When the chain is done but not complete.
 func TestIsDoneNotComplete(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -227,7 +226,7 @@ func TestIsDoneNotComplete(t *testing.T) {
 // When the chain is done and complete.
 func TestIsDoneComplete(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -250,7 +249,7 @@ func TestIsDoneComplete(t *testing.T) {
 
 func TestSetJobState(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(1),
+		Jobs: testutil.InitJobs(1),
 	}
 	c := NewChain(jc)
 
@@ -260,51 +259,19 @@ func TestSetJobState(t *testing.T) {
 	}
 }
 
-func TestSetStart(t *testing.T) {
+func TestSetState(t *testing.T) {
 	jc := &proto.JobChain{}
 	c := NewChain(jc)
-	now := time.Now()
 
-	c.SetStart()
-	if c.JobChain.StartTime.Unix() != now.Unix() {
-		t.Errorf("StartTime unix = %d, want %d", c.JobChain.StartTime.Unix(), now.Unix())
-	}
+	c.SetState(proto.STATE_RUNNING)
 	if c.JobChain.State != proto.STATE_RUNNING {
 		t.Errorf("State = %d, want %d", c.JobChain.State, proto.STATE_RUNNING)
 	}
 }
 
-func TestSetComplete(t *testing.T) {
-	jc := &proto.JobChain{}
-	c := NewChain(jc)
-	now := time.Now()
-
-	c.SetComplete()
-	if c.JobChain.EndTime.Unix() != now.Unix() {
-		t.Errorf("EndTime unix = %d, want %d", c.JobChain.EndTime.Unix(), now.Unix())
-	}
-	if c.JobChain.State != proto.STATE_COMPLETE {
-		t.Errorf("State = %d, want %d", c.JobChain.State, proto.STATE_COMPLETE)
-	}
-}
-
-func TestSetIncomplete(t *testing.T) {
-	jc := &proto.JobChain{}
-	c := NewChain(jc)
-	now := time.Now()
-
-	c.SetIncomplete()
-	if c.JobChain.EndTime.Unix() != now.Unix() {
-		t.Errorf("EndTime unix = %d, want %d", c.JobChain.EndTime.Unix(), now.Unix())
-	}
-	if c.JobChain.State != proto.STATE_INCOMPLETE {
-		t.Errorf("State = %d, want %d", c.JobChain.State, proto.STATE_INCOMPLETE)
-	}
-}
-
 func TestIndegreeCounts(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(9),
+		Jobs: testutil.InitJobs(9),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4", "job5"},
@@ -337,7 +304,7 @@ func TestIndegreeCounts(t *testing.T) {
 
 func TestOutdegreeCounts(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(7),
+		Jobs: testutil.InitJobs(7),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4", "job5", "job6"},
@@ -368,7 +335,7 @@ func TestOutdegreeCounts(t *testing.T) {
 func TestIsAcyclic(t *testing.T) {
 	// No cycle in the chain.
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -386,7 +353,7 @@ func TestIsAcyclic(t *testing.T) {
 
 	// Cycle from end to beginning of the chain (i.e., there is no first job).
 	jc = &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -405,7 +372,7 @@ func TestIsAcyclic(t *testing.T) {
 
 	// Cycle in the middle of the chain.
 	jc = &proto.JobChain{
-		Jobs: mock.InitJobs(4),
+		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 			"job2": {"job4"},
@@ -425,7 +392,7 @@ func TestIsAcyclic(t *testing.T) {
 
 	// No cycle, but multiple first jobs and last jobs.
 	jc = &proto.JobChain{
-		Jobs: mock.InitJobs(5),
+		Jobs: testutil.InitJobs(5),
 		AdjacencyList: map[string][]string{
 			"job1": {"job3"},
 			"job2": {"job3"},
@@ -445,7 +412,7 @@ func TestIsAcyclic(t *testing.T) {
 func TestValidateAdjacencyList(t *testing.T) {
 	// Invalid 1.
 	jc := &proto.JobChain{
-		Jobs: mock.InitJobs(2),
+		Jobs: testutil.InitJobs(2),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
 		},
@@ -461,7 +428,7 @@ func TestValidateAdjacencyList(t *testing.T) {
 
 	// Invalid 2.
 	jc = &proto.JobChain{
-		Jobs: mock.InitJobs(2),
+		Jobs: testutil.InitJobs(2),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2"},
 			"job7": {},
@@ -478,7 +445,7 @@ func TestValidateAdjacencyList(t *testing.T) {
 
 	// Valid.
 	jc = &proto.JobChain{
-		Jobs: mock.InitJobs(3),
+		Jobs: testutil.InitJobs(3),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2"},
 			"job2": {"job3"},

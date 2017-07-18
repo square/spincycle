@@ -3,6 +3,7 @@
 package chain_test
 
 import (
+	"fmt"
 	"log"
 	"strconv"
 	"testing"
@@ -26,10 +27,11 @@ func initRedis() (*miniredis.Miniredis, *chain.RedisRepo) {
 		log.Fatal(err)
 	}
 
+	addr := fmt.Sprintf("%s:%d", redis.Host(), port)
 	conf := chain.RedisRepoConfig{
-		Server: redis.Host(),
-		Port:   uint(port),
-		Prefix: "SpinCycle::ChainRepo",
+		Network: "tcp",
+		Address: addr,
+		Prefix:  "SpinCycle::ChainRepo",
 	}
 
 	repo, err := chain.NewRedisRepo(conf)

@@ -9,9 +9,7 @@ package internal
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"os/exec"
-	"strings"
 	"sync"
 
 	"github.com/square/spincycle/job"
@@ -61,18 +59,15 @@ func NewShellCommand(jobName string) *ShellCommand {
 
 // Create is a job.Job interface method.
 func (j *ShellCommand) Create(jobArgs map[string]interface{}) error {
-	cmd, ok := jobArgs[j.jobName+"_cmd"].(string)
+	cmd, ok := jobArgs["cmd"]
 	if !ok {
-		return errors.New("invalid command given by " + j.jobName + "_cmd")
+		return job.ErrArgNotSet{"cmd"}
 	}
-	if cmd == "" {
-		return errors.New(j.jobName + "_cmd is not set")
-	}
-	j.Cmd = cmd
+	j.Cmd = cmd.(string)
 
-	args := jobArgs[j.jobName+"_args"]
-	if args != nil {
-		j.Args = strings.Split(args.(string), ",")
+	args, ok := jobArgs["args"]
+	if ok {
+		j.Args = args.([]string)
 	}
 
 	return nil

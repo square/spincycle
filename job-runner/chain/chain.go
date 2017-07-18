@@ -5,27 +5,10 @@
 package chain
 
 import (
-	"errors"
+	"fmt"
 	"sync"
-	"time"
 
 	"github.com/square/spincycle/proto"
-)
-
-var (
-	// ErrFirstJob means the job chain doesn't have only one job with zero indegrees.
-	// This is usually an error in the adjacency list.
-	ErrFirstJob = errors.New("chain does not have exactly one first job")
-
-	// ErrLastJob means the job chain doesn't have only one job with zero outdegrees.
-	// This is usually an error in the adjacency list.
-	ErrLastJob = errors.New("chain does not have exactly one last job")
-
-	// ErrCyclic means the graph has a cycle.
-	ErrCyclic = errors.New("chain is cyclic")
-
-	// ErrInvalidAdjacencyList means the adjacency list refers to a nonexistent job.
-	ErrInvalidAdjacencyList = errors.New("chain does not have a valid adjacency list")
 )
 
 // chain represents a job chain and some meta information about it.
@@ -41,10 +24,10 @@ type chain struct {
 // the JR can use.
 func NewChain(jc *proto.JobChain) *chain {
 	// Set the state of all jobs in the chain to "Pending".
-	for _, job := range jc.Jobs {
+	for jobName, job := range jc.Jobs {
 		job.State = proto.STATE_PENDING
 		job.Data = map[string]interface{}{}
-		jc.Jobs[job.Name] = job
+		jc.Jobs[jobName] = job
 	}
 
 	return &chain{
@@ -53,46 +36,61 @@ func NewChain(jc *proto.JobChain) *chain {
 	}
 }
 
+// ErrInvalidChain is the error returned when a chain is not valid.
+type ErrInvalidChain struct {
+	Message string
+}
+
+func (e ErrInvalidChain) Error() string {
+	return e.Error()
+}
+
 // FirstJob finds the job in the chain with indegree 0. If there is not
 // exactly one of these jobs, it returns an error.
 func (c *chain) FirstJob() (proto.Job, error) {
-	var jobNames []string
-	for jobName, count := range c.indegreeCounts() {
+	var jobIds []string
+	for jobId, count := range c.indegreeCounts() {
 		if count == 0 {
-			jobNames = append(jobNames, jobName)
+			jobIds = append(jobIds, jobId)
 		}
 	}
 
-	if len(jobNames) != 1 {
-		return proto.Job{}, ErrFirstJob
+	if len(jobIds) != 1 {
+		return proto.Job{}, ErrInvalidChain{
+			Message: fmt.Sprintf("chain has %d first job(s), should "+
+				"have one (first job(s) = %v)", len(jobIds), jobIds),
+		}
 	}
 
-	return c.JobChain.Jobs[jobNames[0]], nil
+	return c.JobChain.Jobs[jobIds[0]], nil
 }
 
 // LastJob finds the job in the chain with outdegree 0. If there is not
 // exactly one of these jobs, it returns an error.
 func (c *chain) LastJob() (proto.Job, error) {
-	var jobNames []string
-	for jobName, count := range c.outdegreeCounts() {
+	var jobIds []string
+	for jobId, count := range c.outdegreeCounts() {
 		if count == 0 {
-			jobNames = append(jobNames, jobName)
+			jobIds = append(jobIds, jobId)
 		}
 	}
 
-	if len(jobNames) != 1 {
-		return proto.Job{}, ErrLastJob
+	if len(jobIds) != 1 {
+		return proto.Job{}, ErrInvalidChain{
+			Message: fmt.Sprintf("chain has %d last job(s), should "+
+				"have one (last job(s) = %v)", len(jobIds), jobIds),
+		}
 	}
 
-	return c.JobChain.Jobs[jobNames[0]], nil
+	return c.JobChain.Jobs[jobIds[0]], nil
 }
 
 // NextJobs finds all of the jobs adjacent to the given job.
-func (c *chain) NextJobs(jobName string) proto.Jobs {
+func (c *chain) NextJobs(jobId string) proto.Jobs {
 	var nextJobs proto.Jobs
-	if nextJobNames, ok := c.JobChain.AdjacencyList[jobName]; ok {
-		for _, name := range nextJobNames {
-			if val, ok := c.JobChain.Jobs[name]; ok {
+	if nextJobIds, ok := c.JobChain.AdjacencyList[jobId]; ok {
+		for _, id := range nextJobIds {
+			if val, ok := c.JobChain.Jobs[id]; ok {
 				nextJobs = append(nextJobs, val)
 			}
 		}
@@ -102,10 +100,10 @@ func (c *chain) NextJobs(jobName string) proto.Jobs {
 }
 
 // PreviousJobs finds all of the immediately previous jobs to a given job.
-func (c *chain) PreviousJobs(jobName string) proto.Jobs {
+func (c *chain) PreviousJobs(jobId string) proto.Jobs {
 	var prevJobs proto.Jobs
 	for curJob, nextJobs := range c.JobChain.AdjacencyList {
-		if contains(nextJobs, jobName) {
+		if contains(nextJobs, jobId) {
 			if val, ok := c.JobChain.Jobs[curJob]; ok {
 				prevJobs = append(prevJobs, val)
 			}
@@ -117,9 +115,9 @@ func (c *chain) PreviousJobs(jobName string) proto.Jobs {
 // JobIsReady returns whether or not a job is ready to run. A job is considered
 // ready to run if all of its previous jobs are complete. If any previous jobs
 // are not complete, the job is not ready to run.
-func (c *chain) JobIsReady(jobName string) bool {
+func (c *chain) JobIsReady(jobId string) bool {
 	isReady := true
-	for _, job := range c.PreviousJobs(jobName) {
+	for _, job := range c.PreviousJobs(jobId) {
 		if job.State != proto.STATE_COMPLETE {
 			isReady = false
 		}
@@ -173,7 +171,7 @@ LOOP:
 	for _, job := range pendingJobs {
 		complete = false
 		allPrevComplete := true
-		for _, prevJob := range c.PreviousJobs(job.Name) {
+		for _, prevJob := range c.PreviousJobs(job.Id) {
 			if prevJob.State != proto.STATE_COMPLETE {
 				allPrevComplete = false
 				// We can break out of this loop if a single
@@ -196,7 +194,10 @@ LOOP:
 func (c *chain) Validate() error {
 	// Make sure the adjacency list is valid.
 	if !c.adjacencyListIsValid() {
-		return ErrInvalidAdjacencyList
+		return ErrInvalidChain{
+			Message: "invalid adjacency list: some jobs exist in " +
+				"chain.AdjacencyList but not chain.Jobs",
+		}
 	}
 
 	// Make sure there is one first job.
@@ -213,7 +214,7 @@ func (c *chain) Validate() error {
 
 	// Make sure there are no cycles.
 	if !c.isAcyclic() {
-		return ErrCyclic
+		return ErrInvalidChain{Message: "chain is cyclic"}
 	}
 
 	return nil
@@ -224,46 +225,26 @@ func (c *chain) RequestId() string {
 	return c.JobChain.RequestId
 }
 
-// Allows tests to mock the time.
-var now func() time.Time = time.Now
-
 // JobState returns the state of a given job.
-func (c *chain) JobState(jobName string) byte {
+func (c *chain) JobState(jobId string) byte {
 	c.RLock()         // -- lock
 	defer c.RUnlock() // -- unlock
-	return c.JobChain.Jobs[jobName].State
+	return c.JobChain.Jobs[jobId].State
 }
 
 // Set the state of a job in the chain.
-func (c *chain) SetJobState(jobName string, state byte) {
+func (c *chain) SetJobState(jobId string, state byte) {
 	c.Lock() // -- lock
-	j := c.JobChain.Jobs[jobName]
+	j := c.JobChain.Jobs[jobId]
 	j.State = state
-	c.JobChain.Jobs[jobName] = j
+	c.JobChain.Jobs[jobId] = j
 	c.Unlock() // -- unlock
 }
 
-// Set the start time of the chain, and set the chain's state to RUNNING.
-func (c *chain) SetStart() {
+// Set the chain's state.
+func (c *chain) SetState(state byte) {
 	c.Lock() // -- lock
-	c.JobChain.StartTime = now()
-	c.JobChain.State = proto.STATE_RUNNING
-	c.Unlock() // -- unlock
-}
-
-// Set the end time of the chain, and set the chain's state to COMPLETE.
-func (c *chain) SetComplete() {
-	c.Lock() // -- lock
-	c.JobChain.EndTime = now()
-	c.JobChain.State = proto.STATE_COMPLETE
-	c.Unlock() // -- unlock
-}
-
-// Set the end time of the chain, and set the chain's state to INCOMPLETE.
-func (c *chain) SetIncomplete() {
-	c.Lock() // -- lock
-	c.JobChain.EndTime = now()
-	c.JobChain.State = proto.STATE_INCOMPLETE
+	c.JobChain.State = state
 	c.Unlock() // -- unlock
 }
 
