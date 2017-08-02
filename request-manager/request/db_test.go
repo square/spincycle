@@ -4,7 +4,6 @@ package request
 
 import (
 	"database/sql"
-	"encoding/json"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -106,11 +105,13 @@ func TestSaveRequestRollback(t *testing.T) {
 
 	reqId := util.UUID() // don't change this
 	req := proto.Request{
-		Id:       reqId,
-		JobChain: &proto.JobChain{},
+		Id: reqId,
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			State:     proto.STATE_COMPLETE,
+		},
 	}
-	rawParams := []byte(`{"type":"something"}`)
-	rawJc := []byte(`{"requestId":"` + reqId + `","state":4}`)
+	reqParams := proto.CreateRequestParams{Type: "something"}
 
 	// Inserting this record will cause a duplicate key insert error below.
 	if _, err := db.Exec("INSERT INTO raw_requests (request_id) VALUES (?)",
@@ -118,7 +119,7 @@ func TestSaveRequestRollback(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := dbA.SaveRequest(req, rawParams, rawJc)
+	err := dbA.SaveRequest(req, reqParams)
 	if err == nil {
 		t.Errorf("expected an error, did not get one") // duplicate key error
 	}
@@ -155,14 +156,10 @@ func TestSaveGetRequest(t *testing.T) {
 			State:     proto.STATE_RUNNING,
 		},
 	}
-	rawParams := []byte(`{"type":"something"}`)
-	rawJc, err := json.Marshal(req.JobChain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reqParams := proto.CreateRequestParams{Type: "something"}
 
 	// Create a request in the db.
-	err = dbA.SaveRequest(req, rawParams, rawJc)
+	err := dbA.SaveRequest(req, reqParams)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -211,14 +208,10 @@ func TestUpdateRequest(t *testing.T) {
 		State:    proto.STATE_RUNNING,
 		JobChain: &proto.JobChain{},
 	}
-	rawParams := []byte(`{"type":"something"}`)
-	rawJc, err := json.Marshal(req.JobChain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reqParams := proto.CreateRequestParams{Type: "something"}
 
 	// Create a request in the db.
-	err = dbA.SaveRequest(req, rawParams, rawJc)
+	err := dbA.SaveRequest(req, reqParams)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -270,14 +263,10 @@ func TestIncrementRequestFinishedJobs(t *testing.T) {
 		State:    proto.STATE_RUNNING,
 		JobChain: &proto.JobChain{},
 	}
-	rawParams := []byte(`{"type":"something"}`)
-	rawJc, err := json.Marshal(req.JobChain)
-	if err != nil {
-		t.Fatal(err)
-	}
+	reqParams := proto.CreateRequestParams{Type: "something"}
 
 	// Create a request in the db.
-	err = dbA.SaveRequest(req, rawParams, rawJc)
+	err := dbA.SaveRequest(req, reqParams)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -317,6 +306,7 @@ func TestCreateGetJL(t *testing.T) {
 	jl := proto.JobLog{
 		RequestId: reqId,
 		JobId:     jobId,
+		Attempt:   1,
 	}
 
 	// Create a jl in the db.
@@ -325,55 +315,25 @@ func TestCreateGetJL(t *testing.T) {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
+	jl = proto.JobLog{
+		RequestId: reqId,
+		JobId:     jobId,
+		Attempt:   2,
+	}
+
+	// Create a second jl in the db.
+	err = dbA.SaveJL(jl)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+
 	// Get the jl from the db.
-	gotjl, err := dbA.GetJL(reqId, jobId)
+	gotjl, err := dbA.GetLatestJL(reqId, jobId)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
 	if diff := deep.Equal(gotjl, jl); diff != nil {
-		t.Error(diff)
-	}
-}
-
-func TestGetRequestFinishedJobIds(t *testing.T) {
-	setup(t)
-	defer cleanup()
-
-	reqId := util.UUID()
-	jobId := "job1"
-	jl1 := proto.JobLog{
-		RequestId: reqId,
-		JobId:     jobId,
-		State:     proto.STATE_COMPLETE,
-	}
-	jobId = "job2"
-	jl2 := proto.JobLog{
-		RequestId: reqId,
-		JobId:     jobId,
-		State:     proto.STATE_FAIL,
-	}
-	jls := []proto.JobLog{jl1, jl2}
-
-	// Create the jls in the db.
-	for _, jl := range jls {
-		err := dbA.SaveJL(jl)
-		if err != nil {
-			t.Errorf("err = %s, expected nil", err)
-		}
-	}
-
-	// Get the finished job ids in the request.
-	ids, err := dbA.GetRequestFinishedJobIds(reqId)
-	if err != nil {
-		t.Errorf("err = %s, expected nil", err)
-	}
-	sort.Strings(ids)
-
-	expectedIds := []string{"job1", "job2"}
-	sort.Strings(expectedIds)
-
-	if diff := deep.Equal(ids, expectedIds); diff != nil {
 		t.Error(diff)
 	}
 }
@@ -387,28 +347,44 @@ func TestGetRequestJobStatuses(t *testing.T) {
 	jl1 := proto.JobLog{
 		RequestId: reqId1,
 		JobId:     jobId,
-		State:     proto.STATE_COMPLETE,
+		State:     proto.STATE_FAIL,
+		Attempt:   1, // first attempt
 	}
-	jobId = "job2"
 	jl2 := proto.JobLog{
 		RequestId: reqId1,
 		JobId:     jobId,
-		State:     proto.STATE_FAIL,
+		State:     proto.STATE_COMPLETE,
+		Attempt:   2, // second attempt
 	}
-	jobId = "job3"
+	jobId = "job2"
 	jl3 := proto.JobLog{
 		RequestId: reqId1,
 		JobId:     jobId,
 		State:     proto.STATE_FAIL,
+		Attempt:   1, // first attempt
+	}
+	jl4 := proto.JobLog{
+		RequestId: reqId1,
+		JobId:     jobId,
+		State:     proto.STATE_FAIL,
+		Attempt:   2, // second attempt
+	}
+	jobId = "job3"
+	jl5 := proto.JobLog{
+		RequestId: reqId1,
+		JobId:     jobId,
+		State:     proto.STATE_FAIL,
+		Attempt:   1,
 	}
 	reqId2 := util.UUID() // this one has a different request id
 	jobId = "job4"
-	jl4 := proto.JobLog{
+	jl6 := proto.JobLog{
 		RequestId: reqId2,
 		JobId:     jobId,
 		State:     proto.STATE_FAIL,
+		Attempt:   1,
 	}
-	jls := []proto.JobLog{jl1, jl2, jl3, jl4}
+	jls := []proto.JobLog{jl1, jl2, jl3, jl4, jl5, jl6}
 
 	// Create the jls in the db.
 	for _, jl := range jls {
@@ -418,31 +394,13 @@ func TestGetRequestJobStatuses(t *testing.T) {
 		}
 	}
 
-	// Get the status of just two jobs.
-	s, err := dbA.GetRequestJobStatuses(reqId1, []string{"job1", "job3"})
+	// Get the status of all jobs.
+	s, err := dbA.GetRequestJobStatuses(reqId1)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
 	expectedS := proto.JobStatuses{
-		proto.JobStatus{Id: "job1", State: proto.STATE_COMPLETE},
-		proto.JobStatus{Id: "job3", State: proto.STATE_FAIL},
-	}
-
-	sort.Sort(s)
-	sort.Sort(expectedS)
-
-	if diff := deep.Equal(s, expectedS); diff != nil {
-		t.Error(diff)
-	}
-
-	// Get the status of all jobs.
-	s, err = dbA.GetRequestJobStatuses(reqId1, []string{})
-	if err != nil {
-		t.Errorf("err = %s, expected nil", err)
-	}
-
-	expectedS = proto.JobStatuses{
 		proto.JobStatus{Id: "job1", State: proto.STATE_COMPLETE},
 		proto.JobStatus{Id: "job2", State: proto.STATE_FAIL},
 		proto.JobStatus{Id: "job3", State: proto.STATE_FAIL},

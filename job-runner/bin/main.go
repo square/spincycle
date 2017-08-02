@@ -14,6 +14,7 @@ import (
 	"github.com/square/spincycle/config"
 	"github.com/square/spincycle/job-runner/api"
 	"github.com/square/spincycle/job-runner/chain"
+	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job/external"
 	rm "github.com/square/spincycle/request-manager"
 	"github.com/square/spincycle/util"
@@ -79,10 +80,15 @@ func main() {
 	rmClient := rm.NewClient(httpClient, cfg.RMClient.ServerURL)
 
 	// //////////////////////////////////////////////////////////////////////
+	// Runner factory
+	// //////////////////////////////////////////////////////////////////////
+	rf := runner.NewFactory(external.JobFactory, rmClient)
+
+	// //////////////////////////////////////////////////////////////////////
 	// Traverser repo and factory
 	// //////////////////////////////////////////////////////////////////////
 	trRepo := cmap.New()
-	trFactory := chain.NewTraverserFactory(chainRepo, external.JobFactory, rmClient)
+	trFactory := chain.NewTraverserFactory(chainRepo, rf, rmClient)
 
 	// //////////////////////////////////////////////////////////////////////
 	// API

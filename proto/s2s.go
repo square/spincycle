@@ -16,6 +16,9 @@ type Job struct {
 	Bytes []byte                 `json:"bytes"` // return value of Job.Serialize method
 	State byte                   `json:"state"` // STATE_* const
 	Data  map[string]interface{} `json:"data"`  // job-specific data during Job.Run
+
+	RetriesAllowed int `json:"retriesAllowed"` // the number of times a job can be retried
+	RetryDelay     int `json:"retryDelay"`     // delay, in seconds, between retries
 }
 
 // JobChain represents a directed acyclic graph of jobs for one request.
@@ -50,15 +53,16 @@ type JobLog struct {
 	JobId     string `json:"jobId"`     // the id of the job
 	Type      string `json:"type"`      // the type of the job
 
-	// These are pointers so that they can have nil values.
-	StartedAt  *time.Time `json:"startedAt"`  // when the request was sent to the job runner
-	FinishedAt *time.Time `json:"finishedAt"` // when the job runner finished the request. doesn't indicate success/failure
+	StartedAt  time.Time `json:"startedAt"`  // when the request was sent to the job runner
+	FinishedAt time.Time `json:"finishedAt"` // when the job runner finished the request. doesn't indicate success/failure
 
 	State  byte   `json:"state"`  // STATE_* const
 	Exit   int64  `json:"exit"`   // unix exit code
 	Error  string `json:"error"`  // error message
 	Stdout string `json:"stdout"` // stdout output
 	Stderr string `json:"stderr"` // stderr output
+
+	Attempt int `json:"attempt"` // the attempt number for running the job (ex: 1 for first, 2 for second)
 }
 
 // JobStatus represents the status of one job in a job chain.

@@ -63,6 +63,12 @@ defined as:
 	given as `each: foos:foo`, and can be read as "repeat for each foo in foos" The
 	variable `foos` must necessarily be an argument given to the node.
 
+	* retries: the number of times that a node will be retried if it fails. This field
+	only applies to nodes with category="job" (i.e., does not apply to sequences).
+
+	* retryDelay: the delay, in seconds, between retries of a node. This field only
+	applies to nodes with category="job" (i.e., does not apply to sequences).
+
 Also included in the config file, is
 
 Example Config
@@ -86,6 +92,8 @@ The full example file can be foind at grapher/test/example-requests.yaml
 		          given: cluster
 		      sets: [instances]
 		      deps: []
+		      retries: 3
+		      retryDelay: 10
 		    delete-job:
 		      category: job
 		      type: delete-job-1

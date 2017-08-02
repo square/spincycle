@@ -13,20 +13,19 @@ var (
 )
 
 type RequestDBAccessor struct {
-	SaveRequestFunc                  func(proto.Request, []byte, []byte) error
+	SaveRequestFunc                  func(proto.Request, proto.CreateRequestParams) error
 	GetRequestFunc                   func(string) (proto.Request, error)
 	UpdateRequestFunc                func(proto.Request) error
 	IncrementRequestFinishedJobsFunc func(string) error
-	GetRequestFinishedJobIdsFunc     func(string) ([]string, error)
-	GetRequestJobStatusesFunc        func(string, []string) (proto.JobStatuses, error)
+	GetRequestJobStatusesFunc        func(string) (proto.JobStatuses, error)
 	GetJobChainFunc                  func(string) (proto.JobChain, error)
-	GetJLFunc                        func(string, string) (proto.JobLog, error)
+	GetLatestJLFunc                  func(string, string) (proto.JobLog, error)
 	SaveJLFunc                       func(proto.JobLog) error
 }
 
-func (a *RequestDBAccessor) SaveRequest(req proto.Request, rawParams, rawJc []byte) error {
+func (a *RequestDBAccessor) SaveRequest(req proto.Request, reqParams proto.CreateRequestParams) error {
 	if a.SaveRequestFunc != nil {
-		return a.SaveRequestFunc(req, rawParams, rawJc)
+		return a.SaveRequestFunc(req, reqParams)
 	}
 	return nil
 }
@@ -59,23 +58,16 @@ func (a *RequestDBAccessor) IncrementRequestFinishedJobs(requestId string) error
 	return nil
 }
 
-func (a *RequestDBAccessor) GetRequestFinishedJobIds(requestId string) ([]string, error) {
-	if a.GetRequestFinishedJobIdsFunc != nil {
-		return a.GetRequestFinishedJobIdsFunc(requestId)
-	}
-	return nil, nil
-}
-
-func (a *RequestDBAccessor) GetRequestJobStatuses(requestId string, jobIds []string) (proto.JobStatuses, error) {
+func (a *RequestDBAccessor) GetRequestJobStatuses(requestId string) (proto.JobStatuses, error) {
 	if a.GetRequestJobStatusesFunc != nil {
-		return a.GetRequestJobStatusesFunc(requestId, jobIds)
+		return a.GetRequestJobStatusesFunc(requestId)
 	}
 	return proto.JobStatuses{}, nil
 }
 
-func (a *RequestDBAccessor) GetJL(requestId, jobId string) (proto.JobLog, error) {
-	if a.GetJLFunc != nil {
-		return a.GetJLFunc(requestId, jobId)
+func (a *RequestDBAccessor) GetLatestJL(requestId, jobId string) (proto.JobLog, error) {
+	if a.GetLatestJLFunc != nil {
+		return a.GetLatestJLFunc(requestId, jobId)
 	}
 	return proto.JobLog{}, nil
 }

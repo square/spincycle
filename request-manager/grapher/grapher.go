@@ -45,13 +45,17 @@ type Graph struct {
 
 // Node represents a single vertex within a Graph.
 // Each node consists of a Payload (i.e. the data that the
-// user cares about), and a list of next and prev Nodes.
-// Next defines all the out edges from Node, and Prev
-// defines all the in edges to Node.
+// user cares about), a list of next and prev Nodes, and other
+// information about the node such as the number of times it
+// should be retried on error. Next defines all the out edges
+// from Node, and Prev defines all the in edges to Node.
 type Node struct {
 	Datum Payload          // Data stored at this Node
 	Next  map[string]*Node // out edges ( node name -> Node )
 	Prev  map[string]*Node // in edges ( node name -> Node )
+
+	Retries    int // the number of times to retry a node
+	RetryDelay int // the time, in seconds, to sleep between retries
 }
 
 // Payload defines the interface of structs that can be
@@ -76,6 +80,10 @@ type NodeSpec struct {
 	Args         []*NodeArg `yaml:"args"`     // expected arguments
 	Sets         []string   `yaml:"sets"`     // expected job args to be set
 	Dependencies []string   `yaml:"deps"`     // nodes with out-edges leading to this node
+
+	// Retries only apply to nodes with category="job". Fields are ignored for "sequence"s
+	Retries    int `yaml:"retries"`    // the number of times to retry a "job" that fails
+	RetryDelay int `yaml:"retryDelay"` // the time, in seconds, to sleep between "job" retries
 }
 
 // NodeArg defines the structure expected from the yaml file to define a job's args.
@@ -708,9 +716,11 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 	}
 
 	return &Node{
-		Datum: rj,
-		Next:  map[string]*Node{},
-		Prev:  map[string]*Node{},
+		Datum:      rj,
+		Next:       map[string]*Node{},
+		Prev:       map[string]*Node{},
+		Retries:    j.Retries,
+		RetryDelay: j.RetryDelay,
 	}, nil
 }
 
