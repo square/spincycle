@@ -48,6 +48,19 @@ func initJc() *proto.JobChain {
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 		},
+		Jobs: map[string]proto.Job{
+			"j1": proto.Job{
+				Id:    "j1",
+				Type:  "something",
+				State: proto.STATE_PENDING,
+				Args: map[string]interface{}{
+					"k": "v",
+				},
+				Data: map[string]interface{}{
+					"some": "thing",
+				},
+			},
+		},
 	}
 }
 
