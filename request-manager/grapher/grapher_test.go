@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-test/deep"
 	"github.com/square/spincycle/job"
 )
 
@@ -78,6 +79,49 @@ func testGrapher() *Grapher {
 		NoopNode:     cfg.NoopNode,
 	}
 	return o
+}
+
+func TestNodeArgs(t *testing.T) {
+	omg := testGrapher()
+	args := map[string]interface{}{
+		"cluster": "test-cluster-001",
+		"env":     "testing",
+	}
+
+	// create the graph
+	g, err := omg.CreateGraph("decommission-cluster", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, node := range g.Vertices {
+		// Verify that noop nodes do not have Args.
+		if strings.HasPrefix(name, "sequence_") || strings.HasPrefix(name, "repeat_") {
+			if len(node.Args) != 0 {
+				t.Errorf("node %s args = %#v, expected an empty map", name, node.Args)
+			}
+		}
+
+		// Check the Args on some nodes.
+		if strings.HasPrefix(name, "get-instances@") {
+			expectedArgs := map[string]interface{}{
+				"cluster": "test-cluster-001",
+			}
+			if diff := deep.Equal(node.Args, expectedArgs); diff != nil {
+				t.Error(diff)
+			}
+		}
+		if strings.HasPrefix(name, "prep-1@") {
+			expectedArgs := map[string]interface{}{
+				"cluster":   "test-cluster-001",
+				"env":       "testing",
+				"instances": []string{"node1", "node2", "node3", "node4"},
+			}
+			if diff := deep.Equal(node.Args, expectedArgs); diff != nil {
+				t.Error(diff)
+			}
+		}
+	}
 }
 
 func TestNodeRetries(t *testing.T) {

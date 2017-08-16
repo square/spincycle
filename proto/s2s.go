@@ -15,6 +15,7 @@ type Job struct {
 	Type  string                 `json:"type"`  // user-specific job type
 	Bytes []byte                 `json:"bytes"` // return value of Job.Serialize method
 	State byte                   `json:"state"` // STATE_* const
+	Args  map[string]interface{} `json:"args"`  // the jobArgs a job was created with
 	Data  map[string]interface{} `json:"data"`  // job-specific data during Job.Run
 
 	RetriesAllowed int `json:"retriesAllowed"` // the number of times a job can be retried
@@ -25,8 +26,8 @@ type Job struct {
 // Job chains are identified by RequestId, which must be globally unique.
 type JobChain struct {
 	RequestId     string              `json:"requestId"`     // unique identifier for the chain
-	Jobs          map[string]Job      `json:"jobs"`          // Job.Name => job
-	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Name => next []Job.Name
+	Jobs          map[string]Job      `json:"jobs"`          // Job.Id => job
+	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Id => next []Job.Id
 	State         byte                `json:"state"`         // STATE_* const
 }
 

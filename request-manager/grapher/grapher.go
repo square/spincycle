@@ -50,12 +50,12 @@ type Graph struct {
 // should be retried on error. Next defines all the out edges
 // from Node, and Prev defines all the in edges to Node.
 type Node struct {
-	Datum Payload          // Data stored at this Node
-	Next  map[string]*Node // out edges ( node name -> Node )
-	Prev  map[string]*Node // in edges ( node name -> Node )
-
-	Retries    int // the number of times to retry a node
-	RetryDelay int // the time, in seconds, to sleep between retries
+	Datum      Payload                // Data stored at this Node
+	Next       map[string]*Node       // out edges ( node name -> Node )
+	Prev       map[string]*Node       // in edges ( node name -> Node )
+	Args       map[string]interface{} // the args the node was created with
+	Retries    int                    // the number of times to retry a node
+	RetryDelay int                    // the time, in seconds, to sleep between retries
 }
 
 // Payload defines the interface of structs that can be
@@ -367,8 +367,10 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 					return nil, err
 				}
 
-				// Add the iterator to the node args
-				nodeArgsCopy[iterator] = i
+				// Add the iterator to the node args unless there is no iterator for this node
+				if iterator != "" {
+					nodeArgsCopy[iterator] = i
+				}
 
 				var g *Graph
 
@@ -593,6 +595,8 @@ func (o *Grapher) allArgsPresent(n *NodeSpec, args map[string]interface{}) bool 
 
 // Given a node definition and an args, copy args into a new map,
 // but also rename the arguments as defined in the "args" clause.
+// A shallow copy is sufficient because args values should never
+// change.
 func (o *Grapher) remapNodeArgs(n *NodeSpec, args map[string]interface{}) (map[string]interface{}, error) {
 	nodeArgs2 := map[string]interface{}{}
 	for _, arg := range n.Args {
@@ -700,6 +704,13 @@ func (o *Grapher) newNoopNode(name string, nodeArgs map[string]interface{}) (*No
 
 // newNode creates a node for the given job j
 func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, error) {
+	// Make a copy of the nodeArgs before this node gets created and potentially
+	// adds additional keys to the nodeArgs. A shallow copy is sufficient because
+	// args values should never change.
+	originalArgs := map[string]interface{}{}
+	for k, v := range nodeArgs {
+		originalArgs[k] = v
+	}
 
 	// Make the name of this node unique within the request by assigning it an id.
 	name := fmt.Sprintf("%s@%d", j.Name, o.getNewNodeId())
@@ -719,6 +730,7 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 		Datum:      rj,
 		Next:       map[string]*Node{},
 		Prev:       map[string]*Node{},
+		Args:       originalArgs, // Args is the nodeArgs map that this node was created with
 		Retries:    j.Retries,
 		RetryDelay: j.RetryDelay,
 	}, nil
