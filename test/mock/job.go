@@ -4,7 +4,6 @@ package mock
 
 import (
 	"errors"
-	"sync"
 
 	"github.com/square/spincycle/job"
 )
@@ -29,9 +28,7 @@ type Job struct {
 	DeserializeErr error
 	RunReturn      job.Return
 	RunErr         error
-	AddedJobData   map[string]interface{} // Data to add to jobData.
-	RunWg          *sync.WaitGroup        // WaitGroup that gets released from when a job starts running.
-	RunBlock       chan struct{}          // Channel that job.Run() will block on, if defined.
+	RunFunc        func(jobData map[string]interface{}) (job.Return, error) // can use this instead of RunErr and RunFunc for more involved mocks
 	StopErr        error
 	StatusResp     string
 	NameResp       string
@@ -51,16 +48,11 @@ func (j *Job) Deserialize(jobArgs []byte) error {
 }
 
 func (j *Job) Run(jobData map[string]interface{}) (job.Return, error) {
-	if j.RunWg != nil {
-		j.RunWg.Done()
+	// If RunFunc is defined, use that.
+	if j.RunFunc != nil {
+		return j.RunFunc(jobData)
 	}
-	if j.RunBlock != nil {
-		<-j.RunBlock
-	}
-	// Add job data.
-	for k, v := range j.AddedJobData {
-		jobData[k] = v
-	}
+
 	return j.RunReturn, j.RunErr
 }
 

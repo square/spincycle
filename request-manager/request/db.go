@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/square/spincycle/proto"
@@ -26,19 +25,19 @@ const (
 
 	// JL queries.
 	createJL = "INSERT INTO job_log (request_id, job_id, type, started_at, finished_at, state, `exit`, " +
-		"error, stdout, stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	selectJL = "SELECT request_id, job_id, state, started_at, finished_at, error, `exit`, stdout, stderr FROM " +
-		"job_log WHERE request_id = ? AND job_id = ?"
-	selectRequestJLStates     = "SELECT job_id, state FROM job_log WHERE request_id = ?"
-	selectRequestJLStatesById = "SELECT job_id, state FROM job_log WHERE request_id = ? AND job_id in (%s)" // note the %s
-	selectRequestJLIds        = "SELECT job_id FROM job_log WHERE request_id = ?"
+		"error, stdout, stderr, attempt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	selectLatestJL = "SELECT request_id, job_id, state, started_at, finished_at, error, `exit`, stdout, stderr, attempt " +
+		"FROM job_log WHERE request_id = ? AND job_id = ? ORDER BY attempt DESC LIMIT 1"
+	// Select the job id and state of all jobs in a request, using the latest JL for each job.
+	selectRequestLatestJLStates = "SELECT j1.job_id, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
+		"j2.request_id AND j1.job_id = j2.job_id AND j1.attempt < j2.attempt) WHERE j1.request_id = ? AND j2.attempt IS NULL"
 )
 
 // A DBAccessor persists requests to a database.
 type DBAccessor interface {
 	// SaveRequest saves a proto.Request, along with it's job chain and the
 	// request params that created it (both as byte arrays), in the database.
-	SaveRequest(proto.Request, []byte, []byte) error
+	SaveRequest(proto.Request, proto.CreateRequestParams) error
 
 	// GetRequest retrieves a request from the database.
 	GetRequest(string) (proto.Request, error)
@@ -51,22 +50,17 @@ type DBAccessor interface {
 	// level status of a request, you can see what % of jobs are finished.
 	IncrementRequestFinishedJobs(string) error
 
-	// GetRequestFinishedJobIds takes a request id and returns a list of
-	// all of the job ids in the request that have finished running.
-	GetRequestFinishedJobIds(string) ([]string, error)
-
-	// GetRequestJobStatuses takes a request id and a slice of job ids, and
-	// returns the status of all of the jobs in the form of a
-	// proto.JobStatuses. If the slice of job ids is empty, this method will
-	// return the status for all jobs in the request.
-	GetRequestJobStatuses(string, []string) (proto.JobStatuses, error)
+	// GetRequestJobStatuses takes a request id and returns the status of
+	// all of the jobs in the request in the form of a proto.RequestStatus.
+	// It uses the most recent JL entry for each job to determine its status.
+	GetRequestJobStatuses(string) (proto.JobStatuses, error)
 
 	// GetJobChain retrieves a job chain from the database.
 	GetJobChain(string) (proto.JobChain, error)
 
-	// GetJL takes a request id and a job id and returns the corresponding
-	// jog log.
-	GetJL(string, string) (proto.JobLog, error)
+	// GetLatestJL takes a request id and a job id and returns the latest
+	// corresponding jog log.
+	GetLatestJL(string, string) (proto.JobLog, error)
 
 	// SaveJL saves a proto.JobLog to the database.
 	SaveJL(proto.JobLog) error
@@ -82,7 +76,17 @@ func NewDBAccessor(db *sql.DB) DBAccessor {
 	}
 }
 
-func (d *dbAccessor) SaveRequest(req proto.Request, rawParams, rawJc []byte) error {
+func (d *dbAccessor) SaveRequest(req proto.Request, reqParams proto.CreateRequestParams) error {
+	// Marshal the the job chain and request params.
+	rawJc, err := json.Marshal(req.JobChain)
+	if err != nil {
+		return fmt.Errorf("cannot marshal job chain: %s", err)
+	}
+	rawParams, err := json.Marshal(reqParams)
+	if err != nil {
+		return fmt.Errorf("cannot marshal request params: %s", err)
+	}
+
 	// Begin a transaction.
 	txn, err := d.db.Begin()
 	if err != nil {
@@ -202,48 +206,10 @@ func (d *dbAccessor) IncrementRequestFinishedJobs(requestId string) error {
 	return err
 }
 
-func (d *dbAccessor) GetRequestFinishedJobIds(requestId string) ([]string, error) {
-	// Get the id of all finished jobs in the request.
-	rows, err := d.db.Query(selectRequestJLIds, requestId)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var finishedIds []string
-	var id string
-	for rows.Next() {
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		finishedIds = append(finishedIds, id)
-	}
-
-	return finishedIds, nil
-}
-
-func (d *dbAccessor) GetRequestJobStatuses(requestId string, jobIds []string) (proto.JobStatuses, error) {
+func (d *dbAccessor) GetRequestJobStatuses(requestId string) (proto.JobStatuses, error) {
 	var js proto.JobStatuses
-	var query string
-	var queryParams []interface{}
 
-	// If no jobIds are given, retreive the status for all jobs in this request.
-	if len(jobIds) < 1 {
-		query = selectRequestJLStates
-		queryParams = append(queryParams, requestId)
-	} else {
-		// Transform the query from something like "select where id in (%s)"
-		// to "select where id in (?, ?, ?, ?)", with one placeholder per
-		// job id.
-		query = fmt.Sprintf(selectRequestJLStatesById,
-			strings.Join(strings.Split(strings.Repeat("?", len(jobIds)), ""), ","))
-		queryParams = append(queryParams, requestId)
-		for _, id := range jobIds {
-			queryParams = append(queryParams, id)
-		}
-	}
-
-	rows, err := d.db.Query(query, queryParams...)
+	rows, err := d.db.Query(selectRequestLatestJLStates, requestId)
 	if err != nil {
 		return js, err
 	}
@@ -284,15 +250,11 @@ func (d *dbAccessor) GetJobChain(requestId string) (proto.JobChain, error) {
 	return jc, nil
 }
 
-func (d *dbAccessor) GetJL(requestId, jobId string) (proto.JobLog, error) {
+func (d *dbAccessor) GetLatestJL(requestId, jobId string) (proto.JobLog, error) {
 	var jl proto.JobLog
 
-	// Prepare for handling nullable columns.
-	startedAt := mysql.NullTime{}
-	finishedAt := mysql.NullTime{}
-
 	// Get the JL from the job_log table.
-	err := d.db.QueryRow(selectJL, requestId, jobId).Scan(
+	err := d.db.QueryRow(selectLatestJL, requestId, jobId).Scan(
 		&jl.RequestId,
 		&jl.JobId,
 		&jl.State,
@@ -301,21 +263,13 @@ func (d *dbAccessor) GetJL(requestId, jobId string) (proto.JobLog, error) {
 		&jl.Error,
 		&jl.Exit,
 		&jl.Stdout,
-		&jl.Stderr)
+		&jl.Stderr,
+		&jl.Attempt)
 	switch {
 	case err == sql.ErrNoRows:
 		return jl, NewErrNotFound("job log")
 	case err != nil:
 		return jl, err
-	}
-
-	// Add potentially null columns (that aren't actually null for this JL)
-	// to the JL struct.
-	if startedAt.Valid {
-		jl.StartedAt = &startedAt.Time
-	}
-	if finishedAt.Valid {
-		jl.FinishedAt = &finishedAt.Time
 	}
 
 	return jl, nil
@@ -333,7 +287,8 @@ func (d *dbAccessor) SaveJL(jl proto.JobLog) error {
 		&jl.Exit,
 		&jl.Error,
 		&jl.Stdout,
-		&jl.Stderr)
+		&jl.Stderr,
+		&jl.Attempt)
 
 	return err
 }

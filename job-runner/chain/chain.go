@@ -241,7 +241,7 @@ func (c *chain) SetJobState(jobId string, state byte) {
 	c.Unlock() // -- unlock
 }
 
-// Set the chain's state.
+// SetState sets the chain's state.
 func (c *chain) SetState(state byte) {
 	c.Lock() // -- lock
 	c.JobChain.State = state

@@ -34,8 +34,9 @@ CREATE TABLE `job_log` (
   `exit`        TINYINT UNSIGNED NULL DEFAULT NULL,
   `stdout`      TEXT NULL DEFAULT NULL,
   `stderr`      TEXT NULL DEFAULT NULL,
+  `attempt`     SMALLINT NOT NULL DEFAULT 1,
 
-  PRIMARY KEY (`request_id`, `job_id`),
+  PRIMARY KEY (`request_id`, `job_id`, `attempt`),
   INDEX state (`state`),
   INDEX type (`type`)
 );

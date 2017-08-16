@@ -53,7 +53,7 @@ func (c *client) NewJobChain(jobChain proto.JobChain) error {
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unsuccessful status code: %d (response body: %s)",
+		return fmt.Errorf("jr.Client.NewJobChain - unsuccessful status code: %d (response body: %s)",
 			resp.StatusCode, string(body))
 	}
 

@@ -3,7 +3,6 @@
 package request_test
 
 import (
-	"encoding/json"
 	"sort"
 	"testing"
 
@@ -11,6 +10,7 @@ import (
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/request-manager/request"
+	testutil "github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
 )
 
@@ -42,7 +42,7 @@ func TestCreateRequestResolveError(t *testing.T) {
 func TestCreateRequestDBError(t *testing.T) {
 	// Create a mock dbaccessor that will return an error.
 	dbAccessor := &mock.RequestDBAccessor{
-		SaveRequestFunc: func(proto.Request, []byte, []byte) error {
+		SaveRequestFunc: func(proto.Request, proto.CreateRequestParams) error {
 			return mock.ErrRequestDBAccessor
 		},
 	}
@@ -85,12 +85,11 @@ func TestCreateRequestSuccess(t *testing.T) {
 	}
 	// Create a mock dbaccessor that records the rawJc and rawParams it receives.
 	var dbRequest proto.Request
-	var dbRawJc, dbRawParams []byte
+	var dbReqParams proto.CreateRequestParams
 	dbAccessor := &mock.RequestDBAccessor{
-		SaveRequestFunc: func(req proto.Request, rawParams, rawJc []byte) error {
+		SaveRequestFunc: func(req proto.Request, reqParams proto.CreateRequestParams) error {
 			dbRequest = req
-			dbRawJc = rawJc
-			dbRawParams = rawParams
+			dbReqParams = reqParams
 			return nil
 		},
 	}
@@ -135,21 +134,8 @@ func TestCreateRequestSuccess(t *testing.T) {
 		t.Error(diff)
 	}
 
-	// Make sure the raw job chain sent to the db is what we expect.
-	var dbJc proto.JobChain
-	if err = json.Unmarshal(dbRawJc, &dbJc); err != nil {
-		t.Fatal(err)
-	}
-	if diff := deep.Equal(dbJc, expectedJc); diff != nil {
-		t.Error(diff)
-	}
-
-	// Make sure the raw request params sent to the db is what we expect.
-	var dbParams proto.CreateRequestParams
-	if err = json.Unmarshal(dbRawParams, &dbParams); err != nil {
-		t.Fatal(err)
-	}
-	if diff := deep.Equal(dbParams, reqParams); diff != nil {
+	// Make sure the request params sent to the db is what we expect.
+	if diff := deep.Equal(dbReqParams, reqParams); diff != nil {
 		t.Error(diff)
 	}
 }
@@ -341,19 +327,20 @@ func TestStopRequestSuccess(t *testing.T) {
 func TestRequestStatusRunning(t *testing.T) {
 	reqId := "abcd1234"
 	jc := proto.JobChain{
+		Jobs: testutil.InitJobs(9),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
-			"job2": []string{"job4", "job5"},
+			"job2": []string{"job4", "job5", "job6"},
 			"job3": []string{"job6"},
-			"job4": []string{"job8"},
-			"job5": []string{"job8"},
-			"job6": []string{"job7"},
+			"job4": []string{"job9"},
+			"job5": []string{"job9"},
+			"job6": []string{"job9"},
 			"job7": []string{"job8"},
+			"job8": []string{"job9"},
 		},
 	}
 	req := proto.Request{State: proto.STATE_RUNNING}
 	// Create a mock dbaccessor that returns a request and job statuses.
-	var recvdFinishedBurningEdges []string
 	dbAccessor := &mock.RequestDBAccessor{
 		GetRequestFunc: func(r string) (proto.Request, error) {
 			return req, nil
@@ -361,15 +348,14 @@ func TestRequestStatusRunning(t *testing.T) {
 		GetJobChainFunc: func(r string) (proto.JobChain, error) {
 			return jc, nil
 		},
-		GetRequestFinishedJobIdsFunc: func(req string) ([]string, error) {
-			// jobs 1, 2, 3, 4, 5, and 6 are finished running
-			return []string{"job1", "job2", "job3", "job4", "job5", "job6"}, nil
-		},
-		GetRequestJobStatusesFunc: func(req string, jobIds []string) (proto.JobStatuses, error) {
-			recvdFinishedBurningEdges = jobIds
+		GetRequestJobStatusesFunc: func(req string) (proto.JobStatuses, error) {
 			return proto.JobStatuses{
-				proto.JobStatus{Id: "job4", Status: "actually done"},
-				proto.JobStatus{Id: "job5", Status: "done"},
+				proto.JobStatus{Id: "job1", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job2", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job3", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job4", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job5", State: proto.STATE_FAIL},
+				proto.JobStatus{Id: "job6", State: proto.STATE_COMPLETE},
 			}, nil
 		},
 	}
@@ -379,12 +365,12 @@ func TestRequestStatusRunning(t *testing.T) {
 			return proto.JobChainStatus{
 				RequestId: reqId,
 				JobStatuses: proto.JobStatuses{
-					// jobs 4 and 7 are running. notive above, however, that job4
+					// jobs 4 and 7 are running. notice above, however, that job4
 					// is also "finished". This means that between the time we asked
 					// the JR for status, and we got the finished jobs from the db,
 					// job 4 moved from running to being finished.
-					proto.JobStatus{Id: "job4", Status: "running"},
-					proto.JobStatus{Id: "job7", Status: "running as well"},
+					proto.JobStatus{Id: "job4", State: proto.STATE_RUNNING, Status: "running"},
+					proto.JobStatus{Id: "job7", State: proto.STATE_RUNNING, Status: "running as well"},
 				},
 			}, nil
 		},
@@ -400,9 +386,15 @@ func TestRequestStatusRunning(t *testing.T) {
 		Request: req,
 		JobChainStatus: proto.JobChainStatus{
 			JobStatuses: proto.JobStatuses{
-				proto.JobStatus{Id: "job4", Status: "actually done"},
-				proto.JobStatus{Id: "job7", Status: "running as well"},
-				proto.JobStatus{Id: "job5", Status: "done"},
+				proto.JobStatus{Id: "job1", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job2", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job3", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job4", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job5", State: proto.STATE_FAIL},
+				proto.JobStatus{Id: "job6", State: proto.STATE_COMPLETE},
+				proto.JobStatus{Id: "job7", State: proto.STATE_RUNNING, Status: "running as well"},
+				proto.JobStatus{Id: "job8", State: proto.STATE_PENDING},
+				proto.JobStatus{Id: "job9", State: proto.STATE_PENDING},
 			},
 		},
 	}
@@ -411,13 +403,6 @@ func TestRequestStatusRunning(t *testing.T) {
 	sort.Sort(actualReqStatus.JobChainStatus.JobStatuses)
 
 	if diff := deep.Equal(actualReqStatus, expectedReqStatus); diff != nil {
-		t.Error(diff)
-	}
-
-	expectedFinishedBurningEdges := []string{"job4", "job5"}
-	sort.Strings(recvdFinishedBurningEdges)
-	sort.Strings(expectedFinishedBurningEdges)
-	if diff := deep.Equal(recvdFinishedBurningEdges, expectedFinishedBurningEdges); diff != nil {
 		t.Error(diff)
 	}
 }
@@ -447,7 +432,7 @@ func TestGetJLSuccess(t *testing.T) {
 	jobId := "job1"
 	// Create a mock dbaccessor that returns a jl.
 	dbAccessor := &mock.RequestDBAccessor{
-		GetJLFunc: func(r, j string) (proto.JobLog, error) {
+		GetLatestJLFunc: func(r, j string) (proto.JobLog, error) {
 			return proto.JobLog{RequestId: r, JobId: j}, nil
 		},
 	}

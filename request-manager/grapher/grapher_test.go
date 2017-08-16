@@ -124,6 +124,44 @@ func TestNodeArgs(t *testing.T) {
 	}
 }
 
+func TestNodeRetries(t *testing.T) {
+	omg := testGrapher()
+	args := map[string]interface{}{
+		"cluster": "test-cluster-001",
+		"env":     "testing",
+	}
+
+	// create the graph
+	g, err := omg.CreateGraph("decommission-cluster", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the retries are set correctly on all nodes. Only the "get-instances" node should have retries.
+	found := false
+	for name, node := range g.Vertices {
+		if strings.HasPrefix(name, "get-instances@") {
+			found = true
+			if node.Retries != 3 {
+				t.Errorf("%s node retries = %d, expected %d", name, node.Retries, 3)
+			}
+			if node.RetryDelay != 10 {
+				t.Errorf("%s node retry delay = %d, expected %d", name, node.RetryDelay, 10)
+			}
+		} else {
+			if node.Retries != 0 {
+				t.Errorf("%s node retries = %d, expected %d", name, node.Retries, 0)
+			}
+			if node.RetryDelay != 0 {
+				t.Errorf("%s node retry delay = %d, expected %d", name, node.RetryDelay, 0)
+			}
+		}
+	}
+	if !found {
+		t.Error("couldn't find vertix with node name 'get-instances@*'")
+	}
+}
+
 func TestCreateDecomGraph(t *testing.T) {
 	omg := testGrapher()
 	args := map[string]interface{}{
