@@ -306,7 +306,7 @@ func TestCreateGetJL(t *testing.T) {
 	jl := proto.JobLog{
 		RequestId: reqId,
 		JobId:     jobId,
-		Attempt:   1,
+		Try:       1,
 	}
 
 	// Create a jl in the db.
@@ -318,7 +318,7 @@ func TestCreateGetJL(t *testing.T) {
 	jl = proto.JobLog{
 		RequestId: reqId,
 		JobId:     jobId,
-		Attempt:   2,
+		Try:       2,
 	}
 
 	// Create a second jl in the db.
@@ -348,33 +348,33 @@ func TestGetRequestJobStatuses(t *testing.T) {
 		RequestId: reqId1,
 		JobId:     jobId,
 		State:     proto.STATE_FAIL,
-		Attempt:   1, // first attempt
+		Try:       1, // first attempt
 	}
 	jl2 := proto.JobLog{
 		RequestId: reqId1,
 		JobId:     jobId,
 		State:     proto.STATE_COMPLETE,
-		Attempt:   2, // second attempt
+		Try:       2, // second attempt
 	}
 	jobId = "job2"
 	jl3 := proto.JobLog{
 		RequestId: reqId1,
 		JobId:     jobId,
 		State:     proto.STATE_FAIL,
-		Attempt:   1, // first attempt
+		Try:       1, // first attempt
 	}
 	jl4 := proto.JobLog{
 		RequestId: reqId1,
 		JobId:     jobId,
 		State:     proto.STATE_FAIL,
-		Attempt:   2, // second attempt
+		Try:       2, // second attempt
 	}
 	jobId = "job3"
 	jl5 := proto.JobLog{
 		RequestId: reqId1,
 		JobId:     jobId,
 		State:     proto.STATE_FAIL,
-		Attempt:   1,
+		Try:       1,
 	}
 	reqId2 := util.UUID() // this one has a different request id
 	jobId = "job4"
@@ -382,7 +382,7 @@ func TestGetRequestJobStatuses(t *testing.T) {
 		RequestId: reqId2,
 		JobId:     jobId,
 		State:     proto.STATE_FAIL,
-		Attempt:   1,
+		Try:       1,
 	}
 	jls := []proto.JobLog{jl1, jl2, jl3, jl4, jl5, jl6}
 

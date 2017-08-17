@@ -53,10 +53,10 @@ func TestRunFail(t *testing.T) {
 		},
 	}
 	pJob := proto.Job{
-		Id:             "failJob",
-		Type:           "jtype",
-		Bytes:          []byte{},
-		RetriesAllowed: 2,
+		Id:    "failJob",
+		Type:  "jtype",
+		Bytes: []byte{},
+		Retry: 2,
 	}
 	// Create a mock rmClient that will keep track of how many JLs get sent through it.
 	jlsSent := 0
@@ -92,10 +92,10 @@ func TestRunSuccess(t *testing.T) {
 		},
 	}
 	pJob := proto.Job{
-		Id:             "successJob",
-		Type:           "jtype",
-		Bytes:          []byte{},
-		RetriesAllowed: 4,
+		Id:    "successJob",
+		Type:  "jtype",
+		Bytes: []byte{},
+		Retry: 4,
 	}
 	// Create a mock rmClient that will keep track of how many JLs get sent through it.
 	jlsSent := 0
@@ -125,11 +125,11 @@ func TestRunStop(t *testing.T) {
 		},
 	}
 	pJob := proto.Job{
-		Id:             "successJob",
-		Type:           "jtype",
-		Bytes:          []byte{},
-		RetriesAllowed: 1,
-		RetryDelay:     30, // important...the runner will sleep for 30 seconds after the job fails the first time
+		Id:        "successJob",
+		Type:      "jtype",
+		Bytes:     []byte{},
+		Retry:     1,
+		RetryWait: 30000, // important...the runner will sleep for 30 seconds after the job fails the first time
 	}
 	rmc := &mock.RMClient{}
 	jr := runner.NewRunner(pJob, mJob, "abc", rmc)
@@ -142,7 +142,7 @@ func TestRunStop(t *testing.T) {
 
 	// Sleep for a second to allow the runner to get to the state where it's sleeping for the
 	// duration of the retry delay.
-	time.Sleep(1000 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 	err := jr.Stop()
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)

@@ -118,7 +118,7 @@ func TestNodeArgs(t *testing.T) {
 	}
 }
 
-func TestNodeRetries(t *testing.T) {
+func TestNodeRetry(t *testing.T) {
 	omg := testGrapher()
 	args := map[string]interface{}{
 		"cluster": "test-cluster-001",
@@ -136,18 +136,18 @@ func TestNodeRetries(t *testing.T) {
 	for name, node := range g.Vertices {
 		if strings.HasPrefix(name, "get-instances@") {
 			found = true
-			if node.Retries != 3 {
-				t.Errorf("%s node retries = %d, expected %d", name, node.Retries, 3)
+			if node.Retry != 3 {
+				t.Errorf("%s node retries = %d, expected %d", name, node.Retry, 3)
 			}
-			if node.RetryDelay != 10 {
-				t.Errorf("%s node retry delay = %d, expected %d", name, node.RetryDelay, 10)
+			if node.RetryWait != 10 {
+				t.Errorf("%s node retry delay = %d, expected %d", name, node.RetryWait, 10)
 			}
 		} else {
-			if node.Retries != 0 {
-				t.Errorf("%s node retries = %d, expected %d", name, node.Retries, 0)
+			if node.Retry != 0 {
+				t.Errorf("%s node retries = %d, expected %d", name, node.Retry, 0)
 			}
-			if node.RetryDelay != 0 {
-				t.Errorf("%s node retry delay = %d, expected %d", name, node.RetryDelay, 0)
+			if node.RetryWait != 0 {
+				t.Errorf("%s node retry delay = %d, expected %d", name, node.RetryWait, 0)
 			}
 		}
 	}
