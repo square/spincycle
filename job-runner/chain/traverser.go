@@ -295,22 +295,24 @@ func (t *traverser) Status() (proto.JobChainStatus, error) {
 // and attaches it to the job. When it's done, it sends the job out through the
 // doneJobChan.
 func (t *traverser) runJobs() {
-	for runJ := range t.runJobChan {
-		go func(j proto.Job) {
+	for runnableJob := range t.runJobChan {
+		go func(pJob proto.Job) {
+			// Always return the job when done, else the traverser will block.
+			defer func() { t.doneJobChan <- pJob }()
+
 			// Make a job runner. If an error is encountered, set the
 			// state of the job to FAIL and create a JL with the error.
-			runner, err := t.rf.Make(j, t.chain.RequestId())
+			runner, err := t.rf.Make(pJob, t.chain.RequestId())
 			if err != nil {
-				j.State = proto.STATE_FAIL
-				t.sendJL(j, err)   // need to send a JL to the RM so that it knows this job failed
-				t.doneJobChan <- j // send the job to the doneJobChan
+				pJob.State = proto.STATE_FAIL
+				t.sendJL(pJob, err) // need to send a JL to the RM so that it knows this job failed
 				return
 			}
 
 			// Add the runner to the repo. Runners in the repo are used
 			// by the Status and Stop methods on the traverser.
-			t.runnerRepo.Set(j.Id, runner)
-			defer t.runnerRepo.Remove(j.Id)
+			t.runnerRepo.Set(pJob.Id, runner)
+			defer t.runnerRepo.Remove(pJob.Id)
 
 			// Bail out if Stop was called. It is important that this check happens AFTER
 			// the runner is added to the repo, because if Stop gets called between the
@@ -319,35 +321,32 @@ func (t *traverser) runJobs() {
 			select {
 			case <-t.stopChan:
 				err = fmt.Errorf("not starting job because traverser has already been stopped")
-				t.sendJL(j, err)   // need to send a JL to the RM so that it knows this job failed
-				t.doneJobChan <- j // send the job to the doneJobChan
+				t.sendJL(pJob, err) // need to send a JL to the RM so that it knows this job failed
 				return
 			default:
 			}
 
 			// Run the job. This is a blocking operation that could take a long time.
-			finalState := runner.Run(j.Data)
+			finalState := runner.Run(pJob.Data)
 
 			// The traverser only cares about if a job completes or fails. Therefore,
 			// we set the state of every job that isn't COMPLETE to be FAIL.
 			if finalState != proto.STATE_COMPLETE {
 				finalState = proto.STATE_FAIL
 			}
-			j.State = finalState
-
-			t.doneJobChan <- j // send the job to the doneJobChan
-		}(runJ)
+			pJob.State = finalState
+		}(runnableJob)
 	}
 }
 
-func (t *traverser) sendJL(j proto.Job, err error) {
-	jLogger := t.logger.WithFields(log.Fields{"job_id": j.Id})
+func (t *traverser) sendJL(pJob proto.Job, err error) {
+	jLogger := t.logger.WithFields(log.Fields{"job_id": pJob.Id})
 	jl := proto.JobLog{RequestId: t.chain.RequestId(),
-		JobId:      j.Id,
-		Type:       j.Type,
+		JobId:      pJob.Id,
+		Type:       pJob.Type,
 		StartedAt:  time.Now(),
 		FinishedAt: time.Now(),
-		State:      j.State,
+		State:      pJob.State,
 		Exit:       1,
 		Error:      err.Error(),
 	}

@@ -17,8 +17,8 @@ sequences:
             given: cluster
         sets: [instances]
         deps: []
-        retries: 3
-        retryDelay: 10
+        retry: 3
+        retryWait: 10
       prep-1:
         category: job
         type: prep-job-1
@@ -41,8 +41,8 @@ sequences:
           - expected: instances
             given: instances
         deps: [get-instances]
-        retries: 3     # this should get ignored
-        retryDelay: 10 # this should get ignored
+        retry: 3      # this should be ignored
+        retryWait: 10 # this should be ignored
       decommission-instances:
         category: sequence
         type: decommission-instance

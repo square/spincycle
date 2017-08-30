@@ -1,4 +1,4 @@
-CREATE TABLE `requests` (
+CREATE TABLE IF NOT EXISTS `requests` (
   `id`             BINARY(32) NOT NULL,
   `type`           VARBINARY(75) NOT NULL,
   `state`          TINYINT NOT NULL DEFAULT 0,
@@ -14,7 +14,7 @@ CREATE TABLE `requests` (
   INDEX state (`state`)
 );
 
-CREATE TABLE `raw_requests` (
+CREATE TABLE IF NOT EXISTS `raw_requests` (
   `request_id` BINARY(32) NOT NULL,
   `request`    BLOB NOT NULL,
   `job_chain`  BLOB NOT NULL,
@@ -22,9 +22,10 @@ CREATE TABLE `raw_requests` (
   PRIMARY KEY (`request_id`)
 );
 
-CREATE TABLE `job_log` (
+CREATE TABLE IF NOT EXISTS `job_log` (
   `request_id`  BINARY(32) NOT NULL,
   `job_id`      VARBINARY(100) NOT NULL,
+  `try`         SMALLINT NOT NULL DEFAULT 0,
   `type`        VARBINARY(75) NOT NULL,
   `state`       TINYINT NOT NULL DEFAULT 0,
   `status`      TEXT NULL DEFAULT NULL,
@@ -34,9 +35,6 @@ CREATE TABLE `job_log` (
   `exit`        TINYINT UNSIGNED NULL DEFAULT NULL,
   `stdout`      TEXT NULL DEFAULT NULL,
   `stderr`      TEXT NULL DEFAULT NULL,
-  `attempt`     SMALLINT NOT NULL DEFAULT 1,
 
-  PRIMARY KEY (`request_id`, `job_id`, `attempt`),
-  INDEX state (`state`),
-  INDEX type (`type`)
+  PRIMARY KEY (`request_id`, `job_id`, `try`)
 );

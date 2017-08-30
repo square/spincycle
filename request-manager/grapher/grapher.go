@@ -50,12 +50,12 @@ type Graph struct {
 // should be retried on error. Next defines all the out edges
 // from Node, and Prev defines all the in edges to Node.
 type Node struct {
-	Datum      Payload                // Data stored at this Node
-	Next       map[string]*Node       // out edges ( node name -> Node )
-	Prev       map[string]*Node       // in edges ( node name -> Node )
-	Args       map[string]interface{} // the args the node was created with
-	Retries    int                    // the number of times to retry a node
-	RetryDelay int                    // the time, in seconds, to sleep between retries
+	Datum     Payload                // Data stored at this Node
+	Next      map[string]*Node       // out edges ( node name -> Node )
+	Prev      map[string]*Node       // in edges ( node name -> Node )
+	Args      map[string]interface{} // the args the node was created with
+	Retry     uint                   // retry N times if first run fails
+	RetryWait uint                   // wait time (milliseconds) between retries
 }
 
 // Payload defines the interface of structs that can be
@@ -81,9 +81,9 @@ type NodeSpec struct {
 	Sets         []string   `yaml:"sets"`     // expected job args to be set
 	Dependencies []string   `yaml:"deps"`     // nodes with out-edges leading to this node
 
-	// Retries only apply to nodes with category="job". Fields are ignored for "sequence"s
-	Retries    int `yaml:"retries"`    // the number of times to retry a "job" that fails
-	RetryDelay int `yaml:"retryDelay"` // the time, in seconds, to sleep between "job" retries
+	// Retry only apply to nodes with category="job". Fields are ignored for "sequence"s
+	Retry     uint `yaml:"retry"`     // retry N times if first run fails
+	RetryWait uint `yaml:"retryWait"` // wait time (milliseconds) between retries
 }
 
 // NodeArg defines the structure expected from the yaml file to define a job's args.
@@ -727,12 +727,12 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 	}
 
 	return &Node{
-		Datum:      rj,
-		Next:       map[string]*Node{},
-		Prev:       map[string]*Node{},
-		Args:       originalArgs, // Args is the nodeArgs map that this node was created with
-		Retries:    j.Retries,
-		RetryDelay: j.RetryDelay,
+		Datum:     rj,
+		Next:      map[string]*Node{},
+		Prev:      map[string]*Node{},
+		Args:      originalArgs, // Args is the nodeArgs map that this node was created with
+		Retry:     j.Retry,
+		RetryWait: j.RetryWait,
 	}, nil
 }
 

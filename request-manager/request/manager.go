@@ -108,11 +108,11 @@ func (m *manager) CreateRequest(reqParams proto.CreateRequestParams) (proto.Requ
 			return req, err
 		}
 		job := proto.Job{
-			Type:           node.Datum.Type(),
-			Id:             node.Datum.Name(),
-			Bytes:          bytes,
-			RetriesAllowed: node.Retries,
-			RetryDelay:     node.RetryDelay,
+			Type:      node.Datum.Type(),
+			Id:        node.Datum.Name(),
+			Bytes:     bytes,
+			Retry:     node.Retry,
+			RetryWait: node.RetryWait,
 		}
 		jc.Jobs[name] = job
 	}

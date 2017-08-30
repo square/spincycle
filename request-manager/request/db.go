@@ -25,12 +25,12 @@ const (
 
 	// JL queries.
 	createJL = "INSERT INTO job_log (request_id, job_id, type, started_at, finished_at, state, `exit`, " +
-		"error, stdout, stderr, attempt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	selectLatestJL = "SELECT request_id, job_id, state, started_at, finished_at, error, `exit`, stdout, stderr, attempt " +
-		"FROM job_log WHERE request_id = ? AND job_id = ? ORDER BY attempt DESC LIMIT 1"
+		"error, stdout, stderr, try) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	selectLatestJL = "SELECT request_id, job_id, state, started_at, finished_at, error, `exit`, stdout, stderr, try " +
+		"FROM job_log WHERE request_id = ? AND job_id = ? ORDER BY try DESC LIMIT 1"
 	// Select the job id and state of all jobs in a request, using the latest JL for each job.
 	selectRequestLatestJLStates = "SELECT j1.job_id, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
-		"j2.request_id AND j1.job_id = j2.job_id AND j1.attempt < j2.attempt) WHERE j1.request_id = ? AND j2.attempt IS NULL"
+		"j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try) WHERE j1.request_id = ? AND j2.try IS NULL"
 )
 
 // A DBAccessor persists requests to a database.
@@ -264,7 +264,7 @@ func (d *dbAccessor) GetLatestJL(requestId, jobId string) (proto.JobLog, error) 
 		&jl.Exit,
 		&jl.Stdout,
 		&jl.Stderr,
-		&jl.Attempt)
+		&jl.Try)
 	switch {
 	case err == sql.ErrNoRows:
 		return jl, NewErrNotFound("job log")
@@ -288,7 +288,7 @@ func (d *dbAccessor) SaveJL(jl proto.JobLog) error {
 		&jl.Error,
 		&jl.Stdout,
 		&jl.Stderr,
-		&jl.Attempt)
+		&jl.Try)
 
 	return err
 }
