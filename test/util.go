@@ -26,10 +26,10 @@ func MakeHTTPRequest(httpVerb, url string, payload []byte, respStruct interface{
 	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := (http.DefaultClient).Do(req)
+	defer res.Body.Close()
 	if err != nil {
 		return statusCode, http.Header{}, err
 	}
-	defer res.Body.Close()
 
 	if respStruct != nil {
 		decoder := json.NewDecoder(res.Body)
