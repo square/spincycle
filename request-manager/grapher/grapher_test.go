@@ -7,11 +7,13 @@ import (
 
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/test/mock"
 )
 
-type testFactory struct{}
+type testFactory struct {
+}
 
-func (f testFactory) Make(t, n string) (job.Job, error) {
+func (f *testFactory) Make(t, n string) (job.Job, error) {
 	j := testJob{
 		name:      n,
 		jobtype:   t,
@@ -27,6 +29,11 @@ type testJob struct {
 }
 
 func (tj testJob) Create(args map[string]interface{}) error {
+	tj.givenArgs = map[string]interface{}{}
+	for k, v := range args {
+		tj.givenArgs[k] = v
+	}
+
 	switch tj.jobtype {
 	case "get-cluster-instances":
 		return createGetClusterMembers(args)
@@ -44,15 +51,8 @@ func (tj testJob) Create(args map[string]interface{}) error {
 		return createDecom2(args)
 	case "decom-step-3":
 		return createDecom3(args)
-	case "no-op":
+	case "no-op", "noop":
 		return createEndNode(args)
-	default:
-		return fmt.Errorf("warning job not found")
-	}
-
-	tj.givenArgs = map[string]interface{}{}
-	for k, v := range args {
-		tj.givenArgs[k] = v
 	}
 
 	return nil
@@ -69,8 +69,8 @@ func (tj testJob) Run(map[string]interface{}) (job.Return, error) {
 }
 
 func testGrapher() *Grapher {
-	tf := testFactory{}
-	sequencesFile := "./test/example-requests.yaml"
+	tf := &testFactory{}
+	sequencesFile := "../test/specs/decomm.yaml"
 	cfg, _ := ReadConfig(sequencesFile)
 	return NewGrapher(tf, cfg)
 }
@@ -399,7 +399,7 @@ func createEndNode(args map[string]interface{}) error {
 
 // three nodes in a straight line
 func g1() *Graph {
-	tf := testFactory{}
+	tf := &testFactory{}
 	n1, _ := tf.Make("g1n1", "g1n1")
 	n2, _ := tf.Make("g1n2", "g1n2")
 	n3, _ := tf.Make("g1n3", "g1n3")
@@ -439,7 +439,7 @@ func g1() *Graph {
 //
 //
 func g3() *Graph {
-	tf := testFactory{}
+	tf := &testFactory{}
 	n1, _ := tf.Make("g3n1", "g3n1")
 	n2, _ := tf.Make("g3n2", "g3n2")
 	n3, _ := tf.Make("g3n3", "g3n3")
@@ -478,7 +478,7 @@ func g3() *Graph {
 
 // 18 node graph of something
 func g2() *Graph {
-	tf := testFactory{}
+	tf := &testFactory{}
 	n := [20]*Node{}
 	for i := 0; i < 20; i++ {
 		m := fmt.Sprintf("g2n%d", i)
@@ -816,5 +816,102 @@ func TestInsertComponentBetween3(t *testing.T) {
 		if e := actualEdges[source]; !slicesMatch(e, sinks) {
 			t.Fatalf("missing4 %s -> %v", source, sinks)
 		}
+	}
+}
+
+func TestOptArgs001(t *testing.T) {
+	tf := &mock.JobFactory{
+		Created: map[string]*mock.Job{},
+	}
+	s, err := ReadConfig("../test/specs/opt-args-001.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := NewGrapher(tf, s)
+
+	args := map[string]interface{}{
+		"cmd":  "sleep",
+		"args": "3",
+	}
+	got, err := g.CreateGraph("req", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, ok := got.Vertices["job1name@3"]
+	if !ok {
+		t.Logf("%#v", got.Vertices)
+		t.Fatal("graph.Vertices[job1name@3] not set")
+	}
+	if diff := deep.Equal(j.Args, args); diff != nil {
+		t.Logf("%#v\n", j.Args)
+		t.Error(diff)
+	}
+	job := tf.Created["job1name@3"]
+	if diff := deep.Equal(job.CreatedWithArgs, args); diff != nil {
+		t.Logf("%#v\n", job)
+		t.Errorf("test job not created with args arg")
+	}
+
+	// Try again without "args", i.e. the optional arg is not given
+	delete(args, "args")
+
+	tf = &mock.JobFactory{
+		Created: map[string]*mock.Job{},
+	}
+	s, err = ReadConfig("../test/specs/opt-args-001.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g = NewGrapher(tf, s)
+
+	got, err = g.CreateGraph("req", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, ok = got.Vertices["job1name@3"]
+	if !ok {
+		t.Logf("%#v", got.Vertices)
+		t.Fatal("graph.Vertices[job1name@3] not set")
+	}
+	if diff := deep.Equal(j.Args, args); diff != nil {
+		t.Logf("%#v\n", j.Args)
+		t.Error(diff)
+	}
+	job = tf.Created["job1name@3"]
+	if _, ok := job.CreatedWithArgs["args"]; !ok {
+		t.Error("jobArgs[args] does not exist, expected it to be set")
+	}
+	if diff := deep.Equal(job.CreatedWithArgs, args); diff != nil {
+		t.Logf("%#v\n", job)
+		t.Errorf("test job not created with args arg")
+	}
+}
+
+func TestBadEach001(t *testing.T) {
+	job := &mock.Job{
+		SetJobArgs: map[string]interface{}{
+			// This causes an error because the spec has each: instances:instannce,
+			// so instances should be a slice, but it's a string.
+			"instances": "foo",
+		},
+	}
+	tf := &mock.JobFactory{
+		MockJobs: map[string]*mock.Job{
+			"get-instances": job,
+		},
+	}
+	s, err := ReadConfig("../test/specs/bad-each-001.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := NewGrapher(tf, s)
+
+	args := map[string]interface{}{
+		"host": "foo",
+	}
+	_, err = g.CreateGraph("bad-each", args)
+	// Should get "each:instances:instance: arg instances is a string, expected a slice"
+	if err == nil {
+		t.Error("err is nil, expected an error")
 	}
 }

@@ -3,6 +3,7 @@
 package request_test
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 
@@ -10,32 +11,46 @@ import (
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/request-manager/request"
-	testutil "github.com/square/spincycle/test"
+	"github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
 )
 
+var abcSpec *grapher.Config
+var testJobFactory *mock.JobFactory
+var testGrapher *grapher.Grapher
+
+func setup() {
+	testJobFactory = &mock.JobFactory{
+		MockJobs: map[string]*mock.Job{},
+	}
+	for i, c := range []string{"a", "b", "c"} {
+		jobType := c + "JobType"
+		testJobFactory.MockJobs[jobType] = &mock.Job{
+			NameResp: fmt.Sprintf("%s@%d", c, i),
+			TypeResp: jobType,
+		}
+	}
+	testJobFactory.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
+		"aArg": "aValue",
+	}
+	testGrapher = grapher.NewGrapher(testJobFactory, abcSpec)
+}
+
+func init() {
+	var err error
+	abcSpec, err = grapher.ReadConfig("../test/specs/a-b-c.yaml")
+	if err != nil {
+		panic(err)
+	}
+	setup()
+}
+
 func TestCreateRequestMissingType(t *testing.T) {
-	m := request.NewManager(&mock.Grapher{}, &mock.RequestDBAccessor{}, &mock.JRClient{})
+	m := request.NewManager(testGrapher, &mock.RequestDBAccessor{}, &mock.JRClient{})
 
 	_, err := m.CreateRequest(proto.CreateRequestParams{})
 	if err != request.ErrInvalidParams {
 		t.Errorf("err = %s, expected %s", err, request.ErrInvalidParams)
-	}
-}
-
-func TestCreateRequestResolveError(t *testing.T) {
-	// Create a mock request resolver that will return an error.
-	grapher := &mock.Grapher{
-		CreateGraphFunc: func(reqType string, args map[string]interface{}) (*grapher.Graph, error) {
-			return nil, mock.ErrGrapher
-		},
-	}
-	m := request.NewManager(grapher, &mock.RequestDBAccessor{}, &mock.JRClient{})
-	reqParams := proto.CreateRequestParams{Type: "foo"}
-
-	_, err := m.CreateRequest(reqParams)
-	if err != mock.ErrGrapher {
-		t.Errorf("err = %s, expected %s", err, mock.ErrGrapher)
 	}
 }
 
@@ -46,8 +61,8 @@ func TestCreateRequestDBError(t *testing.T) {
 			return mock.ErrRequestDBAccessor
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
-	reqParams := proto.CreateRequestParams{Type: "foo"}
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
+	reqParams := proto.CreateRequestParams{Type: "three-nodes", Args: map[string]interface{}{"foo": 1}}
 
 	_, err := m.CreateRequest(reqParams)
 	if err != mock.ErrRequestDBAccessor {
@@ -56,33 +71,17 @@ func TestCreateRequestDBError(t *testing.T) {
 }
 
 func TestCreateRequestSuccess(t *testing.T) {
-	reqParams := proto.CreateRequestParams{Type: "foo", User: "john"}
-	// Create a mock request resolver that will return a graph.
-	grapher := &mock.Grapher{
-		CreateGraphFunc: func(reqType string, args map[string]interface{}) (*grapher.Graph, error) {
-			fNode := &grapher.Node{
-				Datum: &mock.Payload{
-					NameResp: "job1",
-				},
-			}
-			lNode := &grapher.Node{
-				Datum: &mock.Payload{
-					NameResp: "job2",
-				},
-			}
-			return &grapher.Graph{
-				First: fNode,
-				Last:  lNode,
-				Vertices: map[string]*grapher.Node{
-					"job1": fNode,
-					"job2": lNode,
-				},
-				Edges: map[string][]string{
-					"job1": []string{"job2"},
-				},
-			}, nil
+	setup()
+
+	// testGrapher uses spec a-b-c.yaml which has reqest "three-nodes"
+	reqParams := proto.CreateRequestParams{
+		Type: "three-nodes",
+		User: "john",
+		Args: map[string]interface{}{
+			"foo": "foo-value",
 		},
 	}
+
 	// Create a mock dbaccessor that records the rawJc and rawParams it receives.
 	var dbRequest proto.Request
 	var dbReqParams proto.CreateRequestParams
@@ -93,7 +92,7 @@ func TestCreateRequestSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	m := request.NewManager(grapher, dbAccessor, &mock.JRClient{})
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
 
 	actualReq, err := m.CreateRequest(reqParams)
 	if err != nil {
@@ -102,30 +101,69 @@ func TestCreateRequestSuccess(t *testing.T) {
 
 	// Make sure the returned request is what we expect.
 	if actualReq.Id == "" {
-		t.Errorf("request id is an empty string, shoudl not be")
+		t.Errorf("request id is an empty string, expected it to be set")
 	}
 	if actualReq.CreatedAt.IsZero() {
 		t.Errorf("request created at is a zero time, should not be")
 	}
-	expectedJc := proto.JobChain{
-		RequestId: actualReq.Id, // no other way of getting this from outside the package
-		State:     proto.STATE_PENDING,
-		Jobs: map[string]proto.Job{
-			"job1": proto.Job{Id: "job1"},
-			"job2": proto.Job{Id: "job2"},
-		},
-		AdjacencyList: map[string][]string{"job1": []string{"job2"}},
-	}
+
+	// Job names in requests are non-deterministic because the nodes in a sequence
+	// are built from a map (i.e. hash order randomness). So sometimes we get a@3
+	// and other times a@4, etc. So we'll check some specific, deterministic stuff.
+	// But an example of a job chain is shown in the comment block below.
+	actualJobChain := actualReq.JobChain
+	actualReq.JobChain = nil
+	dbRequest.JobChain = nil
+
+	/*
+		expectedJc := proto.JobChain{
+			RequestId: actualReq.Id, // no other way of getting this from outside the package
+			State:     proto.STATE_PENDING,
+			Jobs: map[string]proto.Job{
+				"sequence_three-nodes_start@1": proto.Job{
+					Id:   "sequence_three-nodes_start@1",
+					Type: "no-op",
+				},
+				"a@3": proto.Job{
+					Id:        "a@3",
+					Type:      "aJobType",
+					Retry:     1,
+					RetryWait: 500,
+				},
+				"b@4": proto.Job{
+					Id:    "b@4",
+					Type:  "bJobType",
+					Retry: 3,
+				},
+				"c@5": proto.Job{
+					Id:   "c@5",
+					Type: "cJobType",
+				},
+				"sequence_three-nodes_end@2": proto.Job{
+					Id:   "sequence_three-nodes_end@2",
+					Type: "no-op",
+				},
+			},
+			AdjacencyList: map[string][]string{
+				"sequence_three-nodes_start@1": []string{"a@3"},
+				"a@3": []string{"b@4"},
+				"b@4": []string{"c@5"},
+				"c@5": []string{"sequence_three-nodes_end@2"},
+			},
+		}
+	*/
+
 	expectedReq := proto.Request{
 		Id:        actualReq.Id, // no other way of getting this from outside the package
 		Type:      reqParams.Type,
 		CreatedAt: actualReq.CreatedAt, // same deal as request id
 		State:     proto.STATE_PENDING,
 		User:      reqParams.User,
-		JobChain:  &expectedJc,
-		TotalJobs: 2,
+		JobChain:  nil,
+		TotalJobs: 5,
 	}
 	if diff := deep.Equal(actualReq, expectedReq); diff != nil {
+		test.Dump(actualReq)
 		t.Error(diff)
 	}
 
@@ -138,6 +176,23 @@ func TestCreateRequestSuccess(t *testing.T) {
 	if diff := deep.Equal(dbReqParams, reqParams); diff != nil {
 		t.Error(diff)
 	}
+
+	// Check the job chain
+	if actualJobChain.RequestId == "" {
+		t.Error("job chain RequestId not set, expected it to be set")
+	}
+	if actualJobChain.State != proto.STATE_PENDING {
+		t.Error("job chain state = %s, expected PENDING", proto.StateName[actualJobChain.State])
+	}
+	if len(actualJobChain.Jobs) != 5 {
+		test.Dump(actualJobChain.Jobs)
+		t.Error("job chain has %d jobs, expected 5", len(actualJobChain.Jobs))
+	}
+	if len(actualJobChain.AdjacencyList) != 4 {
+		test.Dump(actualJobChain.Jobs)
+		t.Error("job chain AdjacencyList len = %d, expected 4", len(actualJobChain.AdjacencyList))
+	}
+
 }
 
 func TestGetRequestSuccess(t *testing.T) {
@@ -148,7 +203,7 @@ func TestGetRequestSuccess(t *testing.T) {
 			return proto.Request{Id: r}, nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
 
 	actualReq, err := m.GetRequest(reqId)
 	if err != nil {
@@ -168,7 +223,7 @@ func TestStartRequestInvalidState(t *testing.T) {
 			return proto.Request{State: proto.STATE_RUNNING}, nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
 
 	err := m.StartRequest(reqId)
 	if err != nil {
@@ -206,7 +261,7 @@ func TestStartRequestSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, jrClient)
+	m := request.NewManager(testGrapher, dbAccessor, jrClient)
 
 	err := m.StartRequest(reqId)
 	if err != nil {
@@ -233,8 +288,8 @@ func TestFinishRequestInvalidState(t *testing.T) {
 			return proto.Request{State: proto.STATE_PENDING}, nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
-	finishParams := proto.FinishRequestParams{State: proto.STATE_INCOMPLETE}
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
+	finishParams := proto.FinishRequestParams{State: proto.STATE_FAIL}
 
 	err := m.FinishRequest(reqId, finishParams)
 	if err != nil {
@@ -260,16 +315,16 @@ func TestFinishRequestSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
-	finishParams := proto.FinishRequestParams{State: proto.STATE_INCOMPLETE}
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
+	finishParams := proto.FinishRequestParams{State: proto.STATE_FAIL}
 
 	err := m.FinishRequest(reqId, finishParams)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
-	if dbReq.State != proto.STATE_INCOMPLETE {
-		t.Errorf("request state = %d, expected %d", dbReq.State, proto.STATE_INCOMPLETE)
+	if dbReq.State != proto.STATE_FAIL {
+		t.Errorf("request state = %d, expected %d", dbReq.State, proto.STATE_FAIL)
 	}
 	if dbReq.FinishedAt.IsZero() {
 		t.Errorf("request started at is a zero time, should not be")
@@ -284,7 +339,7 @@ func TestStopRequestInvalidState(t *testing.T) {
 			return proto.Request{State: proto.STATE_PENDING}, nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
 
 	err := m.StopRequest(reqId)
 	if err != nil {
@@ -312,7 +367,7 @@ func TestStopRequestSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, jrClient)
+	m := request.NewManager(testGrapher, dbAccessor, jrClient)
 
 	err := m.StopRequest(reqId)
 	if err != nil {
@@ -327,7 +382,7 @@ func TestStopRequestSuccess(t *testing.T) {
 func TestRequestStatusRunning(t *testing.T) {
 	reqId := "abcd1234"
 	jc := proto.JobChain{
-		Jobs: testutil.InitJobs(9),
+		Jobs: test.InitJobs(9),
 		AdjacencyList: map[string][]string{
 			"job1": []string{"job2", "job3"},
 			"job2": []string{"job4", "job5", "job6"},
@@ -350,12 +405,12 @@ func TestRequestStatusRunning(t *testing.T) {
 		},
 		GetRequestJobStatusesFunc: func(req string) (proto.JobStatuses, error) {
 			return proto.JobStatuses{
-				proto.JobStatus{Id: "job1", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job2", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job3", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job4", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job5", State: proto.STATE_FAIL},
-				proto.JobStatus{Id: "job6", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job1", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job2", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job3", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job4", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job5", State: proto.STATE_FAIL},
+				proto.JobStatus{JobId: "job6", State: proto.STATE_COMPLETE},
 			}, nil
 		},
 	}
@@ -369,13 +424,13 @@ func TestRequestStatusRunning(t *testing.T) {
 					// is also "finished". This means that between the time we asked
 					// the JR for status, and we got the finished jobs from the db,
 					// job 4 moved from running to being finished.
-					proto.JobStatus{Id: "job4", State: proto.STATE_RUNNING, Status: "running"},
-					proto.JobStatus{Id: "job7", State: proto.STATE_RUNNING, Status: "running as well"},
+					proto.JobStatus{JobId: "job4", State: proto.STATE_RUNNING, Status: "running"},
+					proto.JobStatus{JobId: "job7", State: proto.STATE_RUNNING, Status: "running as well"},
 				},
 			}, nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, jrClient)
+	m := request.NewManager(testGrapher, dbAccessor, jrClient)
 
 	actualReqStatus, err := m.RequestStatus(reqId)
 	if err != nil {
@@ -386,15 +441,15 @@ func TestRequestStatusRunning(t *testing.T) {
 		Request: req,
 		JobChainStatus: proto.JobChainStatus{
 			JobStatuses: proto.JobStatuses{
-				proto.JobStatus{Id: "job1", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job2", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job3", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job4", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job5", State: proto.STATE_FAIL},
-				proto.JobStatus{Id: "job6", State: proto.STATE_COMPLETE},
-				proto.JobStatus{Id: "job7", State: proto.STATE_RUNNING, Status: "running as well"},
-				proto.JobStatus{Id: "job8", State: proto.STATE_PENDING},
-				proto.JobStatus{Id: "job9", State: proto.STATE_PENDING},
+				proto.JobStatus{JobId: "job1", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job2", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job3", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job4", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job5", State: proto.STATE_FAIL},
+				proto.JobStatus{JobId: "job6", State: proto.STATE_COMPLETE},
+				proto.JobStatus{JobId: "job7", State: proto.STATE_RUNNING, Status: "running as well"},
+				proto.JobStatus{JobId: "job8", State: proto.STATE_PENDING},
+				proto.JobStatus{JobId: "job9", State: proto.STATE_PENDING},
 			},
 		},
 	}
@@ -415,7 +470,7 @@ func TestGetJobChainSuccess(t *testing.T) {
 			return proto.JobChain{RequestId: r}, nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
 
 	actualJc, err := m.GetJobChain(reqId)
 	if err != nil {
@@ -436,7 +491,7 @@ func TestGetJLSuccess(t *testing.T) {
 			return proto.JobLog{RequestId: r, JobId: j}, nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
 
 	actualjl, err := m.GetJL(reqId, jobId)
 	if err != nil {
@@ -468,7 +523,7 @@ func TestCreateJLComplete(t *testing.T) {
 			return nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
 
 	actualjl, err := m.CreateJL(reqId, jl)
 	if err != nil {
@@ -489,7 +544,7 @@ func TestCreateJLComplete(t *testing.T) {
 
 func TestCreateJLNotComplete(t *testing.T) {
 	reqId := "abcd1234"
-	jl := proto.JobLog{RequestId: reqId, State: proto.STATE_INCOMPLETE}
+	jl := proto.JobLog{RequestId: reqId, State: proto.STATE_FAIL}
 	// Create a mock dbaccessor that records the jl it receieves, and also
 	// records if it increments the finished jobs count of a request.
 	var dbjl proto.JobLog
@@ -504,7 +559,7 @@ func TestCreateJLNotComplete(t *testing.T) {
 			return nil
 		},
 	}
-	m := request.NewManager(&mock.Grapher{}, dbAccessor, &mock.JRClient{})
+	m := request.NewManager(testGrapher, dbAccessor, &mock.JRClient{})
 
 	actualjl, err := m.CreateJL(reqId, jl)
 	if err != nil {

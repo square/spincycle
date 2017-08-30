@@ -13,15 +13,16 @@ var (
 )
 
 type RMClient struct {
-	CreateRequestFunc func(string, map[string]interface{}) (string, error)
-	GetRequestFunc    func(string) (proto.Request, error)
-	StartRequestFunc  func(string) error
-	FinishRequestFunc func(string, byte) error
-	StopRequestFunc   func(string) error
-	RequestStatusFunc func(string) (proto.RequestStatus, error)
-	GetJobChainFunc   func(string) (proto.JobChain, error)
-	GetJLFunc         func(string, string) (proto.JobLog, error)
-	CreateJLFunc      func(string, proto.JobLog) error
+	CreateRequestFunc  func(string, map[string]interface{}) (string, error)
+	GetRequestFunc     func(string) (proto.Request, error)
+	StartRequestFunc   func(string) error
+	FinishRequestFunc  func(string, byte) error
+	StopRequestFunc    func(string) error
+	RequestStatusFunc  func(string) (proto.RequestStatus, error)
+	GetJobChainFunc    func(string) (proto.JobChain, error)
+	GetJLFunc          func(string) ([]proto.JobLog, error)
+	CreateJLFunc       func(string, proto.JobLog) error
+	SysStatRunningFunc func() (proto.RunningStatus, error)
 }
 
 func (c *RMClient) CreateRequest(requestId string, args map[string]interface{}) (string, error) {
@@ -73,11 +74,11 @@ func (c *RMClient) GetJobChain(requestId string) (proto.JobChain, error) {
 	return proto.JobChain{}, nil
 }
 
-func (c *RMClient) GetJL(requestId, jobId string) (proto.JobLog, error) {
+func (c *RMClient) GetJL(requestId string) ([]proto.JobLog, error) {
 	if c.GetJLFunc != nil {
-		return c.GetJLFunc(requestId, jobId)
+		return c.GetJLFunc(requestId)
 	}
-	return proto.JobLog{}, nil
+	return []proto.JobLog{}, nil
 }
 
 func (c *RMClient) CreateJL(requestId string, jl proto.JobLog) error {
@@ -85,4 +86,15 @@ func (c *RMClient) CreateJL(requestId string, jl proto.JobLog) error {
 		return c.CreateJLFunc(requestId, jl)
 	}
 	return nil
+}
+
+func (c *RMClient) RequestList() ([]proto.RequestSpec, error) {
+	return []proto.RequestSpec{}, nil
+}
+
+func (c *RMClient) SysStatRunning() (proto.RunningStatus, error) {
+	if c.SysStatRunningFunc != nil {
+		return c.SysStatRunningFunc()
+	}
+	return proto.RunningStatus{}, nil
 }

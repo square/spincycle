@@ -284,7 +284,7 @@ func TestRequestStatusError(t *testing.T) {
 
 func TestRequestStatusSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	respBody := `{"request":{"id":"` + reqId + `"},"jobChainStatus":{"jobStatuses":[{"id":"job1"}]}}`
+	respBody := `{"request":{"id":"` + reqId + `"},"jobChainStatus":{"jobStatuses":[{"jobId":"job1"}]}}`
 
 	setup(t, nil, http.StatusOK, respBody)
 	defer cleanup()
@@ -301,7 +301,7 @@ func TestRequestStatusSuccess(t *testing.T) {
 		},
 		JobChainStatus: proto.JobChainStatus{
 			JobStatuses: proto.JobStatuses{
-				proto.JobStatus{Id: "job1"},
+				proto.JobStatus{JobId: "job1"},
 			},
 		},
 	}
@@ -365,13 +365,12 @@ func TestGetJobChainSuccess(t *testing.T) {
 
 func TestGetjlrror(t *testing.T) {
 	reqId := "abcd1234"
-	jobId := "job1"
 
 	setup(t, nil, http.StatusBadRequest, "")
 	defer cleanup()
 	c := rm.NewClient(&http.Client{}, ts.URL)
 
-	_, err := c.GetJL(reqId, jobId)
+	_, err := c.GetJL(reqId)
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -380,27 +379,29 @@ func TestGetjlrror(t *testing.T) {
 func TestGetJLSuccess(t *testing.T) {
 	reqId := "abcd1234"
 	jobId := "job1"
-	respBody := fmt.Sprintf("{\"requestId\":\"%s\",\"jobId\":\"%s\",\"state\":%d}", reqId, jobId, proto.STATE_COMPLETE)
+	respBody := fmt.Sprintf("[{\"requestId\":\"%s\",\"jobId\":\"%s\",\"state\":%d}]", reqId, jobId, proto.STATE_COMPLETE)
 
 	setup(t, nil, http.StatusOK, respBody)
 	defer cleanup()
 	c := rm.NewClient(&http.Client{}, ts.URL)
 
-	jl, err := c.GetJL(reqId, jobId)
+	jl, err := c.GetJL(reqId)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
-	expectedjl := proto.JobLog{
-		RequestId: reqId,
-		JobId:     jobId,
-		State:     proto.STATE_COMPLETE,
+	expectedjl := []proto.JobLog{
+		{
+			RequestId: reqId,
+			JobId:     jobId,
+			State:     proto.STATE_COMPLETE,
+		},
 	}
 	if diff := deep.Equal(jl, expectedjl); diff != nil {
 		t.Error(diff)
 	}
 
-	expectedPath := "/api/v1/requests/" + reqId + "/log/" + jobId
+	expectedPath := "/api/v1/requests/" + reqId + "/log"
 	if path != expectedPath {
 		t.Errorf("url path = %s, expected %s", path, expectedPath)
 	}

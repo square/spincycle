@@ -47,6 +47,20 @@ type Request struct {
 	FinishedJobs int       `json:"finishedJobs"` // the number of finished jobs in the request
 }
 
+// RequestSpec represents the metadata of a request necessary to start the request.
+type RequestSpec struct {
+	Name string
+	Args []RequestArg
+}
+
+// RequestArg represents one request arg.
+type RequestArg struct {
+	Name     string
+	Desc     string
+	Required bool
+	Default  string
+}
+
 // JobLog represents a log entry for a finished job.
 type JobLog struct {
 	// These three fields uniquely identify an entry in the job log.
@@ -54,9 +68,9 @@ type JobLog struct {
 	JobId     string `json:"jobId"`
 	Try       uint   `json:"try"` // try number N of 1 + Job.Retry
 
-	Type       string    `json:"type"`       // the type of the job
-	StartedAt  time.Time `json:"startedAt"`  // when the job runner started the job
-	FinishedAt time.Time `json:"finishedAt"` // when the job returned, regardless of state
+	Type       string `json:"type"`       // the type of the job
+	StartedAt  int64  `json:"startedAt"`  // when the job runner started the job
+	FinishedAt int64  `json:"finishedAt"` // when the job returned, regardless of state
 
 	State  byte   `json:"state"`  // STATE_* const
 	Exit   int64  `json:"exit"`   // unix exit code
@@ -67,9 +81,12 @@ type JobLog struct {
 
 // JobStatus represents the status of one job in a job chain.
 type JobStatus struct {
-	Id     string `json:"id"`     // unique id
-	Status string `json:"status"` // stdout of job, if any
-	State  byte   `json:"state"`  // STATE_* const
+	RequestId string  `json:"requestId"`
+	JobId     string  `json:"jobId"`
+	State     byte    `json:"state"`
+	Status    string  `json:"status"`  // @todo: job.Status()
+	Runtime   float64 `json:"runtime"` // seconds
+	N         uint    `json:"n"`       // Nth job ran in chain
 }
 
 // JobChainStatus represents the status of a job chain reported by the Job Runner.
@@ -84,8 +101,10 @@ type RequestStatus struct {
 	JobChainStatus JobChainStatus `json:"jobChainStatus"`
 }
 
-// JobStatuses are a list of job status sorted by job id.
-type JobStatuses []JobStatus
+type RunningStatus struct {
+	Jobs     []JobStatus        `json:"jobs,omitempty"`
+	Requests map[string]Request `json:"requests,omitempty"` // keyed on RequestId
+}
 
 // CreateRequestParams represents the payload that is required to create a new
 // request in the RM.
@@ -101,17 +120,18 @@ type FinishRequestParams struct {
 	State byte // the final state of the chain
 }
 
-func (js JobStatuses) Len() int {
-	return len(js)
-}
+// JobStatuses are a list of job status sorted by job id.
+type JobStatuses []JobStatus
 
-func (js JobStatuses) Less(i, j int) bool {
-	return js[i].Id < js[j].Id
-}
+func (js JobStatuses) Len() int           { return len(js) }
+func (js JobStatuses) Less(i, j int) bool { return js[i].JobId < js[j].JobId }
+func (js JobStatuses) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
 
-func (js JobStatuses) Swap(i, j int) {
-	js[i], js[j] = js[j], js[i]
-}
+type JobStatusByRuntime []JobStatus
+
+func (js JobStatusByRuntime) Len() int           { return len(js) }
+func (js JobStatusByRuntime) Less(i, j int) bool { return js[i].Runtime > js[j].Runtime }
+func (js JobStatusByRuntime) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
 
 // Jobs are a list of jobs sorted by id.
 type Jobs []Job

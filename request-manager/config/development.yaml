@@ -1,6 +1,6 @@
 ---
 server:
-  listen_address: ":8888"
+  listen_address: "127.0.0.1:8888"
 db:
   type: mysql
   dsn: "root:@tcp(localhost:3306)/request_manager_development"

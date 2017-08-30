@@ -25,7 +25,7 @@ var (
 
 func setup(traverserFactory *mock.TraverserFactory) {
 	traverserRepo = cmap.New()
-	api := api.NewAPI(traverserFactory, traverserRepo)
+	api := api.NewAPI(traverserFactory, traverserRepo, &mock.JRStatus{})
 	server = httptest.NewServer(api)
 }
 
@@ -229,8 +229,8 @@ func TestStatusJobChainHandlerSuccess(t *testing.T) {
 	chainStatus := proto.JobChainStatus{
 		RequestId: requestId,
 		JobStatuses: proto.JobStatuses{
-			proto.JobStatus{"job2", "", proto.STATE_FAIL},
-			proto.JobStatus{"job3", "95% complete", proto.STATE_RUNNING},
+			proto.JobStatus{JobId: "job2", Status: "", State: proto.STATE_FAIL},
+			proto.JobStatus{JobId: "job3", Status: "95% complete", State: proto.STATE_RUNNING},
 		},
 	}
 

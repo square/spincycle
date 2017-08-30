@@ -41,11 +41,17 @@ type Client interface {
 	// GetJobChain gets the job chain for a given request id.
 	GetJobChain(string) (proto.JobChain, error)
 
-	// GetJL gets a jog log (JL) for a given request id + job id.
-	GetJL(string, string) (proto.JobLog, error)
+	// GetJL gets the job log of the given request ID.
+	GetJL(string) ([]proto.JobLog, error)
 
 	// CreateJL creates a JL for a given request id.
 	CreateJL(string, proto.JobLog) error
+
+	// RequestList returns a list of possible requests.
+	RequestList() ([]proto.RequestSpec, error)
+
+	// SysStatRunning returns a list of running jobs, sorted by runtime.
+	SysStatRunning() (proto.RunningStatus, error)
 }
 
 type client struct {
@@ -132,11 +138,11 @@ func (c *client) GetJobChain(requestId string) (proto.JobChain, error) {
 	return jc, err
 }
 
-func (c *client) GetJL(requestId, jobId string) (proto.JobLog, error) {
-	// GET /api/v1/requests/${requestId}/log/${jobId}
-	url := c.baseUrl + "/api/v1/requests/" + requestId + "/log/" + jobId
+func (c *client) GetJL(requestId string) ([]proto.JobLog, error) {
+	// GET /api/v1/requests/${requestId}/log
+	url := c.baseUrl + "/api/v1/requests/" + requestId + "/log"
 
-	var jl proto.JobLog
+	var jl []proto.JobLog
 	err := c.makeRequest("GET", url, nil, http.StatusOK, &jl)
 	return jl, err
 }
@@ -146,6 +152,22 @@ func (c *client) CreateJL(requestId string, jl proto.JobLog) error {
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/log"
 
 	return c.makeRequest("POST", url, jl, http.StatusCreated, nil)
+}
+
+func (c *client) RequestList() ([]proto.RequestSpec, error) {
+	// GET /api/v1/requests
+	url := c.baseUrl + "/api/v1/request-list"
+	var req []proto.RequestSpec
+	err := c.makeRequest("GET", url, nil, http.StatusOK, &req)
+	return req, err
+}
+
+func (c *client) SysStatRunning() (proto.RunningStatus, error) {
+	// GET /api/v1/requests
+	url := c.baseUrl + "/api/v1/status/running"
+	var req proto.RunningStatus
+	err := c.makeRequest("GET", url, nil, http.StatusOK, &req)
+	return req, err
 }
 
 // ------------------------------------------------------------------------- //

@@ -19,7 +19,7 @@ import (
 var server *httptest.Server
 
 func setup(rm *mock.RequestManager, middleware ...echo.MiddlewareFunc) {
-	a := api.NewAPI(rm)
+	a := api.NewAPI(rm, &mock.RMStatus{})
 	a.Use(middleware...)
 	server = httptest.NewServer(a)
 }
@@ -271,8 +271,8 @@ func TestStatusRequestHandlerSuccess(t *testing.T) {
 		},
 		JobChainStatus: proto.JobChainStatus{
 			JobStatuses: proto.JobStatuses{
-				proto.JobStatus{Id: "j1", Status: "status1", State: proto.STATE_RUNNING},
-				proto.JobStatus{Id: "j2", Status: "status2", State: proto.STATE_FAIL},
+				proto.JobStatus{JobId: "j1", Status: "status1", State: proto.STATE_RUNNING},
+				proto.JobStatus{JobId: "j2", Status: "status2", State: proto.STATE_FAIL},
 			},
 		},
 	}

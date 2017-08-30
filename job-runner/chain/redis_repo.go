@@ -116,6 +116,51 @@ func (r *RedisRepo) Get(id string) (*chain, error) {
 	return chain, nil
 }
 
+// Get all job chains, even those owned/running on other JR instances.
+func (r *RedisRepo) GetAll() ([]chain, error) {
+	conn := r.ConnectionPool.Get()
+	defer conn.Close()
+
+	pattern := r.fmtIdKey("*")
+	allIds := []interface{}{}
+	cursor := 0
+	for {
+		vals, err := redis.MultiBulk(conn.Do("SCAN", cursor, "MATCH", pattern))
+		if err != nil {
+			return nil, err
+		}
+		cursor, _ = redis.Int(vals[0], nil)
+		ids, _ := redis.Strings(vals[1], nil)
+		if len(ids) > 0 {
+			// SCAN applies MATCH last, so a set can be empy
+			for _, id := range ids {
+				allIds = append(allIds, id)
+			}
+		}
+		if cursor == 0 {
+			break
+		}
+	}
+	vals, err := redis.Values(conn.Do("MGET", allIds...))
+	if err != nil {
+		return nil, err
+	}
+	chains := []chain{}
+	for _, val := range vals {
+		if val == nil {
+			// Chain removed between SCAN and MGET
+			continue
+		}
+		var c chain
+		if err := json.Unmarshal(val.([]byte), &c); err != nil {
+			return nil, err
+		}
+		chains = append(chains, c)
+	}
+
+	return chains, nil
+}
+
 // Remove takes a Chain RequestId and deletes that Chain from redis.
 func (r *RedisRepo) Remove(id string) error {
 	conn := r.ConnectionPool.Get()
@@ -150,7 +195,7 @@ func (r *RedisRepo) ping() error {
 // fmtIdKey takes a Chain RequestId and returns the key where that Chain is
 // stored in redis.
 func (r *RedisRepo) fmtIdKey(id string) string {
-	return fmt.Sprintf("%s::%s::%d", r.Conf.Prefix, CHAIN_KEY, id)
+	return fmt.Sprintf("%s:%s", r.Conf.Prefix, id)
 }
 
 // fmtChainKey takes a Chain and returns the key where that Chain is stored in

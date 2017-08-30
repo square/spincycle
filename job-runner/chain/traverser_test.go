@@ -68,6 +68,11 @@ func TestRunComplete(t *testing.T) {
 	if c.JobChain.State != proto.STATE_COMPLETE {
 		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
 	}
+
+	_, err = chainRepo.Get(requestId)
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
+	}
 }
 
 // Not all jobs in the chain complete successfully.
@@ -99,11 +104,16 @@ func TestRunNotComplete(t *testing.T) {
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	if c.JobChain.State != proto.STATE_INCOMPLETE {
-		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_INCOMPLETE)
+	if c.JobChain.State != proto.STATE_FAIL {
+		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_FAIL)
 	}
 	if c.JobChain.Jobs["job4"].State != proto.STATE_PENDING {
 		t.Errorf("job4 state = %d, expected %d", c.JobChain.Jobs["job4"].State, proto.STATE_PENDING)
+	}
+
+	_, err = chainRepo.Get("abc")
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
 	}
 }
 
@@ -140,6 +150,11 @@ func TestJobUnknownState(t *testing.T) {
 	}
 	if c.JobChain.State != proto.STATE_COMPLETE {
 		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
+	}
+
+	_, err := chainRepo.Get("abc")
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
 	}
 }
 
@@ -214,8 +229,8 @@ func TestRunJobsRunnerError(t *testing.T) {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
-	if jc.State != proto.STATE_INCOMPLETE {
-		t.Errorf("chain state = %d, expected %d", jc.State, proto.STATE_INCOMPLETE)
+	if jc.State != proto.STATE_FAIL {
+		t.Errorf("chain state = %d, expected %d", jc.State, proto.STATE_FAIL)
 	}
 
 	// Make sure the JL sent to the RM matches what we expect.
@@ -231,11 +246,16 @@ func TestRunJobsRunnerError(t *testing.T) {
 	if recvdjl.Error == "" {
 		t.Errorf("jl error is empty, expected something")
 	}
-	if recvdjl.StartedAt.IsZero() {
-		t.Errorf("jl started at value is not a non-zero time")
+	if recvdjl.StartedAt != 0 {
+		t.Errorf("jobLog.StartedAt = %d, expected 0", recvdjl.StartedAt)
 	}
-	if recvdjl.FinishedAt.IsZero() {
-		t.Errorf("jl finished at value is not a non-zero time")
+	if recvdjl.FinishedAt != 0 {
+		t.Errorf("jobLog.Finished = %d, expected 0", recvdjl.FinishedAt)
+	}
+
+	_, err = chainRepo.Get("abc")
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
 	}
 }
 
@@ -284,7 +304,7 @@ func TestStop(t *testing.T) {
 	// Wait for the traverser to finish.
 	<-doneChan
 
-	if c.JobChain.State != proto.STATE_INCOMPLETE {
+	if c.JobChain.State != proto.STATE_FAIL {
 		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
 	}
 	if c.JobChain.Jobs["job2"].State != proto.STATE_FAIL {
@@ -295,6 +315,11 @@ func TestStop(t *testing.T) {
 	}
 	if c.JobChain.Jobs["job4"].State != proto.STATE_PENDING {
 		t.Errorf("job4 state = %d, expected %d", c.JobChain.Jobs["job4"].State, proto.STATE_PENDING)
+	}
+
+	_, err = chainRepo.Get("abc")
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
 	}
 }
 
@@ -339,8 +364,18 @@ func TestStatus(t *testing.T) {
 	expectedStatus := proto.JobChainStatus{
 		RequestId: "abc",
 		JobStatuses: proto.JobStatuses{
-			proto.JobStatus{"job2", "job2 running", proto.STATE_RUNNING},
-			proto.JobStatus{"job3", "job3 running", proto.STATE_RUNNING},
+			proto.JobStatus{
+				JobId:  "job2",
+				State:  proto.STATE_RUNNING,
+				Status: "job2 running",
+				N:      0,
+			},
+			proto.JobStatus{
+				JobId:  "job3",
+				State:  proto.STATE_RUNNING,
+				Status: "job3 running",
+				N:      0,
+			},
 		},
 	}
 	status, err := traverser.Status()

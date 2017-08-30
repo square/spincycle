@@ -1,0 +1,37 @@
+---
+sequences:
+  bad-each:
+    args:
+      required:
+        - name: host
+    nodes:
+      get-instances:
+        category: job
+        type: get-instances
+        args:
+          - expected: host
+            given: host
+        sets: [instances]
+      pre-flight-checks:
+        category: sequence
+        type: check-instance-is-ok
+        each: instances:instance
+        args:
+          - expected: instances
+            given: instances
+        deps: [get-instances]
+      cleanup:
+        category: job
+        type: cleanup
+        deps: [pre-flight-checks]
+  check-instance-is-ok:
+    nodes:
+      check-ok:
+        category: job
+        type: check-ok-1
+        args:
+          - expected: container
+            given: instance
+noop-node:
+  category: job
+  type: no-op

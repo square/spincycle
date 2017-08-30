@@ -57,8 +57,8 @@ func setup(t *testing.T) {
 	// todo: support all params that could be in the dsn (ex: port).
 	cmd = exec.Command("mysql", "-h", host, "-u", dsnConfig.User,
 		dsnConfig.DBName, "-e", "SOURCE "+schemaFile, "--password="+dsnConfig.Passwd)
-	if _, err = cmd.Output(); err != nil {
-		t.Fatalf("error sourcing schema: %s", err)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("error sourcing schema: %s: %s", err, string(output))
 	}
 
 	// Open the db.
@@ -401,9 +401,9 @@ func TestGetRequestJobStatuses(t *testing.T) {
 	}
 
 	expectedS := proto.JobStatuses{
-		proto.JobStatus{Id: "job1", State: proto.STATE_COMPLETE},
-		proto.JobStatus{Id: "job2", State: proto.STATE_FAIL},
-		proto.JobStatus{Id: "job3", State: proto.STATE_FAIL},
+		proto.JobStatus{JobId: "job1", State: proto.STATE_COMPLETE},
+		proto.JobStatus{JobId: "job2", State: proto.STATE_FAIL},
+		proto.JobStatus{JobId: "job3", State: proto.STATE_FAIL},
 	}
 
 	sort.Sort(s)

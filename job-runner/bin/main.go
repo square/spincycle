@@ -15,6 +15,7 @@ import (
 	"github.com/square/spincycle/job-runner/api"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/job-runner/runner"
+	"github.com/square/spincycle/job-runner/status"
 	"github.com/square/spincycle/job/external"
 	rm "github.com/square/spincycle/request-manager"
 	"github.com/square/spincycle/util"
@@ -40,6 +41,23 @@ func main() {
 	}
 
 	// //////////////////////////////////////////////////////////////////////
+	// Request Manager Client
+	// //////////////////////////////////////////////////////////////////////
+	httpClient := &http.Client{}
+	var tlsConfig *tls.Config
+	if cfg.RMClient.TLS.CertFile != "" && cfg.RMClient.TLS.KeyFile != "" && cfg.RMClient.TLS.CAFile != "" {
+		tlsConfig, err = util.NewTLSConfig(cfg.RMClient.TLS.CAFile,
+			cfg.RMClient.TLS.CertFile, cfg.RMClient.TLS.KeyFile)
+		if err != nil {
+			log.Fatalf("error loading RM client TLS config: %s", err)
+		}
+		httpClient = &http.Client{
+			Transport: &http.Transport{TLSClientConfig: tlsConfig},
+		}
+	}
+	rmClient := rm.NewClient(httpClient, cfg.RMClient.ServerURL)
+
+	// //////////////////////////////////////////////////////////////////////
 	// Chain repo
 	// //////////////////////////////////////////////////////////////////////
 	var chainRepo chain.Repo
@@ -63,37 +81,17 @@ func main() {
 	}
 
 	// //////////////////////////////////////////////////////////////////////
-	// Request Manager Client
-	// //////////////////////////////////////////////////////////////////////
-	httpClient := &http.Client{}
-	var tlsConfig *tls.Config
-	if cfg.RMClient.TLS.CertFile != "" && cfg.RMClient.TLS.KeyFile != "" && cfg.RMClient.TLS.CAFile != "" {
-		tlsConfig, err = util.NewTLSConfig(cfg.RMClient.TLS.CAFile,
-			cfg.RMClient.TLS.CertFile, cfg.RMClient.TLS.KeyFile)
-		if err != nil {
-			log.Fatalf("error loading RM client TLS config: %s", err)
-		}
-		httpClient = &http.Client{
-			Transport: &http.Transport{TLSClientConfig: tlsConfig},
-		}
-	}
-	rmClient := rm.NewClient(httpClient, cfg.RMClient.ServerURL)
-
-	// //////////////////////////////////////////////////////////////////////
-	// Runner factory
+	// Various factories, repos, and managers
 	// //////////////////////////////////////////////////////////////////////
 	rf := runner.NewFactory(external.JobFactory, rmClient)
-
-	// //////////////////////////////////////////////////////////////////////
-	// Traverser repo and factory
-	// //////////////////////////////////////////////////////////////////////
 	trRepo := cmap.New()
 	trFactory := chain.NewTraverserFactory(chainRepo, rf, rmClient)
+	stat := status.NewManager(chainRepo)
 
 	// //////////////////////////////////////////////////////////////////////
 	// API
 	// //////////////////////////////////////////////////////////////////////
-	api := api.NewAPI(trFactory, trRepo)
+	api := api.NewAPI(trFactory, trRepo, stat)
 
 	// If you want to add custom middleware for authentication, authorization,
 	// etc., you should do that here. See https://echo.labstack.com/middleware

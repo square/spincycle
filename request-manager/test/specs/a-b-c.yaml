@@ -1,0 +1,36 @@
+---
+sequences:
+  three-nodes:
+    args:
+      required:
+        - name: foo
+      optional:
+        - name: bar
+          default: 175
+    nodes:
+      a:
+        category: job
+        type: aJobType
+        args:
+          - expected: foo
+            given: foo
+        sets: [aArg]
+        deps: []
+        retry: 1
+        retryWait: 500
+      b:
+        category: job
+        type: bJobType
+        args:
+          - expected: aArg
+            given: aArg
+        sets: []
+        deps: [a]
+        retry: 3
+      c:
+        category: job
+        type: cJobType
+        deps: [b]
+noop-node:
+  category: job
+  type: no-op

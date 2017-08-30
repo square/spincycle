@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/engine/standard"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/request"
+	"github.com/square/spincycle/request-manager/status"
 )
 
 const (
@@ -23,42 +24,43 @@ const (
 // API provides controllers for endpoints it registers with a router.
 // It satisfies the http.HandlerFunc interface.
 type API struct {
-	// An echo web server.
+	rm   request.Manager
+	stat status.Manager
 	echo *echo.Echo
-
-	// Interface for creating and managing requests.
-	rm request.Manager
 }
 
 // NewAPI cretes a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
-func NewAPI(requestManager request.Manager) *API {
+func NewAPI(rm request.Manager, stat status.Manager) *API {
 	api := &API{
+		rm:   rm,
+		stat: stat,
 		echo: echo.New(),
-		rm:   requestManager,
 	}
 
 	// //////////////////////////////////////////////////////////////////////
-	// Routes
+	// Request
 	// //////////////////////////////////////////////////////////////////////
-	// Create a request.
-	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)
-	// Get a request.
-	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)
-	// Start a request.
-	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)
-	// Finish a request. This is how the JR tells the RM a request has finished running.
-	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)
-	// Stop a request.
-	api.echo.PUT(API_ROOT+"requests/:reqId/stop", api.stopRequestHandler)
-	// Get the status of a request.
-	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)
-	// Get a request's job chain.
-	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler)
-	// Get a JL.
-	api.echo.GET(API_ROOT+"requests/:reqId/log/:jobId", api.getJLHandler)
-	// Create a JL.
-	api.echo.POST(API_ROOT+"requests/:reqId/log", api.createJLHandler)
+	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)                   // create
+	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                // get
+	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)        // start
+	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)      // finish
+	api.echo.PUT(API_ROOT+"requests/:reqId/stop", api.stopRequestHandler)          // stop
+	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)      // status
+	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler) // job chain
+
+	// //////////////////////////////////////////////////////////////////////
+	// Job Log
+	// //////////////////////////////////////////////////////////////////////
+	api.echo.POST(API_ROOT+"requests/:reqId/log", api.createJLHandler)    // create
+	api.echo.GET(API_ROOT+"requests/:reqId/log", api.getFullJLHandler)    // per request
+	api.echo.GET(API_ROOT+"requests/:reqId/log/:jobId", api.getJLHandler) // per job
+
+	// //////////////////////////////////////////////////////////////////////
+	// Meta
+	// //////////////////////////////////////////////////////////////////////
+	api.echo.GET(API_ROOT+"request-list", api.requestListHandler)     // request list
+	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler) // running requests
 
 	return api
 }
@@ -100,6 +102,10 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// Create the request.
 	req, err := api.rm.CreateRequest(reqParams)
 	if err != nil {
+		return handleError(err)
+	}
+
+	if err := api.rm.StartRequest(req.Id); err != nil {
 		return handleError(err)
 	}
 
@@ -201,6 +207,21 @@ func (api *API) jobChainRequestHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, jc)
 }
 
+// GET <API_ROOT>/requests/{reqId}/log
+// Get full job log.
+func (api *API) getFullJLHandler(c echo.Context) error {
+	reqId := c.Param("reqId")
+
+	// Get the JL from the rm.
+	jl, err := api.rm.GetFullJL(reqId)
+	if err != nil {
+		return handleError(err)
+	}
+
+	// Return the JL.
+	return c.JSON(http.StatusOK, jl)
+}
+
 // GET <API_ROOT>/requests/{reqId}/log/{jobId}
 // Get a JL.
 func (api *API) getJLHandler(c echo.Context) error {
@@ -236,6 +257,24 @@ func (api *API) createJLHandler(c echo.Context) error {
 
 	// Return the JL.
 	return c.JSON(http.StatusCreated, jl)
+}
+
+// GET <API_ROOT>/request-list
+// Get a list of all requets.
+func (api *API) requestListHandler(c echo.Context) error {
+	return c.JSON(http.StatusOK, api.rm.RequestList())
+}
+
+// GET <API_ROOT>/status/running
+// Report all requests that are running
+func (api *API) statusRunningHandler(c echo.Context) error {
+	running, err := api.stat.Running(status.NoFilter)
+	if err != nil {
+		return handleError(err)
+	}
+
+	// Return the RequestStatus struct.
+	return c.JSON(http.StatusOK, running)
 }
 
 // ------------------------------------------------------------------------- //

@@ -4,7 +4,6 @@ package chain
 
 import (
 	"fmt"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/square/spincycle/job-runner/runner"
@@ -133,16 +132,35 @@ func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rmc rm.Client) *trav
 
 // Run runs all jobs in the chain and blocks until all jobs complete or a job fails.
 func (t *traverser) Run() error {
-	t.logger.Infof("starting the chain traverser")
+	t.logger.Infof("chain traverser start")
+	defer t.logger.Infof("chain traverser done")
+
+	var finalState byte
+	defer func() {
+		// Set final state of chain in repo. This will be very short-lived because
+		// next we'll finalize the request in the RM. Although short-lived, we set
+		// it case there's problems finalizing with RM.
+		t.chain.SetState(finalState)
+		t.chainRepo.Set(t.chain)
+
+		// Mark the request as finished in the Request Manager.
+		if err := t.rmc.FinishRequest(t.chain.RequestId(), finalState); err != nil {
+			t.logger.Errorf("problem reporting status of the finished chain: %s", err)
+		} else {
+			t.chainRepo.Remove(t.chain.RequestId())
+		}
+	}()
 
 	firstJob, err := t.chain.FirstJob()
 	if err != nil {
+		finalState = proto.STATE_FAIL
 		return err
 	}
 
 	// Set the starting state of the chain.
 	t.chain.SetState(proto.STATE_RUNNING)
 	t.chainRepo.Set(t.chain)
+
 	// Start a goroutine to run jobs. This consumes from the runJobChan. When
 	// jobs are done, they will be sent to the doneJobChan, which gets consumed
 	// from right below this.
@@ -159,6 +177,7 @@ func (t *traverser) Run() error {
 	// When a job finishes, update the state of the chain and figure out what
 	// to do next (check to see if the entire chain is done running, and
 	// enqueue the next jobs if there are any).
+JOB_REAPER:
 	for doneJ := range t.doneJobChan {
 		jLogger := t.logger.WithFields(log.Fields{"job_id": doneJ.Id})
 
@@ -173,59 +192,64 @@ func (t *traverser) Run() error {
 		// complete if every job in it completed successfully.
 		done, complete := t.chain.IsDone()
 		if done {
-			var finalState byte
 			close(t.runJobChan)
 			if complete {
 				t.logger.Infof("chain is done, all jobs finished successfully")
 				finalState = proto.STATE_COMPLETE
 			} else {
-				t.logger.Infof("chain is done, some jobs failed")
-				finalState = proto.STATE_INCOMPLETE
-			}
-			t.chain.SetState(finalState)
-
-			// Mark the request as finished in the Request Manager.
-			err = t.rmc.FinishRequest(t.chain.RequestId(), finalState)
-			if err != nil {
-				t.logger.Errorf("problem reporting status of the finished chain: %s", err)
+				t.logger.Warn("chain is done, some jobs failed")
+				finalState = proto.STATE_FAIL
 			}
 			break
 		}
 
-		// If the job completed successfully, add its next jobs to
-		// runJobChan. If it didn't complete successfully, do nothing.
-		// Also, pass a copy of the job's jobData to all next jobs.
-		//
-		// It is important to note that when a job has multiple parent
-		// jobs, it will get its jobData from whichever parent finishes
-		// last. Therefore, a job should never rely on jobData that was
-		// created during an unrelated sequence at any time earlier in
-		// the chain.
-		switch doneJ.State {
-		case proto.STATE_COMPLETE:
-			jLogger.Infof("job completed successfully")
-			for _, nextJ := range t.chain.NextJobs(doneJ.Id) {
-				nextJLogger := jLogger.WithFields(log.Fields{"next_job_id": nextJ.Id})
-
-				// Check to make sure the job is ready to run.
-				if t.chain.JobIsReady(nextJ.Id) {
-					nextJLogger.Infof("next job is ready to run - enqueuing it")
-					// Set the state of the job in the chain to "Running".
-					t.chain.SetJobState(nextJ.Id, proto.STATE_RUNNING)
-
-					// Copy the jobData from the job that just finished to the next job.
-					for k, v := range doneJ.Data {
-						nextJ.Data[k] = v
-					}
-
-					t.runJobChan <- nextJ // add the job to the run queue
-				} else {
-					nextJLogger.Infof("next job is not ready to run - not enqueuing it")
-				}
-			}
-		default:
-			jLogger.Infof("job did not complete successfully")
+		// If the job did not complete successfully, then ignore subsequent jobs.
+		// For example, if job B of A -> B -> C  fails, then C is not ran.
+		if doneJ.State != proto.STATE_COMPLETE {
+			jLogger.Warn("job did not complete successfully")
+			continue JOB_REAPER
 		}
+
+		// Job completed successfully, so enqueue/run the next jobs in the chain.
+		// This will yield multiple next jobs when the current job is the start of
+		// a sequence (a fanout node).
+		jLogger.Infof("job completed successfully")
+
+	NEXT_JOB:
+		for _, nextJ := range t.chain.NextJobs(doneJ.Id) {
+			nextJLogger := jLogger.WithFields(log.Fields{"next_job_id": nextJ.Id})
+
+			// Check to make sure the job is ready to run. It might not be if it has
+			// upstream dependencies that are still running.
+			if !t.chain.JobIsReady(nextJ.Id) {
+				nextJLogger.Infof("next job is not ready to run - not enqueuing it")
+				continue NEXT_JOB
+			}
+
+			nextJLogger.Infof("next job is ready to run - enqueuing it")
+
+			// Copy the jobData from the job that just finished to the next job.
+			// It is important to note that when a job has multiple parent
+			// jobs, it will get its jobData from whichever parent finishes
+			// last. Therefore, a job should never rely on jobData that was
+			// created during an unrelated sequence at any time earlier in
+			// the chain.
+			for k, v := range doneJ.Data {
+				nextJ.Data[k] = v
+			}
+
+			// Set the state of the job in the chain to "Running".
+			// @todo: this should be in the goroutine in runJobs, because it's not
+			//        truly running until that point, but then this causes race conditions
+			//        which indicates we need to more closely examine concurrent
+			//        access to internal chain data.
+			t.chain.SetJobState(nextJ.Id, proto.STATE_RUNNING)
+
+			t.runJobChan <- nextJ // add the job to the run queue
+		}
+
+		// Update chain repo for jobs next jobs just started ^
+		t.chainRepo.Set(t.chain)
 	}
 
 	return nil
@@ -273,9 +297,9 @@ func (t *traverser) Status() (proto.JobChainStatus, error) {
 	// Get the status and state of each job runner.
 	for jobId, runner := range activeRunners {
 		jobStatus := proto.JobStatus{
-			Id:     jobId,
-			Status: runner.Status(),         // get the job status. this should return quickly
+			JobId:  jobId,
 			State:  t.chain.JobState(jobId), // get the state of the job
+			Status: runner.Status(),         // get the job status. this should return quickly
 		}
 		jobStatuses = append(jobStatuses, jobStatus)
 	}
@@ -320,6 +344,7 @@ func (t *traverser) runJobs() {
 			// be nothing to stop that job from running.
 			select {
 			case <-t.stopChan:
+				pJob.State = proto.STATE_STOPPED
 				err = fmt.Errorf("not starting job because traverser has already been stopped")
 				t.sendJL(pJob, err) // need to send a JL to the RM so that it knows this job failed
 				return
@@ -341,11 +366,12 @@ func (t *traverser) runJobs() {
 
 func (t *traverser) sendJL(pJob proto.Job, err error) {
 	jLogger := t.logger.WithFields(log.Fields{"job_id": pJob.Id})
-	jl := proto.JobLog{RequestId: t.chain.RequestId(),
+	jl := proto.JobLog{
+		RequestId:  t.chain.RequestId(),
 		JobId:      pJob.Id,
 		Type:       pJob.Type,
-		StartedAt:  time.Now(),
-		FinishedAt: time.Now(),
+		StartedAt:  0, // zero because the job never ran
+		FinishedAt: 0,
 		State:      pJob.State,
 		Exit:       1,
 		Error:      err.Error(),

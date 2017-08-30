@@ -45,7 +45,8 @@ type runner struct {
 	retryWait time.Duration
 	stopChan  chan struct{}
 	*sync.Mutex
-	logger *log.Entry
+	logger    *log.Entry
+	startTime time.Time
 }
 
 // NewRunner takes a proto.Job struct and its corresponding job.Job interface, and
@@ -72,20 +73,22 @@ func (r *runner) Run(jobData map[string]interface{}) byte {
 	// the run fails.
 	var finalState byte = proto.STATE_PENDING
 
+	r.startTime = time.Now()
+
 TRY_LOOP:
 	for tryNo := uint(1); tryNo <= r.maxTries; tryNo++ {
-		startedAt := time.Now()
-
 		tryLogger := r.logger.WithFields(log.Fields{
 			"try":       tryNo,
 			"max_tries": r.maxTries,
 		})
+		tryLogger.Infof("starting the job")
 
 		// Run the job. Run is a blocking operation that could take a long
 		// time. Run will return when a job finishes running (either by
 		// its own accord or by being forced to finish when Stop is called).
-		tryLogger.Infof("starting the job")
+		startedAt := time.Now().UnixNano()
 		jobRet, runErr := r.realJob.Run(jobData)
+		finishedAt := time.Now().UnixNano()
 
 		// Figure out what the error message in the JL should be. An
 		// error returned by Run takes precedence (because it implies
@@ -106,7 +109,7 @@ TRY_LOOP:
 			Type:       r.jobType,
 			Try:        tryNo,
 			StartedAt:  startedAt,
-			FinishedAt: time.Now(),
+			FinishedAt: finishedAt,
 			State:      jobRet.State,
 			Exit:       jobRet.Exit,
 			Error:      errMsg,
@@ -167,6 +170,10 @@ func (r *runner) Stop() error {
 
 	r.logger.Infof("stopping the job")
 	return r.realJob.Stop() // this is a blocking operation that should return quickly
+}
+
+func (r *runner) Runtime() float64 {
+	return time.Now().Sub(r.startTime).Seconds()
 }
 
 func (r *runner) Status() string {

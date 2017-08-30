@@ -16,6 +16,7 @@ import (
 	"github.com/labstack/echo/engine/standard"
 	"github.com/orcaman/concurrent-map"
 	"github.com/square/spincycle/job-runner/chain"
+	"github.com/square/spincycle/job-runner/status"
 	"github.com/square/spincycle/proto"
 )
 
@@ -32,23 +33,22 @@ var (
 
 // api provides controllers for endpoints it registers with a router.
 type API struct {
-	// An echo web server.
-	echo *echo.Echo
-
-	// Factory for creating traversers.
 	traverserFactory chain.TraverserFactory
-
-	// Repo for storing and retrieving traversers.
-	traverserRepo cmap.ConcurrentMap
+	traverserRepo    cmap.ConcurrentMap
+	stat             status.Manager
+	// --
+	echo *echo.Echo
 }
 
 // NewAPI cretes a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
-func NewAPI(traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap) *API {
+func NewAPI(traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager) *API {
 	api := &API{
-		echo:             echo.New(),
 		traverserFactory: traverserFactory,
 		traverserRepo:    traverserRepo,
+		stat:             stat,
+		// --
+		echo: echo.New(),
 	}
 
 	// //////////////////////////////////////////////////////////////////////
@@ -60,6 +60,8 @@ func NewAPI(traverserFactory chain.TraverserFactory, traverserRepo cmap.Concurre
 	api.echo.PUT(API_ROOT+"job-chains/:requestId/stop", api.stopJobChainHandler)
 	// Get the status of a job chain.
 	api.echo.GET(API_ROOT+"job-chains/:requestId/status", api.statusJobChainHandler)
+
+	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler)
 
 	return api
 }
@@ -166,6 +168,15 @@ func (api *API) statusJobChainHandler(c echo.Context) error {
 
 	// Return the statuses.
 	return c.JSON(http.StatusOK, statuses)
+}
+
+// GET <API_ROOT>/status/running
+func (api *API) statusRunningHandler(c echo.Context) error {
+	running, err := api.stat.Running()
+	if err != nil {
+		return handleError(ErrTraverserNotFound)
+	}
+	return c.JSON(http.StatusOK, running)
 }
 
 // ------------------------------------------------------------------------- //

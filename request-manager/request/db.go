@@ -13,24 +13,26 @@ import (
 
 const (
 	// Request queries.
-	insertRequest = "INSERT INTO requests (id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
-	selectRequest = "SELECT id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
-		"finished_jobs FROM requests WHERE id = ?"
-	updateRequest           = "UPDATE requests SET state = ?, started_at = ?, finished_at = ? WHERE id = ?"
-	incrRequestFinishedJobs = "UPDATE requests SET finished_jobs = finished_jobs + 1 WHERE id = ?"
+	insertRequest = "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
+	selectRequest = "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
+		"finished_jobs FROM requests WHERE request_id = ?"
+	updateRequest           = "UPDATE requests SET state = ?, started_at = ?, finished_at = ? WHERE request_id = ?"
+	incrRequestFinishedJobs = "UPDATE requests SET finished_jobs = finished_jobs + 1 WHERE request_id = ?"
 
 	// Raw Request queries.
 	insertRawRequest = "INSERT INTO raw_requests (request_id, request, job_chain) VALUES (?, ?, ?)"
 	getJobChain      = "SELECT job_chain FROM raw_requests WHERE request_id = ?"
 
 	// JL queries.
-	createJL = "INSERT INTO job_log (request_id, job_id, type, started_at, finished_at, state, `exit`, " +
-		"error, stdout, stderr, try) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	createJL = "INSERT INTO job_log (request_id, job_id, try, type, started_at, finished_at, state, `exit`, " +
+		"error, stdout, stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	selectLatestJL = "SELECT request_id, job_id, state, started_at, finished_at, error, `exit`, stdout, stderr, try " +
 		"FROM job_log WHERE request_id = ? AND job_id = ? ORDER BY try DESC LIMIT 1"
 	// Select the job id and state of all jobs in a request, using the latest JL for each job.
 	selectRequestLatestJLStates = "SELECT j1.job_id, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
 		"j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try) WHERE j1.request_id = ? AND j2.try IS NULL"
+	selectFullJL = "SELECT job_id, try, state, started_at, finished_at, error, `exit`, stdout, stderr " +
+		"FROM job_log WHERE request_id = ?"
 )
 
 // A DBAccessor persists requests to a database.
@@ -57,6 +59,9 @@ type DBAccessor interface {
 
 	// GetJobChain retrieves a job chain from the database.
 	GetJobChain(string) (proto.JobChain, error)
+
+	// Get full job log of a request.
+	GetFullJL(string) ([]proto.JobLog, error)
 
 	// GetLatestJL takes a request id and a job id and returns the latest
 	// corresponding jog log.
@@ -95,13 +100,15 @@ func (d *dbAccessor) SaveRequest(req proto.Request, reqParams proto.CreateReques
 	defer txn.Rollback()
 
 	// Insert the request into the requests table.
-	if _, err = txn.Exec(insertRequest,
+	_, err = txn.Exec(insertRequest,
 		req.Id,
 		req.Type,
 		req.State,
 		req.User,
 		req.CreatedAt,
-		req.TotalJobs); err != nil {
+		req.TotalJobs,
+	)
+	if err != nil {
 		return err
 	}
 
@@ -184,8 +191,10 @@ func (d *dbAccessor) UpdateRequest(request proto.Request) error {
 
 func (d *dbAccessor) IncrementRequestFinishedJobs(requestId string) error {
 	// Update (increment) the finished job count on the request.
-	res, err := d.db.Exec(incrRequestFinishedJobs,
-		&requestId)
+	res, err := d.db.Exec(incrRequestFinishedJobs, &requestId)
+	if err != nil {
+		return err
+	}
 
 	cnt, err := res.RowsAffected()
 	if err != nil {
@@ -217,8 +226,7 @@ func (d *dbAccessor) GetRequestJobStatuses(requestId string) (proto.JobStatuses,
 
 	for rows.Next() {
 		var status proto.JobStatus
-		if err := rows.Scan(&status.Id,
-			&status.State); err != nil {
+		if err := rows.Scan(&status.JobId, &status.State); err != nil {
 			return js, err
 		}
 
@@ -248,6 +256,42 @@ func (d *dbAccessor) GetJobChain(requestId string) (proto.JobChain, error) {
 	}
 
 	return jc, nil
+}
+
+func (d *dbAccessor) GetFullJL(requestId string) ([]proto.JobLog, error) {
+	rows, err := d.db.Query(selectFullJL, requestId)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	jl := []proto.JobLog{}
+	for rows.Next() {
+		// Get the JL from the job_log table.
+		l := proto.JobLog{
+			RequestId: requestId,
+		}
+		err := rows.Scan(
+			&l.JobId,
+			&l.Try,
+			&l.State,
+			&l.StartedAt,
+			&l.FinishedAt,
+			&l.Error,
+			&l.Exit,
+			&l.Stdout,
+			&l.Stderr,
+		)
+		if err != nil {
+			return nil, err
+		}
+		jl = append(jl, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return jl, nil
 }
 
 func (d *dbAccessor) GetLatestJL(requestId, jobId string) (proto.JobLog, error) {
@@ -280,6 +324,7 @@ func (d *dbAccessor) SaveJL(jl proto.JobLog) error {
 	_, err := d.db.Exec(createJL,
 		&jl.RequestId,
 		&jl.JobId,
+		&jl.Try,
 		&jl.Type,
 		&jl.StartedAt,
 		&jl.FinishedAt,
@@ -288,7 +333,7 @@ func (d *dbAccessor) SaveJL(jl proto.JobLog) error {
 		&jl.Error,
 		&jl.Stdout,
 		&jl.Stderr,
-		&jl.Try)
+	)
 
 	return err
 }
