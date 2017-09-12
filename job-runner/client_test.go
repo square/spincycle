@@ -161,7 +161,7 @@ func TestRequestStatus(t *testing.T) {
 		method = r.Method
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "{\"requestId\":\"3\",\"jobStatuses\":[{\"Id\":\"job1\",\"status\":\"job is running...\",\"state\":5}]}")
+		fmt.Fprintln(w, "{\"requestId\":\"3\",\"jobStatuses\":[{\"JobId\":\"job1\",\"status\":\"job is running...\",\"state\":5}]}")
 	}))
 	c = jr.NewClient(&http.Client{}, ts.URL)
 
@@ -183,7 +183,7 @@ func TestRequestStatus(t *testing.T) {
 	expectedStatus := proto.JobChainStatus{
 		JobStatuses: proto.JobStatuses{
 			proto.JobStatus{
-				Id:     "job1",
+				JobId:  "job1",
 				Status: "job is running...",
 				State:  5,
 			},

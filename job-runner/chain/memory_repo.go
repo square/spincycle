@@ -31,6 +31,15 @@ func (m *memoryRepo) Get(id string) (*chain, error) {
 	return chain, nil
 }
 
+func (m *memoryRepo) GetAll() ([]chain, error) {
+	chains := []chain{}
+	for _, v := range m.ConcurrentMap.Items() {
+		chain := v.(*chain)
+		chains = append(chains, *chain)
+	}
+	return chains, nil
+}
+
 func (m *memoryRepo) Add(chain *chain) error {
 	wasAbsent := m.ConcurrentMap.SetIfAbsent(chain.RequestId(), chain)
 	if !wasAbsent {

@@ -1,18 +1,20 @@
 // Copyright 2017, Square, Inc.
 
-// Package internal provides an example job and job factory. The job type is
+// Package example provides an example job and job factory. The job type is
 // "shell-command", and the factory only build this job type. By default, this
 // factory is imported in ../external/factory.go, which allows Spin Cycle to be
 // build without external jobs.
-package internal
+package example
 
 import (
 	"bytes"
 	"encoding/json"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/proto"
 )
 
 // Factory is a job.Factory that makes "shell-command" type jobs.
@@ -26,6 +28,8 @@ type factory struct {
 // error is returned.
 func (f factory) Make(jobType, jobName string) (job.Job, error) {
 	switch jobType {
+	case "noop":
+		return NewNop(jobType, jobName), nil
 	case "shell-command":
 		return NewShellCommand(jobName), nil
 	}
@@ -35,8 +39,8 @@ func (f factory) Make(jobType, jobName string) (job.Job, error) {
 // ShellCommand is a job.Job that runs a single shell command with arguments.
 type ShellCommand struct {
 	// Internal data (serialized)
-	Cmd  string   // command to execute
-	Args []string // args to cmd
+	Cmd  string   `json:"cmd"`            // command to execute
+	Args []string `json:"args,omitempty"` // args to cmd
 
 	// While running
 	status string
@@ -67,7 +71,7 @@ func (j *ShellCommand) Create(jobArgs map[string]interface{}) error {
 
 	args, ok := jobArgs["args"]
 	if ok {
-		j.Args = args.([]string)
+		j.Args = strings.Fields(args.(string))
 	}
 
 	return nil
@@ -109,16 +113,19 @@ func (j *ShellCommand) Run(jobData map[string]interface{}) (job.Return, error) {
 	// Run the cmd and wait for it to return
 	exit := int64(0)
 	err := cmd.Run()
-	if err != nil {
-		exit = 1
-	}
-
 	ret := job.Return{
 		Exit:   exit,
 		Error:  err,
 		Stdout: stdout.String(),
 		Stderr: stderr.String(),
 	}
+	if err != nil {
+		ret.Exit = 1
+		ret.State = proto.STATE_FAIL
+	} else {
+		ret.State = proto.STATE_COMPLETE
+	}
+
 	return ret, nil
 }
 
@@ -149,4 +156,58 @@ func (j *ShellCommand) setStatus(msg string) {
 	j.Lock()
 	defer j.Unlock()
 	j.status = msg
+}
+
+// Nop is a no-op job that does nothing and always returns success. It's used in
+// place of jobs that we want to include in a job chain but haven't implemented yet.
+type Nop struct {
+	jobType string
+	jobName string
+}
+
+func NewNop(jobType, jobName string) *Nop {
+	n := &Nop{
+		jobType: jobType,
+		jobName: jobName,
+	}
+	return n
+}
+
+func (j *Nop) Create(jobArgs map[string]interface{}) error {
+	return nil
+}
+
+func (j *Nop) Serialize() ([]byte, error) {
+	return nil, nil
+}
+
+func (j *Nop) Deserialize(bytes []byte) error {
+	return nil
+}
+
+func (j *Nop) Run(jobData map[string]interface{}) (job.Return, error) {
+	ret := job.Return{
+		Exit:   0,
+		Error:  nil,
+		Stdout: "",
+		Stderr: "",
+		State:  proto.STATE_COMPLETE,
+	}
+	return ret, nil
+}
+
+func (j *Nop) Status() string {
+	return "nop"
+}
+
+func (j *Nop) Stop() error {
+	return nil
+}
+
+func (j *Nop) Type() string {
+	return j.jobType
+}
+
+func (j *Nop) Name() string {
+	return j.jobName
 }

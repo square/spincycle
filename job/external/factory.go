@@ -11,7 +11,7 @@ package external
 //   import myJobs "github.com/my/jobs"
 //
 // Then rebuild Spin Cycle.
-import myJobs "github.com/square/spincycle/job/internal"
+import myJobs "github.com/square/spincycle/job/example"
 
 // Do not change these lines
 import "github.com/square/spincycle/job"    // do not change

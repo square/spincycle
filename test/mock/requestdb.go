@@ -20,6 +20,7 @@ type RequestDBAccessor struct {
 	GetRequestJobStatusesFunc        func(string) (proto.JobStatuses, error)
 	GetJobChainFunc                  func(string) (proto.JobChain, error)
 	GetLatestJLFunc                  func(string, string) (proto.JobLog, error)
+	GetFullJLFunc                    func(string) ([]proto.JobLog, error)
 	SaveJLFunc                       func(proto.JobLog) error
 }
 
@@ -70,6 +71,13 @@ func (a *RequestDBAccessor) GetLatestJL(requestId, jobId string) (proto.JobLog, 
 		return a.GetLatestJLFunc(requestId, jobId)
 	}
 	return proto.JobLog{}, nil
+}
+
+func (a *RequestDBAccessor) GetFullJL(requestId string) ([]proto.JobLog, error) {
+	if a.GetFullJLFunc != nil {
+		return a.GetFullJLFunc(requestId)
+	}
+	return []proto.JobLog{}, nil
 }
 
 func (a *RequestDBAccessor) SaveJL(jl proto.JobLog) error {

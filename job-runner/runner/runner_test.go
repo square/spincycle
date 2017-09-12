@@ -18,8 +18,8 @@ var noJobData = map[string]interface{}{}
 func TestFactory(t *testing.T) {
 	// Making the job factory return an error.
 	jf := &mock.JobFactory{
-		JobsToReturn: map[string]*mock.Job{},
-		MakeErr:      mock.ErrJob,
+		MockJobs: map[string]*mock.Job{},
+		MakeErr:  mock.ErrJob,
 	}
 	rmc := &mock.RMClient{}
 	rf := runner.NewFactory(jf, rmc)

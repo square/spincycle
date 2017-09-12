@@ -56,3 +56,8 @@ func InitJobs(count int) map[string]proto.Job {
 	}
 	return jobs
 }
+
+func Dump(v interface{}) {
+	bytes, _ := json.MarshalIndent(v, "", "  ")
+	fmt.Println(string(bytes))
+}

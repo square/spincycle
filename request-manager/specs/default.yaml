@@ -7,7 +7,10 @@ sequences:
     args:
       required:
         - name: cmd
+          desc: Shell command name
+      optional:
         - name: args
+          desc: Args to shell command
     nodes:
       shell-command:
         category: job

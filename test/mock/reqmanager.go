@@ -21,7 +21,9 @@ type RequestManager struct {
 	RequestStatusFunc func(string) (proto.RequestStatus, error)
 	GetJobChainFunc   func(string) (proto.JobChain, error)
 	GetJLFunc         func(string, string) (proto.JobLog, error)
+	GetFullJLFunc     func(string) ([]proto.JobLog, error)
 	CreateJLFunc      func(string, proto.JobLog) (proto.JobLog, error)
+	RequestListFunc   func() []proto.RequestSpec
 }
 
 func (r *RequestManager) CreateRequest(reqParams proto.CreateRequestParams) (proto.Request, error) {
@@ -80,9 +82,23 @@ func (r *RequestManager) GetJL(reqId, jobId string) (proto.JobLog, error) {
 	return proto.JobLog{}, nil
 }
 
+func (r *RequestManager) GetFullJL(reqId string) ([]proto.JobLog, error) {
+	if r.GetFullJLFunc != nil {
+		return r.GetFullJLFunc(reqId)
+	}
+	return []proto.JobLog{}, nil
+}
+
 func (r *RequestManager) CreateJL(reqId string, jl proto.JobLog) (proto.JobLog, error) {
 	if r.CreateJLFunc != nil {
 		return r.CreateJLFunc(reqId, jl)
 	}
 	return proto.JobLog{}, nil
+}
+
+func (r *RequestManager) RequestList() []proto.RequestSpec {
+	if r.RequestListFunc != nil {
+		return r.RequestListFunc()
+	}
+	return []proto.RequestSpec{}
 }

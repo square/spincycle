@@ -5,6 +5,8 @@
 package request
 
 import (
+	"sort"
+	"sync"
 	"time"
 
 	jr "github.com/square/spincycle/job-runner"
@@ -43,34 +45,35 @@ type Manager interface {
 
 	// GetJL retrieves the job log corresponding to the provided request and job ids.
 	GetJL(requestId string, jobId string) (proto.JobLog, error)
+	GetFullJL(requestId string) ([]proto.JobLog, error)
 
 	// CreateJL takes a request id and a proto.JobLog and creates a
 	// proto.JobLog. This could be a no-op, or, depending on implementation, it
 	// could update some of the fields on the JL, save it to a database, etc.
 	CreateJL(requestId string, jl proto.JobLog) (proto.JobLog, error)
-}
 
-// Create an interface that we can mock out during testing.
-type Grapher interface {
-	CreateGraph(string, map[string]interface{}) (*grapher.Graph, error)
+	RequestList() []proto.RequestSpec
 }
 
 type manager struct {
 	// Resolves requests into graphs.
-	rr Grapher
+	rr *grapher.Grapher
 
 	// Persists requests in a database.
 	db DBAccessor
 
 	// A client for communicating with the Job Runner (JR).
 	jrc jr.Client
+
+	*sync.Mutex
 }
 
-func NewManager(requestResolver Grapher, dbAccessor DBAccessor, jrClient jr.Client) Manager {
+func NewManager(requestResolver *grapher.Grapher, dbAccessor DBAccessor, jrClient jr.Client) Manager {
 	return &manager{
-		rr:  requestResolver,
-		db:  dbAccessor,
-		jrc: jrClient,
+		rr:    requestResolver,
+		db:    dbAccessor,
+		jrc:   jrClient,
+		Mutex: &sync.Mutex{},
 	}
 }
 
@@ -204,6 +207,10 @@ func (m *manager) StopRequest(requestId string) error {
 		return err
 	}
 
+	if req.State == proto.STATE_COMPLETE {
+		return nil
+	}
+
 	// Return an error unless the request is in the running state, which prevents
 	// us from finishing a request which should not be able to be finished.
 	if req.State != proto.STATE_RUNNING {
@@ -255,11 +262,11 @@ func (m *manager) RequestStatus(requestId string) (proto.RequestStatus, error) {
 	// so that it is easy to lookup a job's status by it's id (used below).
 	liveJobs := map[string]proto.JobStatus{}
 	for _, status := range liveStatuses {
-		liveJobs[status.Id] = status
+		liveJobs[status.JobId] = status
 	}
 	finishedJobs := map[string]proto.JobStatus{}
 	for _, status := range finishedStatuses {
-		finishedJobs[status.Id] = status
+		finishedJobs[status.JobId] = status
 	}
 
 	// For each job in the job chain, get the job's status from either
@@ -276,7 +283,7 @@ func (m *manager) RequestStatus(requestId string) (proto.RequestStatus, error) {
 			allStatuses = append(allStatuses, status)
 		} else {
 			status := proto.JobStatus{
-				Id:    job.Id,
+				JobId: job.Id,
 				State: proto.STATE_PENDING,
 			}
 			allStatuses = append(allStatuses, status)
@@ -293,6 +300,10 @@ func (m *manager) RequestStatus(requestId string) (proto.RequestStatus, error) {
 
 func (m *manager) GetJobChain(requestId string) (proto.JobChain, error) {
 	return m.db.GetJobChain(requestId)
+}
+
+func (m *manager) GetFullJL(requestId string) ([]proto.JobLog, error) {
+	return m.db.GetFullJL(requestId)
 }
 
 func (m *manager) GetJL(requestId, jobId string) (proto.JobLog, error) {
@@ -319,4 +330,50 @@ func (m *manager) CreateJL(requestId string, jl proto.JobLog) (proto.JobLog, err
 	}
 
 	return jl, nil
+}
+
+var requestList []proto.RequestSpec
+
+func (m *manager) RequestList() []proto.RequestSpec {
+	m.Lock()
+	defer m.Unlock()
+
+	if requestList != nil {
+		return requestList
+	}
+
+	req := m.rr.Sequences()
+	sortedReqNames := make([]string, 0, len(req))
+	for name := range req {
+		sortedReqNames = append(sortedReqNames, name)
+	}
+	sort.Strings(sortedReqNames)
+
+	requestList = make([]proto.RequestSpec, 0, len(sortedReqNames))
+	for _, name := range sortedReqNames {
+		s := proto.RequestSpec{
+			Name: name,
+			Args: []proto.RequestArg{},
+		}
+		for _, arg := range req[name].Args.Required {
+			a := proto.RequestArg{
+				Name:     arg.Name,
+				Desc:     arg.Desc,
+				Required: true,
+			}
+			s.Args = append(s.Args, a)
+		}
+		for _, arg := range req[name].Args.Optional {
+			a := proto.RequestArg{
+				Name:     arg.Name,
+				Desc:     arg.Desc,
+				Required: false,
+				Default:  arg.Default,
+			}
+			s.Args = append(s.Args, a)
+		}
+		requestList = append(requestList, s)
+	}
+
+	return requestList
 }

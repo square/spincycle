@@ -21,6 +21,9 @@ type Client interface {
 	StopRequest(string) error
 	// RequestStatus gets the status of the job chain that corresponds to a given request Id.
 	RequestStatus(string) (proto.JobChainStatus, error)
+
+	// SysStatRunning reports all running jobs.
+	SysStatRunning() ([]proto.JobStatus, error)
 }
 
 type client struct {
@@ -100,6 +103,26 @@ func (c *client) RequestStatus(requestId string) (proto.JobChainStatus, error) {
 	}
 
 	return status, nil
+}
+
+func (c *client) SysStatRunning() ([]proto.JobStatus, error) {
+	url := fmt.Sprintf(c.baseUrl + "/api/v1/status/running")
+	resp, body, err := c.get(url)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unsuccessful status code: %d (response body: %s)",
+			resp.StatusCode, string(body))
+	}
+
+	var running []proto.JobStatus
+	if err := json.Unmarshal(body, &running); err != nil {
+		return nil, err
+	}
+
+	return running, nil
 }
 
 // ------------------------------------------------------------------------- //

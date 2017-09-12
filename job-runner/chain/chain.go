@@ -7,17 +7,22 @@ package chain
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/square/spincycle/proto"
 )
 
 // chain represents a job chain and some meta information about it.
 type chain struct {
-	// The jobchain.
-	JobChain *proto.JobChain `json:"jobChain"`
-
-	// Protection for the chain.
+	JobChain *proto.JobChain       `json:"jobChain"`
+	Running  map[string]RunningJob `json:"running"` // keyed on job ID => start time (Unix nano)
+	N        uint
 	*sync.RWMutex
+}
+
+type RunningJob struct {
+	N       uint  `json:"n"`
+	StartTs int64 `json:"startTs"`
 }
 
 // NewChain takes a JobChain proto (from the RM) and turns it into a Chain that
@@ -32,6 +37,8 @@ func NewChain(jc *proto.JobChain) *chain {
 
 	return &chain{
 		JobChain: jc,
+		Running:  map[string]RunningJob{},
+		N:        0,
 		RWMutex:  &sync.RWMutex{},
 	}
 }
@@ -238,6 +245,21 @@ func (c *chain) SetJobState(jobId string, state byte) {
 	j := c.JobChain.Jobs[jobId]
 	j.State = state
 	c.JobChain.Jobs[jobId] = j
+
+	// Keep chain.Running up to date
+	if state == proto.STATE_RUNNING {
+		c.N += 1 // Nth job to run
+		// @todo: on sequence retry, we need to N-- for all jobs in the sequence
+
+		c.Running[jobId] = RunningJob{
+			N:       c.N,
+			StartTs: time.Now().UnixNano(),
+		}
+	} else {
+		// STATE_RUNNING is the only running state, and it's not that, so the
+		// job must not be running.
+		delete(c.Running, jobId)
+	}
 	c.Unlock() // -- unlock
 }
 

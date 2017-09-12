@@ -12,6 +12,14 @@
 			"Rev": "d26492970760ca5d33129d2d799e34be5c4782eb"
 		},
 		{
+			"ImportPath": "github.com/alexflint/go-arg",
+			"Rev": "cef6506c97e5731da728c374ff3523e481026423"
+		},
+		{
+			"ImportPath": "github.com/alexflint/go-scalar",
+			"Rev": "e80c3b7ed292b052c7083b6fd7154a8422c33f65"
+		},
+		{
 			"ImportPath": "github.com/alicebob/miniredis",
 			"Comment": "2.1.0",
 			"Rev": "995ba133bd8fe5dae5a34732bd99f558b0b60e1a"

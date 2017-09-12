@@ -1,18 +1,19 @@
 CREATE TABLE IF NOT EXISTS `requests` (
-  `id`             BINARY(32) NOT NULL,
+  `request_id`     BINARY(32) NOT NULL,
   `type`           VARBINARY(75) NOT NULL,
-  `state`          TINYINT NOT NULL DEFAULT 0,
-  `user`           VARBINARY(32) NOT NULL DEFAULT "?",
+  `state`          TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  `user`           VARCHAR(100) NULL DEFAULT NULL,
   `created_at`     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `started_at`     TIMESTAMP NULL DEFAULT NULL,
   `finished_at`    TIMESTAMP NULL DEFAULT NULL,
-  `total_jobs`     INT DEFAULt 0,
-  `finished_jobs`  INT DEFAULT 0,
+  `total_jobs`     INT UNSIGNED NOT NULL DEFAULT 0,
+  `finished_jobs`  INT UNSIGNED NOT NULL DEFAULT 0,
 
-  PRIMARY KEY (`id`),
-  INDEX created_at (`created_at`),
-  INDEX state (`state`)
-);
+  PRIMARY KEY (`request_id`),
+  INDEX (`created_at`),  -- recently created
+  INDEX (`finished_at`), -- recently finished
+  INDEX (`state`)        -- currently running
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `raw_requests` (
   `request_id` BINARY(32) NOT NULL,
@@ -20,21 +21,20 @@ CREATE TABLE IF NOT EXISTS `raw_requests` (
   `job_chain`  BLOB NOT NULL,
 
   PRIMARY KEY (`request_id`)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `job_log` (
   `request_id`  BINARY(32) NOT NULL,
   `job_id`      VARBINARY(100) NOT NULL,
   `try`         SMALLINT NOT NULL DEFAULT 0,
   `type`        VARBINARY(75) NOT NULL,
-  `state`       TINYINT NOT NULL DEFAULT 0,
-  `status`      TEXT NULL DEFAULT NULL,
-  `started_at`  TIMESTAMP NULL DEFAULT NULL,
-  `finished_at` TIMESTAMP NULL DEFAULT NULL,
+  `state`       TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  `started_at`  BIGINT UNSIGNED NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
+  `finished_at` BIGINT UNSIGNED NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
   `error`       TEXT NULL DEFAULT NULL,
   `exit`        TINYINT UNSIGNED NULL DEFAULT NULL,
-  `stdout`      TEXT NULL DEFAULT NULL,
-  `stderr`      TEXT NULL DEFAULT NULL,
+  `stdout`      LONGBLOB NULL DEFAULT NULL,
+  `stderr`      LONGBLOB NULL DEFAULT NULL,
 
   PRIMARY KEY (`request_id`, `job_id`, `try`)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
