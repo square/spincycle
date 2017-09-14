@@ -92,10 +92,6 @@ type SQLDb struct {
 
 	// The TLS config used to connect to the sql database..
 	TLS `yaml:"tls_config"`
-
-	// The path to the database's CLI tool. This is only used for
-	// testing. Ex: /usr/bin/mysql
-	CLIPath string `yaml:"cli_path"`
 }
 
 // Configuration for a Redis database.
