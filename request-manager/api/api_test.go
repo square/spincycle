@@ -18,8 +18,8 @@ import (
 
 var server *httptest.Server
 
-func setup(rm *mock.RequestManager, middleware ...echo.MiddlewareFunc) {
-	a := api.NewAPI(rm, &mock.RMStatus{})
+func setup(rm *mock.RequestManager, jlm *mock.JLManager, jcm *mock.JCManager, middleware ...echo.MiddlewareFunc) {
+	a := api.NewAPI(rm, jlm, jcm, &mock.RMStatus{})
 	a.Use(middleware...)
 	server = httptest.NewServer(a)
 }
@@ -42,7 +42,7 @@ func baseURL() string {
 
 func TestNewRequestHandlerInvalidPayload(t *testing.T) {
 	payload := `"bad":"json"}` // Bad payload.
-	setup(&mock.RequestManager{})
+	setup(&mock.RequestManager{}, &mock.JLManager{}, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -63,12 +63,12 @@ func TestNewRequestHandlerRMError(t *testing.T) {
 	// request params it receives.
 	var rmReqParams proto.CreateRequestParams
 	rm := &mock.RequestManager{
-		CreateRequestFunc: func(reqParams proto.CreateRequestParams) (proto.Request, error) {
+		CreateFunc: func(reqParams proto.CreateRequestParams) (proto.Request, error) {
 			rmReqParams = reqParams
 			return proto.Request{}, mock.ErrRequestManager
 		},
 	}
-	setup(rm)
+	setup(rm, &mock.JLManager{}, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -106,7 +106,7 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 	// request params it receives.
 	var rmReqParams proto.CreateRequestParams
 	rm := &mock.RequestManager{
-		CreateRequestFunc: func(reqParams proto.CreateRequestParams) (proto.Request, error) {
+		CreateFunc: func(reqParams proto.CreateRequestParams) (proto.Request, error) {
 			rmReqParams = reqParams
 			return req, nil
 		},
@@ -118,7 +118,7 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 			return h(c)
 		}
 	}
-	setup(rm, middlewareFunc)
+	setup(rm, &mock.JLManager{}, &mock.JCManager{}, middlewareFunc)
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -170,11 +170,11 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 	}
 	// Create a mock request manager that will return a request.
 	rm := &mock.RequestManager{
-		GetRequestFunc: func(r string) (proto.Request, error) {
+		GetFunc: func(r string) (proto.Request, error) {
 			return req, nil
 		},
 	}
-	setup(rm)
+	setup(rm, &mock.JLManager{}, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -197,7 +197,7 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 
 func TestStartRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	setup(&mock.RequestManager{})
+	setup(&mock.RequestManager{}, &mock.JLManager{}, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -218,12 +218,12 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 	// Create a mock request manager that will record the finish params it receives.
 	var rmFinishParams proto.FinishRequestParams
 	rm := &mock.RequestManager{
-		FinishRequestFunc: func(r string, f proto.FinishRequestParams) error {
+		FinishFunc: func(r string, f proto.FinishRequestParams) error {
 			rmFinishParams = f
 			return nil
 		},
 	}
-	setup(rm)
+	setup(rm, &mock.JLManager{}, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -248,7 +248,7 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 
 func TestStopRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	setup(&mock.RequestManager{})
+	setup(&mock.RequestManager{}, &mock.JLManager{}, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -278,11 +278,11 @@ func TestStatusRequestHandlerSuccess(t *testing.T) {
 	}
 	// Create a mock request manager that will return a request status.
 	rm := &mock.RequestManager{
-		RequestStatusFunc: func(r string) (proto.RequestStatus, error) {
+		StatusFunc: func(r string) (proto.RequestStatus, error) {
 			return reqStatus, nil
 		},
 	}
-	setup(rm)
+	setup(rm, &mock.JLManager{}, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -310,12 +310,12 @@ func TestGetJobChainRequestHandlerSuccess(t *testing.T) {
 		State:     proto.STATE_RUNNING,
 	}
 	// Create a mock request manager that will return a job chain.
-	rm := &mock.RequestManager{
-		GetJobChainFunc: func(r string) (proto.JobChain, error) {
+	jcm := &mock.JCManager{
+		GetFunc: func(r string) (proto.JobChain, error) {
 			return jc, nil
 		},
 	}
-	setup(rm)
+	setup(&mock.RequestManager{}, &mock.JLManager{}, jcm)
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -344,12 +344,12 @@ func TestGetJLHandlerSuccess(t *testing.T) {
 		State:     proto.STATE_COMPLETE,
 	}
 	// Create a mock request manager that will return a jl.
-	rm := &mock.RequestManager{
-		GetJLFunc: func(r string, j string) (proto.JobLog, error) {
+	jlm := &mock.JLManager{
+		GetFunc: func(r string, j string) (proto.JobLog, error) {
 			return jl, nil
 		},
 	}
-	setup(rm)
+	setup(&mock.RequestManager{}, jlm, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -380,13 +380,13 @@ func TestCreateJLHandlerSuccess(t *testing.T) {
 	}
 	// Create a mock request manager that will return a jl and record the jl it receives.
 	var rmjl proto.JobLog
-	rm := &mock.RequestManager{
-		CreateJLFunc: func(r string, j proto.JobLog) (proto.JobLog, error) {
+	jlm := &mock.JLManager{
+		CreateFunc: func(r string, j proto.JobLog) (proto.JobLog, error) {
 			rmjl = j
 			return jl, nil
 		},
 	}
-	setup(rm)
+	setup(&mock.RequestManager{}, jlm, &mock.JCManager{})
 	defer cleanup()
 
 	// Make the HTTP request.
