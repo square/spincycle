@@ -1,0 +1,4 @@
+---
+db:
+  type: mysql
+  dsn: "root:@tcp(localhost:3306)/request_manager_test"
