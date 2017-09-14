@@ -6,22 +6,8 @@ import (
 )
 
 var (
-	ErrInvalidParams   = errors.New("invalid request type and/or arguments")
-	ErrNotUpdated      = errors.New("cannot find request to update")
-	ErrMultipleUpdated = errors.New("multiple requests updated")
+	ErrInvalidParams = errors.New("invalid request type and/or arguments")
 )
-
-type ErrNotFound struct {
-	resource string
-}
-
-func NewErrNotFound(resource string) ErrNotFound {
-	return ErrNotFound{resource}
-}
-
-func (e ErrNotFound) Error() string {
-	return fmt.Sprintf("%s not found", e.resource)
-}
 
 type ErrInvalidState struct {
 	expectedState string
