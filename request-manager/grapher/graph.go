@@ -116,9 +116,13 @@ func (g *Graph) PrintDot() {
 	fmt.Printf("\tlabelloc=\"t\";\n")
 	fmt.Printf("\tlabel=\"%s\"\n", g.Name)
 	fmt.Printf("\tfontsize=22\n")
-	for vertexName, _ := range g.Vertices {
+	for vertexName, vertex := range g.Vertices {
 		fmt.Printf("\tnode [style=filled,color=\"%s\",shape=box]\n", "#86cedf")
-		fmt.Printf("\t\"%s\" [label=\"%s\"]\n", vertexName, vertexName)
+		fmt.Printf("\t\"%s\" [label=\"%s :\\n ", vertexName, vertex.Datum.Name())
+		for k, v := range vertex.Args {
+			fmt.Printf(" %s : %s \\n ", k, v)
+		}
+		fmt.Printf("\"]\n")
 	}
 	for out, ins := range g.Edges {
 		for _, in := range ins {

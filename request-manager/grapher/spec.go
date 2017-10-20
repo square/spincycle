@@ -12,7 +12,7 @@ type NodeSpec struct {
 	Name         string     `yaml:"name"`      // unique name assigned to this node
 	Category     string     `yaml:"category"`  // "job" or "sequence"
 	NodeType     string     `yaml:"type"`      // the type of job or sequence to create
-	Each         string     `yaml:"each"`      // arguments to repeat over
+	Each         []string   `yaml:"each"`      // arguments to repeat over
 	Args         []*NodeArg `yaml:"args"`      // expected arguments
 	Sets         []string   `yaml:"sets"`      // expected job args to be set
 	Dependencies []string   `yaml:"deps"`      // nodes with out-edges leading to this node

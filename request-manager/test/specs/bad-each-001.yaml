@@ -15,7 +15,8 @@ sequences:
       pre-flight-checks:
         category: sequence
         type: check-instance-is-ok
-        each: instances:instance
+        each: 
+          - instances:instance
         args:
           - expected: instances
             given: instances

@@ -120,7 +120,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 			}
 
 			// Find out how many times this node has to be repeated
-			iterator, iterateOver, err := o.getIterators(n, nodeArgs)
+			iterators, iterateOvers, err := o.getIterators(n, nodeArgs)
 			if err != nil {
 				return nil, err
 			}
@@ -128,8 +128,13 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 			// All the graphs that make up this component
 			componentsForThisNode := []*Graph{}
 
+			// Validate that the iterators all have variable names
+			if len(iterateOvers) != len(iterators) || len(iterators) < 1 {
+				return nil, fmt.Errorf("Error making node %s: malformed arguments given.", n.Name)
+			}
+
 			// If no repetition is needed, this loop will only execute once
-			for _, i := range iterateOver {
+			for i, _ := range iterateOvers[0] {
 
 				// Copy the required args into a separate args map here.
 				// Do the necessary remapping here.
@@ -139,8 +144,12 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				// Add the iterator to the node args unless there is no iterator for this node
-				if iterator != "" {
-					nodeArgsCopy[iterator] = i
+				for j, iterator := range iterators {
+					if iterator != "" {
+						// This won't panic because we have earlier asserted that
+						// len(iterators) == len(iterateOvers)
+						nodeArgsCopy[iterator] = iterateOvers[j][i]
+					}
 				}
 
 				// Build next graph component and assert that it's valid
@@ -296,37 +305,47 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 // and the singleton [""], to indicate that only one iteration is needed.
 //
 // Precondition: the iteratable must already be present in args
-func (o *Grapher) getIterators(n *NodeSpec, args map[string]interface{}) (string, []interface{}, error) {
-	if n.Each == "" {
-		return "", []interface{}{""}, nil
+func (o *Grapher) getIterators(n *NodeSpec, args map[string]interface{}) ([]string, [][]interface{}, error) {
+	empty := []string{""}
+	empties := [][]interface{}{[]interface{}{""}}
+	if len(n.Each) == 0 {
+		return empty, empties, nil
 	}
 
-	p := strings.Split(n.Each, ":")
-	if len(p) != 2 {
-		err := fmt.Errorf("invalid each value: %s: split on ':' yielded %d values, expected 2", n.Each, len(p))
-		return "", []interface{}{""}, err
-	}
-	iterateSet := p[0]
-	iterator := p[1]
-	iterateOver := []interface{}{}
+	iterators := []string{}
+	iterateOvers := [][]interface{}{}
 
-	// Grab the iterable set out of args
-	iterables, ok := args[iterateSet]
-	if !ok {
-		return "", []interface{}{""}, fmt.Errorf("each:%s: arg %s not set", n.Each, iterateSet)
+	for _, each := range n.Each {
+		p := strings.Split(each, ":")
+		if len(p) != 2 {
+			err := fmt.Errorf("invalid each value: %s: split on ':' yielded %d values, expected 2", n.Each, len(p))
+			return empty, empties, err
+		}
+		iterateSet := p[0]
+		iterator := p[1]
+		iterateOver := []interface{}{}
+
+		// Grab the iterable set out of args
+		iterables, ok := args[iterateSet]
+		if !ok {
+			return empty, empties, fmt.Errorf("each:%s: arg %s not set", n.Each, iterateSet)
+		}
+
+		// Assert that this is a slice
+		if reflect.TypeOf(iterables).Kind() != reflect.Slice {
+			return empty, empties, fmt.Errorf("each:%s: arg %s is a %s, expected a slice", n.Each, iterateSet, reflect.TypeOf(iterables).Kind())
+		}
+
+		a := reflect.ValueOf(iterables)
+		for i := 0; i < a.Len(); i++ {
+			iterateOver = append(iterateOver, a.Index(i).Interface())
+		}
+
+		iterators = append(iterators, iterator)
+		iterateOvers = append(iterateOvers, iterateOver)
 	}
 
-	// Assert that this is a slice
-	if reflect.TypeOf(iterables).Kind() != reflect.Slice {
-		return "", []interface{}{""}, fmt.Errorf("each:%s: arg %s is a %s, expected a slice", n.Each, iterateSet, reflect.TypeOf(iterables).Kind())
-	}
-
-	a := reflect.ValueOf(iterables)
-	for i := 0; i < a.Len(); i++ {
-		iterateOver = append(iterateOver, a.Index(i).Interface())
-	}
-
-	return iterator, iterateOver, nil
+	return iterators, iterateOvers, nil
 }
 
 // Assert that all arguments required (as defined in the "args" clause in the yaml)
@@ -336,9 +355,18 @@ func (o *Grapher) allArgsPresent(n *NodeSpec, args map[string]interface{}) bool 
 	iterator := ""
 
 	// Assert that the iterable variable is present.
-	if n.Each != "" {
-		iterator = strings.Split(n.Each, ":")[1]
-		iterateSet = strings.Split(n.Each, ":")[0]
+	for _, each := range n.Each {
+		if each == "" {
+			continue
+		}
+
+		// This is malformed input.
+		if len(strings.Split(each, ":")) != 2 {
+			return false
+		}
+
+		iterator = strings.Split(each, ":")[1]
+		iterateSet = strings.Split(each, ":")[0]
 		if _, ok := args[iterateSet]; !ok {
 			return false
 		}
