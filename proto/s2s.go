@@ -133,6 +133,15 @@ func (js JobStatusByRuntime) Len() int           { return len(js) }
 func (js JobStatusByRuntime) Less(i, j int) bool { return js[i].Runtime > js[j].Runtime }
 func (js JobStatusByRuntime) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
 
+// JobLogById is a slice of job logs sorted by request id + job id.
+type JobLogById []JobLog
+
+func (jls JobLogById) Len() int { return len(jls) }
+func (jls JobLogById) Less(i, j int) bool {
+	return jls[i].RequestId+jls[i].JobId < jls[j].RequestId+jls[j].JobId
+}
+func (jls JobLogById) Swap(i, j int) { jls[i], jls[j] = jls[j], jls[i] }
+
 // Jobs are a list of jobs sorted by id.
 type Jobs []Job
 

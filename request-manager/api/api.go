@@ -13,6 +13,9 @@ import (
 	"github.com/labstack/echo/engine"
 	"github.com/labstack/echo/engine/standard"
 	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/request-manager/db"
+	"github.com/square/spincycle/request-manager/jobchain"
+	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
 )
@@ -25,15 +28,20 @@ const (
 // It satisfies the http.HandlerFunc interface.
 type API struct {
 	rm   request.Manager
+	jls  joblog.Store
+	jcs  jobchain.Store
 	stat status.Manager
 	echo *echo.Echo
 }
 
 // NewAPI cretes a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
-func NewAPI(rm request.Manager, stat status.Manager) *API {
+// @todo: create a struct of managers and pass that in here instead?
+func NewAPI(rm request.Manager, jls joblog.Store, jcs jobchain.Store, stat status.Manager) *API {
 	api := &API{
 		rm:   rm,
+		jls:  jls,
+		jcs:  jcs,
 		stat: stat,
 		echo: echo.New(),
 	}
@@ -100,12 +108,12 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	}
 
 	// Create the request.
-	req, err := api.rm.CreateRequest(reqParams)
+	req, err := api.rm.Create(reqParams)
 	if err != nil {
 		return handleError(err)
 	}
 
-	if err := api.rm.StartRequest(req.Id); err != nil {
+	if err := api.rm.Start(req.Id); err != nil {
 		return handleError(err)
 	}
 
@@ -124,7 +132,7 @@ func (api *API) getRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
 	// Get the request from the rm.
-	req, err := api.rm.GetRequest(reqId)
+	req, err := api.rm.Get(reqId)
 	if err != nil {
 		return handleError(err)
 	}
@@ -138,7 +146,7 @@ func (api *API) getRequestHandler(c echo.Context) error {
 func (api *API) startRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
-	if err := api.rm.StartRequest(reqId); err != nil {
+	if err := api.rm.Start(reqId); err != nil {
 		return handleError(err)
 	}
 
@@ -157,7 +165,7 @@ func (api *API) finishRequestHandler(c echo.Context) error {
 		return err
 	}
 
-	if err := api.rm.FinishRequest(reqId, finishParams); err != nil {
+	if err := api.rm.Finish(reqId, finishParams); err != nil {
 		return handleError(err)
 	}
 
@@ -170,7 +178,7 @@ func (api *API) finishRequestHandler(c echo.Context) error {
 func (api *API) stopRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
-	if err := api.rm.StopRequest(reqId); err != nil {
+	if err := api.rm.Stop(reqId); err != nil {
 		return handleError(err)
 	}
 
@@ -183,7 +191,7 @@ func (api *API) stopRequestHandler(c echo.Context) error {
 func (api *API) statusRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
-	reqStatus, err := api.rm.RequestStatus(reqId)
+	reqStatus, err := api.rm.Status(reqId)
 	if err != nil {
 		return handleError(err)
 	}
@@ -198,7 +206,7 @@ func (api *API) jobChainRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
 	// Get the request's job chain from the rm.
-	jc, err := api.rm.GetJobChain(reqId)
+	jc, err := api.jcs.Get(reqId)
 	if err != nil {
 		return handleError(err)
 	}
@@ -213,7 +221,7 @@ func (api *API) getFullJLHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
 	// Get the JL from the rm.
-	jl, err := api.rm.GetFullJL(reqId)
+	jl, err := api.jls.GetFull(reqId)
 	if err != nil {
 		return handleError(err)
 	}
@@ -229,7 +237,7 @@ func (api *API) getJLHandler(c echo.Context) error {
 	jobId := c.Param("jobId")
 
 	// Get the JL from the rm.
-	jl, err := api.rm.GetJL(reqId, jobId)
+	jl, err := api.jls.Get(reqId, jobId)
 	if err != nil {
 		return handleError(err)
 	}
@@ -250,9 +258,16 @@ func (api *API) createJLHandler(c echo.Context) error {
 	}
 
 	// Create a JL in the rm.
-	jl, err := api.rm.CreateJL(reqId, jl)
+	jl, err := api.jls.Create(reqId, jl)
 	if err != nil {
 		return handleError(err)
+	}
+
+	// Increment the finished jobs counter if the job completed successfully.
+	if jl.State == proto.STATE_COMPLETE {
+		if err := api.rm.IncrementFinishedJobs(reqId); err != nil {
+			return handleError(err)
+		}
 	}
 
 	// Return the JL.
@@ -262,7 +277,7 @@ func (api *API) createJLHandler(c echo.Context) error {
 // GET <API_ROOT>/request-list
 // Get a list of all requets.
 func (api *API) requestListHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, api.rm.RequestList())
+	return c.JSON(http.StatusOK, api.rm.Specs())
 }
 
 // GET <API_ROOT>/status/running
@@ -281,13 +296,13 @@ func (api *API) statusRunningHandler(c echo.Context) error {
 
 func handleError(err error) *echo.HTTPError {
 	switch err.(type) {
-	case request.ErrNotFound:
+	case db.ErrNotFound:
 		return echo.NewHTTPError(http.StatusNotFound, err.Error())
 	case request.ErrInvalidState:
 		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	default:
 		switch err {
-		case request.ErrInvalidParams, request.ErrNotUpdated, request.ErrMultipleUpdated:
+		case request.ErrInvalidParams, db.ErrNotUpdated, db.ErrMultipleUpdated:
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 		default:
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())

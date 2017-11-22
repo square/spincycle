@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"time"
 
 	"github.com/square/spincycle/proto"
 )
@@ -60,4 +61,15 @@ func InitJobs(count int) map[string]proto.Job {
 func Dump(v interface{}) {
 	bytes, _ := json.MarshalIndent(v, "", "  ")
 	fmt.Println(string(bytes))
+}
+
+var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func RandSeq(n int) string {
+	rand.Seed(time.Now().UTC().UnixNano())
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }

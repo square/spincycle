@@ -4,13 +4,11 @@ package main
 
 import (
 	"crypto/tls"
-	"database/sql"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/square/spincycle/config"
@@ -19,6 +17,8 @@ import (
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
+	"github.com/square/spincycle/request-manager/jobchain"
+	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
 	"github.com/square/spincycle/util"
@@ -83,11 +83,8 @@ func main() {
 	jrClient := jr.NewClient(httpClient, cfg.JRClient.ServerURL)
 
 	// //////////////////////////////////////////////////////////////////////
-	// Request Manager and its DB Accessor
+	// DB Connection Pool
 	// //////////////////////////////////////////////////////////////////////
-
-	// @todo: move all this to a db.Connector and handle reconnecting
-	params := "?parseTime=true" // always needs to be set
 	var dbTLSConfig *tls.Config
 	if cfg.Db.TLS.CAFile != "" && cfg.Db.TLS.CertFile != "" && cfg.Db.TLS.KeyFile != "" {
 		var err error
@@ -96,33 +93,28 @@ func main() {
 		if err != nil {
 			log.Fatalf("error loading DB Accessor TLS config: %s", err)
 		}
-		mysql.RegisterTLSConfig("custom", dbTLSConfig)
-		params += "&tls=custom"
 	}
-	dsn := cfg.Db.DSN + params
-	dbConn, err := sql.Open(cfg.Db.Type, dsn)
-	if err != nil {
-		log.Fatalf("error opening sql db: %s", err)
-	}
-	if err = dbConn.Ping(); err != nil {
-		log.Fatalf("error connecting to sql db: %s", err)
-	}
-	dbAccessor := request.NewDBAccessor(dbConn)
+	dbc := db.NewConnectionPool(10, 5, cfg.Db.DSN, dbTLSConfig)
 
-	rm := request.NewManager(rr, dbAccessor, jrClient)
+	// //////////////////////////////////////////////////////////////////////
+	// Request Manager, Job Log Manager, and Job Chain Manager
+	// //////////////////////////////////////////////////////////////////////
+	rm := request.NewManager(rr, dbc, jrClient)
+	jls := joblog.NewStore(dbc)
+	jcs := jobchain.NewStore(dbc)
 
 	// //////////////////////////////////////////////////////////////////////
 	// System Status
 	// //////////////////////////////////////////////////////////////////////
 	stat := status.NewManager(
-		db.NewConnectionPool(10, 5, cfg.Db.DSN, dbTLSConfig),
+		dbc,
 		jrClient,
 	)
 
 	// //////////////////////////////////////////////////////////////////////
 	// API
 	// //////////////////////////////////////////////////////////////////////
-	api := api.NewAPI(rm, stat)
+	api := api.NewAPI(rm, jls, jcs, stat)
 
 	// If you want to add custom middleware for authentication, authorization,
 	// etc., you should do that here. See https://echo.labstack.com/middleware

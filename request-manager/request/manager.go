@@ -1,106 +1,99 @@
 // Copyright 2017, Square, Inc.
 
-// Package request provides an interface for managing requests, which are the
-// core compontent of the Request Manager.
+// Package request provides an interface for managing requests.
 package request
 
 import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/util"
 )
 
 // A Manager is used to create and manage requests.
 type Manager interface {
-	// CreateRequest creates a proto.Request from a proto.CreateRequestParams. It
-	// uses the Grapher package to create a job chain which it attaches to the
-	// request proto.
-	CreateRequest(proto.CreateRequestParams) (proto.Request, error)
+	// Create creates a proto.Request and saves it to the db.
+	Create(proto.CreateRequestParams) (proto.Request, error)
 
-	// GetRequest retrieves the request corresponding to the provided request id.
-	GetRequest(requestId string) (proto.Request, error)
+	// Get retreives the request corresponding to the provided id.
+	Get(requestId string) (proto.Request, error)
 
-	// StartRequest starts a request (sends it to the Job Runner).
-	StartRequest(requestId string) error
+	// Start starts a request (sends it to the JR).
+	Start(requestId string) error
 
-	// FinishRequest marks a request as being finished. It gets the request's final
-	// state from the proto.FinishRequestParams argument.
-	FinishRequest(requestId string, finishParams proto.FinishRequestParams) error
+	// Stop stops a request (sends a stop signal to the JR).
+	Stop(requestId string) error
 
-	// StopRequest tells the Job Runner to stop running the request's job chain.
-	StopRequest(requestId string) error
-
-	// RequestStatus returns the status of a request and all of the jobs in it.
+	// Status returns the status of a request and all of the jobs in it.
 	// The live status output of any jobs that are currently running will be
 	// included as well.
-	RequestStatus(requestId string) (proto.RequestStatus, error)
+	Status(requestId string) (proto.RequestStatus, error)
 
-	// GetJobChain retrieves the job chain corresponding to the provided request id.
-	GetJobChain(requestId string) (proto.JobChain, error)
+	// Finish marks a request as being finished. It gets the request's final
+	// state from the proto.FinishRequestParams argument.
+	Finish(requestId string, finishParams proto.FinishRequestParams) error
 
-	// GetJL retrieves the job log corresponding to the provided request and job ids.
-	GetJL(requestId string, jobId string) (proto.JobLog, error)
-	GetFullJL(requestId string) ([]proto.JobLog, error)
+	// IncrementFinishedJobs increments the count of the FinishedJobs field
+	// on the request and saves it to the db.
+	IncrementFinishedJobs(requestId string) error
 
-	// CreateJL takes a request id and a proto.JobLog and creates a
-	// proto.JobLog. This could be a no-op, or, depending on implementation, it
-	// could update some of the fields on the JL, save it to a database, etc.
-	CreateJL(requestId string, jl proto.JobLog) (proto.JobLog, error)
-
-	RequestList() []proto.RequestSpec
+	// Specs returns a list of all the request specs the the RM knows about.
+	Specs() []proto.RequestSpec
 }
 
+// manager implements the Manager interface.
 type manager struct {
-	// Resolves requests into graphs.
-	rr *grapher.Grapher
-
-	// Persists requests in a database.
-	db DBAccessor
-
-	// A client for communicating with the Job Runner (JR).
+	gr  *grapher.Grapher
+	dbc db.Connector
 	jrc jr.Client
-
 	*sync.Mutex
 }
 
-func NewManager(requestResolver *grapher.Grapher, dbAccessor DBAccessor, jrClient jr.Client) Manager {
+func NewManager(gr *grapher.Grapher, dbc db.Connector, jrClient jr.Client) Manager {
 	return &manager{
-		rr:    requestResolver,
-		db:    dbAccessor,
+		gr:    gr,
+		dbc:   dbc,
 		jrc:   jrClient,
 		Mutex: &sync.Mutex{},
 	}
 }
 
-// CreateRequest creates a proto.Request and persists it (along with it's job chain
-// and the request params) in the database.
-func (m *manager) CreateRequest(reqParams proto.CreateRequestParams) (proto.Request, error) {
+func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, error) {
 	var req proto.Request
 	if reqParams.Type == "" {
 		return req, ErrInvalidParams
 	}
 
-	// Generate a UUID for the request.
 	reqUuid := util.UUID()
+	req = proto.Request{
+		Id:        reqUuid,
+		Type:      reqParams.Type,
+		CreatedAt: time.Now(),
+		State:     proto.STATE_PENDING,
+		User:      reqParams.User,
+	}
 
-	// Make a copy of args so that the request resolver doesn't modify our version.
+	// Make a copy of args so that the request resolver doesn't modify reqParams.
 	args := map[string]interface{}{}
 	for k, v := range reqParams.Args {
 		args[k] = v
 	}
 
-	// Resolve the request into a graph.
-	g, err := m.rr.CreateGraph(reqParams.Type, args)
+	// Resolve the request into a graph, and convert to a proto.JobChain.
+	g, err := m.gr.CreateGraph(reqParams.Type, args)
 	if err != nil {
 		return req, err
 	}
 
-	// Convert the graph into a proto.JobChain.
 	jc := &proto.JobChain{
 		Jobs:          map[string]proto.Job{},
 		AdjacencyList: g.Edges,
@@ -121,54 +114,78 @@ func (m *manager) CreateRequest(reqParams proto.CreateRequestParams) (proto.Requ
 	}
 	jc.State = proto.STATE_PENDING
 	jc.RequestId = reqUuid
+	req.JobChain = jc
+	req.TotalJobs = len(jc.Jobs)
 
-	// Create a proto.Request.
-	req = proto.Request{
-		Id:        reqUuid,
-		Type:      reqParams.Type,
-		CreatedAt: time.Now(),
-		State:     proto.STATE_PENDING,
-		User:      reqParams.User,
-		JobChain:  jc,
-		TotalJobs: len(jc.Jobs),
+	// Marshal the the job chain and request params.
+	rawJc, err := json.Marshal(req.JobChain)
+	if err != nil {
+		return req, fmt.Errorf("cannot marshal job chain: %s", err)
+	}
+	rawParams, err := json.Marshal(reqParams)
+	if err != nil {
+		return req, fmt.Errorf("cannot marshal request params: %s", err)
 	}
 
-	return req, m.db.SaveRequest(req, reqParams)
+	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	if err != nil {
+		return req, err
+	}
+
+	// Begin a transaction to insert the request into the requests table, as
+	// well as the jc and raw request params into the raw_requests table.
+	txn, err := conn.Begin()
+	if err != nil {
+		return req, err
+	}
+	defer txn.Rollback()
+
+	q := "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
+	_, err = txn.Exec(q,
+		req.Id,
+		req.Type,
+		req.State,
+		req.User,
+		req.CreatedAt,
+		req.TotalJobs,
+	)
+	if err != nil {
+		return req, err
+	}
+
+	q = "INSERT INTO raw_requests (request_id, request, job_chain) VALUES (?, ?, ?)"
+	if _, err = txn.Exec(q,
+		req.Id,
+		rawParams,
+		rawJc); err != nil {
+		return req, err
+	}
+
+	return req, txn.Commit()
 }
 
-func (m *manager) GetRequest(requestId string) (proto.Request, error) {
-	return m.db.GetRequest(requestId)
+func (m *manager) Get(requestId string) (proto.Request, error) {
+	return m.getWithJc(requestId)
 }
 
-func (m *manager) StartRequest(requestId string) error {
-	// Get the request from the db.
-	req, err := m.db.GetRequest(requestId)
+func (m *manager) Start(requestId string) error {
+	req, err := m.getWithJc(requestId)
 	if err != nil {
 		return err
 	}
 
-	// Return an error unless the request is in the pending state, which prevents
-	// us from starting a request which should not be able to be started.
-	if req.State != proto.STATE_PENDING {
-		return NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[req.State])
-	}
-
-	// Get the request's job chain from the db.
-	jc, err := m.db.GetJobChain(requestId)
-	if err != nil {
-		return err
-	}
-
-	// Update the request.
 	now := time.Now()
 	req.StartedAt = &now
 	req.State = proto.STATE_RUNNING
-	if err = m.db.UpdateRequest(req); err != nil {
+
+	// This will only update the request if the current state is PENDING.
+	err = m.updateRequest(req, proto.STATE_PENDING)
+	if err != nil {
 		return err
 	}
 
 	// Send the request's job chain to the job runner, which will start running it.
-	err = m.jrc.NewJobChain(jc)
+	err = m.jrc.NewJobChain(*req.JobChain)
 	if err != nil {
 		return err
 	}
@@ -176,33 +193,8 @@ func (m *manager) StartRequest(requestId string) error {
 	return nil
 }
 
-func (m *manager) FinishRequest(requestId string, finishParams proto.FinishRequestParams) error {
-	// Get the request from the db.
-	req, err := m.db.GetRequest(requestId)
-	if err != nil {
-		return err
-	}
-
-	// Return an error unless the request is in the running state, which prevents
-	// us from finishing a request which should not be able to be finished.
-	if req.State != proto.STATE_RUNNING {
-		return NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[req.State])
-	}
-
-	// Update the request.
-	now := time.Now()
-	req.FinishedAt = &now
-	req.State = finishParams.State
-	if err = m.db.UpdateRequest(req); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *manager) StopRequest(requestId string) error {
-	// Get the request from the db.
-	req, err := m.db.GetRequest(requestId)
+func (m *manager) Stop(requestId string) error {
+	req, err := m.get(requestId)
 	if err != nil {
 		return err
 	}
@@ -212,7 +204,7 @@ func (m *manager) StopRequest(requestId string) error {
 	}
 
 	// Return an error unless the request is in the running state, which prevents
-	// us from finishing a request which should not be able to be finished.
+	// us from stopping a request which should not be able to be stopped.
 	if req.State != proto.STATE_RUNNING {
 		return NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[req.State])
 	}
@@ -226,47 +218,90 @@ func (m *manager) StopRequest(requestId string) error {
 	return nil
 }
 
-func (m *manager) RequestStatus(requestId string) (proto.RequestStatus, error) {
+func (m *manager) Finish(requestId string, finishParams proto.FinishRequestParams) error {
+	req, err := m.get(requestId)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	req.FinishedAt = &now
+	req.State = finishParams.State
+
+	// This will only update the request if the current state is RUNNING.
+	err = m.updateRequest(req, proto.STATE_RUNNING)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	var reqStatus proto.RequestStatus
 
-	// Get the request from the db.
-	req, err := m.db.GetRequest(requestId)
+	req, err := m.getWithJc(requestId)
 	if err != nil {
 		return reqStatus, err
 	}
 	reqStatus.Request = req
 
-	// Get the job chain from the db.
-	jc, err := m.db.GetJobChain(requestId)
-	if err != nil {
-		return reqStatus, err
-	}
+	// //////////////////////////////////////////////////////////////////////
+	// Live jobs
+	// //////////////////////////////////////////////////////////////////////
 
 	// If the request is running, get the chain's live status from the job runner.
-	var liveStatuses proto.JobStatuses
+	var liveS proto.JobStatuses
 	if req.State == proto.STATE_RUNNING {
-		liveStatus, err := m.jrc.RequestStatus(req.Id)
+		s, err := m.jrc.RequestStatus(req.Id)
 		if err != nil {
 			return reqStatus, err
 		}
-		liveStatuses = liveStatus.JobStatuses
+		liveS = s.JobStatuses
 	}
 
-	// Get the status of all finished jobs in the request.
-	finishedStatuses, err := m.db.GetRequestJobStatuses(req.Id)
+	// //////////////////////////////////////////////////////////////////////
+	// Finished jobs
+	// //////////////////////////////////////////////////////////////////////
+
+	// Get the status of all finished jobs from the db.
+	conn, err := m.dbc.Connect() // connection is from a pool. do not close
 	if err != nil {
 		return reqStatus, err
 	}
 
-	// Convert liveStatuses and finishedStatuses into maps of jobId => status
-	// so that it is easy to lookup a job's status by it's id (used below).
-	liveJobs := map[string]proto.JobStatus{}
-	for _, status := range liveStatuses {
-		liveJobs[status.JobId] = status
+	q := "SELECT j1.job_id, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
+		"j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try) WHERE j1.request_id = ? AND j2.try IS NULL"
+	rows, err := conn.Query(q, requestId)
+	if err != nil {
+		return reqStatus, err
 	}
-	finishedJobs := map[string]proto.JobStatus{}
-	for _, status := range finishedStatuses {
-		finishedJobs[status.JobId] = status
+	defer rows.Close()
+
+	var finishedS proto.JobStatuses
+	for rows.Next() {
+		var s proto.JobStatus
+		if err := rows.Scan(&s.JobId, &s.State); err != nil {
+			return reqStatus, err
+		}
+		s.RequestId = requestId
+
+		finishedS = append(finishedS, s)
+	}
+
+	// //////////////////////////////////////////////////////////////////////
+	// Combine live + finished
+	// //////////////////////////////////////////////////////////////////////
+
+	// Convert liveS and finishedS into maps of jobId => status so that it
+	// is easy to lookup a job's status by its id (used below).
+	liveJ := map[string]proto.JobStatus{}
+	for _, s := range liveS {
+		liveJ[s.JobId] = s
+	}
+	finishedJ := map[string]proto.JobStatus{}
+	for _, s := range finishedS {
+		finishedJ[s.JobId] = s
 	}
 
 	// For each job in the job chain, get the job's status from either
@@ -275,66 +310,61 @@ func (m *manager) RequestStatus(requestId string) (proto.RequestStatus, error) {
 	// potentially be outdated info in liveJobs. Therefore, statuses in
 	// finishedJobs take priority over statuses in liveJobs. If a job does
 	// not exist in either map, it must be pending.
-	allStatuses := proto.JobStatuses{}
-	for _, job := range jc.Jobs {
-		if status, ok := finishedJobs[job.Id]; ok {
-			allStatuses = append(allStatuses, status)
-		} else if status, ok := liveJobs[job.Id]; ok {
-			allStatuses = append(allStatuses, status)
+	allS := proto.JobStatuses{}
+	for _, j := range req.JobChain.Jobs {
+		if s, ok := finishedJ[j.Id]; ok {
+			allS = append(allS, s)
+		} else if s, ok := liveJ[j.Id]; ok {
+			allS = append(allS, s)
 		} else {
-			status := proto.JobStatus{
-				JobId: job.Id,
+			s := proto.JobStatus{
+				JobId: j.Id,
 				State: proto.STATE_PENDING,
 			}
-			allStatuses = append(allStatuses, status)
+			allS = append(allS, s)
 		}
 	}
 
 	reqStatus.JobChainStatus = proto.JobChainStatus{
 		RequestId:   req.Id,
-		JobStatuses: allStatuses,
+		JobStatuses: allS,
 	}
 
 	return reqStatus, nil
 }
 
-func (m *manager) GetJobChain(requestId string) (proto.JobChain, error) {
-	return m.db.GetJobChain(requestId)
-}
-
-func (m *manager) GetFullJL(requestId string) ([]proto.JobLog, error) {
-	return m.db.GetFullJL(requestId)
-}
-
-func (m *manager) GetJL(requestId, jobId string) (proto.JobLog, error) {
-	return m.db.GetLatestJL(requestId, jobId)
-}
-
-func (m *manager) CreateJL(requestId string, jl proto.JobLog) (proto.JobLog, error) {
-	// Set the request id on the JL to be the request id argument.
-	jl.RequestId = requestId
-
-	err := m.db.SaveJL(jl)
+func (m *manager) IncrementFinishedJobs(requestId string) error {
+	conn, err := m.dbc.Connect() // connection is from a pool. do not close
 	if err != nil {
-		return jl, err
+		return err
 	}
 
-	// Update the finished job count on the request if the job completed successfully.
-	// This is so that, when you just get the high-lvel status of a request, you can
-	// see what % of jobs are finished (as opposed to having to look at job logs,
-	// querying the job runner, etc.).
-	if jl.State == proto.STATE_COMPLETE {
-		if err = m.db.IncrementRequestFinishedJobs(requestId); err != nil {
-			return jl, err
-		}
+	q := "UPDATE requests SET finished_jobs = finished_jobs + 1 WHERE request_id = ?"
+	res, err := conn.Exec(q, &requestId)
+	if err != nil {
+		return err
 	}
 
-	return jl, nil
+	cnt, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	switch cnt {
+	case 0:
+		return db.ErrNotUpdated
+	case 1:
+		return nil
+	default:
+		// This should be impossible since we specify the primary key
+		// in the WHERE clause of the update.
+		return db.ErrMultipleUpdated
+	}
 }
 
 var requestList []proto.RequestSpec
 
-func (m *manager) RequestList() []proto.RequestSpec {
+func (m *manager) Specs() []proto.RequestSpec {
 	m.Lock()
 	defer m.Unlock()
 
@@ -342,7 +372,7 @@ func (m *manager) RequestList() []proto.RequestSpec {
 		return requestList
 	}
 
-	req := m.rr.Sequences()
+	req := m.gr.Sequences()
 	sortedReqNames := make([]string, 0, len(req))
 	for name := range req {
 		sortedReqNames = append(sortedReqNames, name)
@@ -376,4 +406,122 @@ func (m *manager) RequestList() []proto.RequestSpec {
 	}
 
 	return requestList
+}
+
+// ------------------------------------------------------------------------- //
+
+// get a request without its jc
+func (m *manager) get(requestId string) (proto.Request, error) {
+	var req proto.Request
+
+	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	if err != nil {
+		return req, err
+	}
+
+	// Nullable columns.
+	var user sql.NullString
+	startedAt := mysql.NullTime{}
+	finishedAt := mysql.NullTime{}
+
+	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
+		"finished_jobs FROM requests WHERE request_id = ?"
+	if err := conn.QueryRow(q, requestId).Scan(
+		&req.Id,
+		&req.Type,
+		&req.State,
+		&user,
+		&req.CreatedAt,
+		&startedAt,
+		&finishedAt,
+		&req.TotalJobs,
+		&req.FinishedJobs); err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			return req, db.NewErrNotFound("request")
+		default:
+			return req, err
+		}
+	}
+
+	if user.Valid {
+		req.User = user.String
+	}
+	if startedAt.Valid {
+		req.StartedAt = &startedAt.Time
+	}
+	if finishedAt.Valid {
+		req.FinishedAt = &finishedAt.Time
+	}
+
+	return req, nil
+}
+
+// get a request with proto.Request.JobChain set
+func (m *manager) getWithJc(requestId string) (proto.Request, error) {
+	req, err := m.get(requestId)
+	if err != nil {
+		return req, err
+	}
+
+	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	if err != nil {
+		return req, err
+	}
+
+	var jc proto.JobChain
+	var rawJc []byte // raw job chains are stored as blobs in the db.
+	q := "SELECT job_chain FROM raw_requests WHERE request_id = ?"
+	if err := conn.QueryRow(q, requestId).Scan(&rawJc); err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			return req, db.NewErrNotFound("job chain")
+		default:
+			return req, err
+		}
+	}
+
+	if err := json.Unmarshal(rawJc, &jc); err != nil {
+		return req, fmt.Errorf("cannot unmarshal job chain: %s", err)
+	}
+
+	req.JobChain = &jc
+	return req, nil
+}
+
+func (m *manager) updateRequest(req proto.Request, curState byte) error {
+	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	if err != nil {
+		return err
+	}
+
+	// Fields that should never be updated by this package are not listed in this query.
+	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ? WHERE request_id = ? AND state = ?"
+	res, err := conn.Exec(q,
+		req.State,
+		req.StartedAt,
+		req.FinishedAt,
+		req.Id,
+		curState)
+	if err != nil {
+		return err
+	}
+
+	cnt, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	switch cnt {
+	case 0:
+		return db.ErrNotUpdated
+	case 1:
+		break
+	default:
+		// This should be impossible since we specify the primary key
+		// in the WHERE clause of the update.
+		return db.ErrMultipleUpdated
+	}
+
+	return nil
 }
