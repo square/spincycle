@@ -13,13 +13,14 @@ var (
 )
 
 type RequestManager struct {
-	CreateFunc func(proto.CreateRequestParams) (proto.Request, error)
-	GetFunc    func(string) (proto.Request, error)
-	StartFunc  func(string) error
-	StopFunc   func(string) error
-	FinishFunc func(string, proto.FinishRequestParams) error
-	StatusFunc func(string) (proto.RequestStatus, error)
-	SpecsFunc  func() []proto.RequestSpec
+	CreateFunc                func(proto.CreateRequestParams) (proto.Request, error)
+	GetFunc                   func(string) (proto.Request, error)
+	StartFunc                 func(string) error
+	StopFunc                  func(string) error
+	FinishFunc                func(string, proto.FinishRequestParams) error
+	StatusFunc                func(string) (proto.RequestStatus, error)
+	IncrementFinishedJobsFunc func(string) error
+	SpecsFunc                 func() []proto.RequestSpec
 }
 
 func (r *RequestManager) Create(reqParams proto.CreateRequestParams) (proto.Request, error) {
@@ -62,6 +63,13 @@ func (r *RequestManager) Status(reqId string) (proto.RequestStatus, error) {
 		return r.StatusFunc(reqId)
 	}
 	return proto.RequestStatus{}, nil
+}
+
+func (r *RequestManager) IncrementFinishedJobs(reqId string) error {
+	if r.IncrementFinishedJobsFunc != nil {
+		return r.IncrementFinishedJobsFunc(reqId)
+	}
+	return nil
 }
 
 func (r *RequestManager) Specs() []proto.RequestSpec {

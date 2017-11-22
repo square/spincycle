@@ -14,8 +14,8 @@ import (
 	"github.com/labstack/echo/engine/standard"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
-	"github.com/square/spincycle/request-manager/jc"
-	"github.com/square/spincycle/request-manager/jl"
+	"github.com/square/spincycle/request-manager/jobchain"
+	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
 )
@@ -28,8 +28,8 @@ const (
 // It satisfies the http.HandlerFunc interface.
 type API struct {
 	rm   request.Manager
-	jlm  jl.Manager
-	jcm  jc.Manager
+	jls  joblog.Store
+	jcs  jobchain.Store
 	stat status.Manager
 	echo *echo.Echo
 }
@@ -37,11 +37,11 @@ type API struct {
 // NewAPI cretes a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
 // @todo: create a struct of managers and pass that in here instead?
-func NewAPI(rm request.Manager, jlm jl.Manager, jcm jc.Manager, stat status.Manager) *API {
+func NewAPI(rm request.Manager, jls joblog.Store, jcs jobchain.Store, stat status.Manager) *API {
 	api := &API{
 		rm:   rm,
-		jlm:  jlm,
-		jcm:  jcm,
+		jls:  jls,
+		jcs:  jcs,
 		stat: stat,
 		echo: echo.New(),
 	}
@@ -206,7 +206,7 @@ func (api *API) jobChainRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
 	// Get the request's job chain from the rm.
-	jc, err := api.jcm.Get(reqId)
+	jc, err := api.jcs.Get(reqId)
 	if err != nil {
 		return handleError(err)
 	}
@@ -221,7 +221,7 @@ func (api *API) getFullJLHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
 	// Get the JL from the rm.
-	jl, err := api.jlm.GetFull(reqId)
+	jl, err := api.jls.GetFull(reqId)
 	if err != nil {
 		return handleError(err)
 	}
@@ -237,7 +237,7 @@ func (api *API) getJLHandler(c echo.Context) error {
 	jobId := c.Param("jobId")
 
 	// Get the JL from the rm.
-	jl, err := api.jlm.Get(reqId, jobId)
+	jl, err := api.jls.Get(reqId, jobId)
 	if err != nil {
 		return handleError(err)
 	}
@@ -258,9 +258,16 @@ func (api *API) createJLHandler(c echo.Context) error {
 	}
 
 	// Create a JL in the rm.
-	jl, err := api.jlm.Create(reqId, jl)
+	jl, err := api.jls.Create(reqId, jl)
 	if err != nil {
 		return handleError(err)
+	}
+
+	// Increment the finished jobs counter if the job completed successfully.
+	if jl.State == proto.STATE_COMPLETE {
+		if err := api.rm.IncrementFinishedJobs(reqId); err != nil {
+			return handleError(err)
+		}
 	}
 
 	// Return the JL.

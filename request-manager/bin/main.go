@@ -17,8 +17,8 @@ import (
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
-	"github.com/square/spincycle/request-manager/jc"
-	"github.com/square/spincycle/request-manager/jl"
+	"github.com/square/spincycle/request-manager/jobchain"
+	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
 	"github.com/square/spincycle/util"
@@ -100,8 +100,8 @@ func main() {
 	// Request Manager, Job Log Manager, and Job Chain Manager
 	// //////////////////////////////////////////////////////////////////////
 	rm := request.NewManager(rr, dbc, jrClient)
-	jlm := jl.NewManager(dbc)
-	jcm := jc.NewManager(dbc)
+	jls := joblog.NewStore(dbc)
+	jcs := jobchain.NewStore(dbc)
 
 	// //////////////////////////////////////////////////////////////////////
 	// System Status
@@ -114,7 +114,7 @@ func main() {
 	// //////////////////////////////////////////////////////////////////////
 	// API
 	// //////////////////////////////////////////////////////////////////////
-	api := api.NewAPI(rm, jlm, jcm, stat)
+	api := api.NewAPI(rm, jls, jcs, stat)
 
 	// If you want to add custom middleware for authentication, authorization,
 	// etc., you should do that here. See https://echo.labstack.com/middleware
