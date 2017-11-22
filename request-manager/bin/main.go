@@ -97,7 +97,7 @@ func main() {
 	dbc := db.NewConnectionPool(10, 5, cfg.Db.DSN, dbTLSConfig)
 
 	// //////////////////////////////////////////////////////////////////////
-	// Request Manager, Job Log Manager, and Job Chain Manager
+	// Request Manager, Job Log Store, and Job Chain Store
 	// //////////////////////////////////////////////////////////////////////
 	rm := request.NewManager(rr, dbc, jrClient)
 	jls := joblog.NewStore(dbc)
