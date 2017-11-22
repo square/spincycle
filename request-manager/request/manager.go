@@ -42,10 +42,15 @@ type Manager interface {
 	// state from the proto.FinishRequestParams argument.
 	Finish(requestId string, finishParams proto.FinishRequestParams) error
 
+	// IncrementFinishedJobs increments the count of the FinishedJobs field
+	// on the request and saves it to the db.
+	IncrementFinishedJobs(requestId string) error
+
 	// Specs returns a list of all the request specs the the RM knows about.
 	Specs() []proto.RequestSpec
 }
 
+// manager implements the Manager interface.
 type manager struct {
 	gr  *grapher.Grapher
 	dbc db.Connector
@@ -326,6 +331,35 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	}
 
 	return reqStatus, nil
+}
+
+func (m *manager) IncrementFinishedJobs(requestId string) error {
+	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	if err != nil {
+		return err
+	}
+
+	q := "UPDATE requests SET finished_jobs = finished_jobs + 1 WHERE request_id = ?"
+	res, err := conn.Exec(q, &requestId)
+	if err != nil {
+		return err
+	}
+
+	cnt, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	switch cnt {
+	case 0:
+		return db.ErrNotUpdated
+	case 1:
+		return nil
+	default:
+		// This should be impossible since we specify the primary key
+		// in the WHERE clause of the update.
+		return db.ErrMultipleUpdated
+	}
 }
 
 var requestList []proto.RequestSpec

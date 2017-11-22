@@ -18,8 +18,8 @@ import (
 
 var server *httptest.Server
 
-func setup(rm *mock.RequestManager, jlm *mock.JLManager, jcm *mock.JCManager, middleware ...echo.MiddlewareFunc) {
-	a := api.NewAPI(rm, jlm, jcm, &mock.RMStatus{})
+func setup(rm *mock.RequestManager, jls *mock.JLStore, jcs *mock.JCStore, middleware ...echo.MiddlewareFunc) {
+	a := api.NewAPI(rm, jls, jcs, &mock.RMStatus{})
 	a.Use(middleware...)
 	server = httptest.NewServer(a)
 }
@@ -42,7 +42,7 @@ func baseURL() string {
 
 func TestNewRequestHandlerInvalidPayload(t *testing.T) {
 	payload := `"bad":"json"}` // Bad payload.
-	setup(&mock.RequestManager{}, &mock.JLManager{}, &mock.JCManager{})
+	setup(&mock.RequestManager{}, &mock.JLStore{}, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -68,7 +68,7 @@ func TestNewRequestHandlerRMError(t *testing.T) {
 			return proto.Request{}, mock.ErrRequestManager
 		},
 	}
-	setup(rm, &mock.JLManager{}, &mock.JCManager{})
+	setup(rm, &mock.JLStore{}, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -118,7 +118,7 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 			return h(c)
 		}
 	}
-	setup(rm, &mock.JLManager{}, &mock.JCManager{}, middlewareFunc)
+	setup(rm, &mock.JLStore{}, &mock.JCStore{}, middlewareFunc)
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -174,7 +174,7 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 			return req, nil
 		},
 	}
-	setup(rm, &mock.JLManager{}, &mock.JCManager{})
+	setup(rm, &mock.JLStore{}, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -197,7 +197,7 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 
 func TestStartRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	setup(&mock.RequestManager{}, &mock.JLManager{}, &mock.JCManager{})
+	setup(&mock.RequestManager{}, &mock.JLStore{}, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -223,7 +223,7 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	setup(rm, &mock.JLManager{}, &mock.JCManager{})
+	setup(rm, &mock.JLStore{}, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -248,7 +248,7 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 
 func TestStopRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	setup(&mock.RequestManager{}, &mock.JLManager{}, &mock.JCManager{})
+	setup(&mock.RequestManager{}, &mock.JLStore{}, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -282,7 +282,7 @@ func TestStatusRequestHandlerSuccess(t *testing.T) {
 			return reqStatus, nil
 		},
 	}
-	setup(rm, &mock.JLManager{}, &mock.JCManager{})
+	setup(rm, &mock.JLStore{}, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -309,13 +309,13 @@ func TestGetJobChainRequestHandlerSuccess(t *testing.T) {
 		RequestId: reqId,
 		State:     proto.STATE_RUNNING,
 	}
-	// Create a mock request manager that will return a job chain.
-	jcm := &mock.JCManager{
+	// Create a mock jobchain store that will return a job chain.
+	jcs := &mock.JCStore{
 		GetFunc: func(r string) (proto.JobChain, error) {
 			return jc, nil
 		},
 	}
-	setup(&mock.RequestManager{}, &mock.JLManager{}, jcm)
+	setup(&mock.RequestManager{}, &mock.JLStore{}, jcs)
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -343,13 +343,13 @@ func TestGetJLHandlerSuccess(t *testing.T) {
 		RequestId: reqId,
 		State:     proto.STATE_COMPLETE,
 	}
-	// Create a mock request manager that will return a jl.
-	jlm := &mock.JLManager{
+	// Create a mock joblog store that will return a jl.
+	jls := &mock.JLStore{
 		GetFunc: func(r string, j string) (proto.JobLog, error) {
 			return jl, nil
 		},
 	}
-	setup(&mock.RequestManager{}, jlm, &mock.JCManager{})
+	setup(&mock.RequestManager{}, jls, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -378,15 +378,24 @@ func TestCreateJLHandlerSuccess(t *testing.T) {
 		RequestId: reqId,
 		State:     proto.STATE_COMPLETE,
 	}
-	// Create a mock request manager that will return a jl and record the jl it receives.
+	// Create a mock joblog store that will return a jl and record the jl it receives.
 	var rmjl proto.JobLog
-	jlm := &mock.JLManager{
+	jls := &mock.JLStore{
 		CreateFunc: func(r string, j proto.JobLog) (proto.JobLog, error) {
 			rmjl = j
 			return jl, nil
 		},
 	}
-	setup(&mock.RequestManager{}, jlm, &mock.JCManager{})
+	// Create a mock request manager that will record if it is called.
+	var rmCalled bool
+	rm := &mock.RequestManager{
+		IncrementFinishedJobsFunc: func(r string) error {
+			rmCalled = true
+			return nil
+		},
+	}
+
+	setup(rm, jls, &mock.JCStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -410,5 +419,54 @@ func TestCreateJLHandlerSuccess(t *testing.T) {
 	// Check the jl sent to the request manager is what we expect.
 	if diff := deep.Equal(rmjl, jl); diff != nil {
 		t.Error(diff)
+	}
+
+	// Check that the IncrementFinishedJobs method on the request manager was called.
+	if rmCalled != true {
+		t.Errorf("IncrementFinishedJob on the request manager was not called, expected it to be")
+	}
+}
+
+func TestCreateJLHandlerJobFailed(t *testing.T) {
+	reqId := "abcd1234"
+	payload := []byte(fmt.Sprintf("{\"requestId\":\"%s\",\"state\":%d}", reqId, proto.STATE_FAIL))
+	jl := proto.JobLog{
+		RequestId: reqId,
+		State:     proto.STATE_FAIL,
+	}
+	// Create a mock joblog store that will return a jl.
+	jls := &mock.JLStore{
+		CreateFunc: func(r string, j proto.JobLog) (proto.JobLog, error) {
+			return jl, nil
+		},
+	}
+	// Create a mock request manager that will record if it is called.
+	var rmCalled bool
+	rm := &mock.RequestManager{
+		IncrementFinishedJobsFunc: func(r string) error {
+			rmCalled = true
+			return nil
+		},
+	}
+
+	setup(rm, jls, &mock.JCStore{})
+	defer cleanup()
+
+	// Make the HTTP request.
+	var actualjl proto.JobLog
+	statusCode, _, err := testutil.MakeHTTPRequest("POST",
+		baseURL()+"requests/"+reqId+"/log", payload, &actualjl)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the status code is what we expect.
+	if statusCode != http.StatusCreated {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusCreated)
+	}
+
+	// Check that the IncrementFinishedJobs method on the request manager was NOT called.
+	if rmCalled != false {
+		t.Errorf("IncrementFinishedJob on the request manager was called, expected it not to be")
 	}
 }

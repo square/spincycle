@@ -1,6 +1,6 @@
 // Copyright 2017, Square, Inc.
 
-package jc_test
+package jobchain_test
 
 import (
 	"database/sql"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/request-manager/db"
-	"github.com/square/spincycle/request-manager/jc"
+	"github.com/square/spincycle/request-manager/jobchain"
 	"github.com/square/spincycle/request-manager/test"
 	testdb "github.com/square/spincycle/request-manager/test/db"
 	"github.com/square/spincycle/test/mock"
@@ -59,8 +59,8 @@ func TestGetNotFound(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "invalid"
-	m := jc.NewManager(dbc)
-	_, err := m.Get(reqId)
+	s := jobchain.NewStore(dbc)
+	_, err := s.Get(reqId)
 	if err != nil {
 		switch v := err.(type) {
 		case db.ErrNotFound:
@@ -78,8 +78,8 @@ func TestGetInvalid(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "cd724fd1209247eea1c41d8d41b22830"
-	m := jc.NewManager(dbc)
-	_, err := m.Get(reqId)
+	s := jobchain.NewStore(dbc)
+	_, err := s.Get(reqId)
 	if err == nil {
 		t.Errorf("expected an error unmarshaling the job chain, did not get one")
 	}
@@ -90,8 +90,8 @@ func TestGet(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "8bff5def4f3f4e429bec07723e905265"
-	m := jc.NewManager(dbc)
-	actual, err := m.Get(reqId)
+	s := jobchain.NewStore(dbc)
+	actual, err := s.Get(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
 	}

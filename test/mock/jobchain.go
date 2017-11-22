@@ -9,14 +9,14 @@ import (
 )
 
 var (
-	ErrJCManager = errors.New("forced error in jc manager")
+	ErrJCStore = errors.New("forced error in jobchain store")
 )
 
-type JCManager struct {
+type JCStore struct {
 	GetFunc func(string) (proto.JobChain, error)
 }
 
-func (j *JCManager) Get(reqId string) (proto.JobChain, error) {
+func (j *JCStore) Get(reqId string) (proto.JobChain, error) {
 	if j.GetFunc != nil {
 		return j.GetFunc(reqId)
 	}
