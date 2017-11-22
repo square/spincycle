@@ -1,7 +1,7 @@
 // Copyright 2017, Square, Inc.
 
-// Package jl provides and interface for managing Job Logs (JLs).
-package jl
+// Package joblog provides an interface for reading and writing job logs.
+package joblog
 
 import (
 	"database/sql"
@@ -10,8 +10,8 @@ import (
 	"github.com/square/spincycle/request-manager/db"
 )
 
-// A Manager is used to create and manage JLs.
-type Manager interface {
+// A Store reads and writes job logs to/from a persistent datastore.
+type Store interface {
 	// Create saves a JL to the db.
 	Create(requestId string, jl proto.JobLog) (proto.JobLog, error)
 
@@ -22,20 +22,21 @@ type Manager interface {
 	GetFull(requestId string) ([]proto.JobLog, error)
 }
 
-type manager struct {
+// store implements the Store interface
+type store struct {
 	dbc db.Connector
 }
 
-func NewManager(dbc db.Connector) Manager {
-	return &manager{
+func NewStore(dbc db.Connector) Store {
+	return &store{
 		dbc: dbc,
 	}
 }
 
-func (m *manager) Create(requestId string, jl proto.JobLog) (proto.JobLog, error) {
+func (s *store) Create(requestId string, jl proto.JobLog) (proto.JobLog, error) {
 	jl.RequestId = requestId
 
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	conn, err := s.dbc.Connect() // connection is from a pool. do not close
 	if err != nil {
 		return jl, err
 	}
@@ -59,38 +60,13 @@ func (m *manager) Create(requestId string, jl proto.JobLog) (proto.JobLog, error
 		return jl, err
 	}
 
-	// Update the finished job count on the request if the job completed successfully.
-	if jl.State == proto.STATE_COMPLETE {
-		q = "UPDATE requests SET finished_jobs = finished_jobs + 1 WHERE request_id = ?"
-		res, err := conn.Exec(q, &requestId)
-		if err != nil {
-			return jl, err
-		}
-
-		cnt, err := res.RowsAffected()
-		if err != nil {
-			return jl, err
-		}
-
-		switch cnt {
-		case 0:
-			return jl, db.ErrNotUpdated
-		case 1:
-			return jl, nil
-		default:
-			// This should be impossible since we specify the primary key
-			// in the WHERE clause of the update.
-			return jl, db.ErrMultipleUpdated
-		}
-	}
-
 	return jl, nil
 }
 
-func (m *manager) Get(requestId, jobId string) (proto.JobLog, error) {
+func (s *store) Get(requestId, jobId string) (proto.JobLog, error) {
 	var jl proto.JobLog
 
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	conn, err := s.dbc.Connect() // connection is from a pool. do not close
 	if err != nil {
 		return jl, err
 	}
@@ -135,8 +111,8 @@ func (m *manager) Get(requestId, jobId string) (proto.JobLog, error) {
 	return jl, nil
 }
 
-func (m *manager) GetFull(requestId string) ([]proto.JobLog, error) {
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+func (s *store) GetFull(requestId string) ([]proto.JobLog, error) {
+	conn, err := s.dbc.Connect() // connection is from a pool. do not close
 	if err != nil {
 		return nil, err
 	}

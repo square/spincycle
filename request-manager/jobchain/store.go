@@ -1,7 +1,7 @@
 // Copyright 2017, Square, Inc.
 
-// Package jc provides and interface for managing Job Chains (JCs).
-package jc
+// Package jobchain provides an interface for reading and writing job chains.
+package jobchain
 
 import (
 	"database/sql"
@@ -12,27 +12,28 @@ import (
 	"github.com/square/spincycle/request-manager/db"
 )
 
-// A Manager is used to manage JCs.
-type Manager interface {
+// A Store reads and writes job chains to/from a persistent datastore.
+type Store interface {
 	// Get retrieves the JC corresponding to the provided request id.
 	Get(requestId string) (proto.JobChain, error)
 }
 
-type manager struct {
+// store implements the Store interface.
+type store struct {
 	dbc db.Connector
 }
 
-func NewManager(dbc db.Connector) Manager {
-	return &manager{
+func NewStore(dbc db.Connector) Store {
+	return &store{
 		dbc: dbc,
 	}
 }
 
-func (m *manager) Get(requestId string) (proto.JobChain, error) {
+func (s *store) Get(requestId string) (proto.JobChain, error) {
 	var jc proto.JobChain
 	var rawJc []byte // raw job chains are stored as blobs in the db.
 
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	conn, err := s.dbc.Connect() // connection is from a pool. do not close
 	if err != nil {
 		return jc, err
 	}

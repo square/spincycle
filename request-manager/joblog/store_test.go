@@ -1,6 +1,6 @@
 // Copyright 2017, Square, Inc.
 
-package jl_test
+package joblog_test
 
 import (
 	"database/sql"
@@ -10,7 +10,7 @@ import (
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
-	"github.com/square/spincycle/request-manager/jl"
+	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/test"
 	testdb "github.com/square/spincycle/request-manager/test/db"
 	"github.com/square/spincycle/test/mock"
@@ -62,8 +62,8 @@ func TestGetNotFound(t *testing.T) {
 
 	reqId := "invalid"
 	jobId := "abcd"
-	m := jl.NewManager(dbc)
-	_, err := m.Get(reqId, jobId)
+	s := joblog.NewStore(dbc)
+	_, err := s.Get(reqId, jobId)
 	if err != nil {
 		switch v := err.(type) {
 		case db.ErrNotFound:
@@ -98,30 +98,16 @@ func TestCreateAndGet(t *testing.T) {
 	}
 	jls := []proto.JobLog{jl1, jl2}
 
-	m := jl.NewManager(dbc)
+	s := joblog.NewStore(dbc)
 	for _, j := range jls {
-		_, err := m.Create(reqId, j)
+		_, err := s.Create(reqId, j)
 		if err != nil {
 			t.Errorf("error = %s, expected nil", err)
 		}
 	}
 
-	// Run a direct query against the db and make sure the finished_jobs field
-	// on the request got updated. It should only have incremented by 1 since
-	// only one of the JLs had stats COMPLETE.
-	conn, err := dbc.Connect()
-	if err != nil {
-		t.Errorf("error = %s, expected nil", err)
-	}
-	var count int
-	err = conn.QueryRow("SELECT finished_jobs FROM requests WHERE request_id = ?", reqId).Scan(&count)
-
-	if count != 8 {
-		t.Errorf("finished jobs = %d, expected 8", count)
-	}
-
 	// Get the JL back.
-	actualJl, err := m.Get(reqId, jobId2)
+	actualJl, err := s.Get(reqId, jobId2)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
 	}
@@ -136,21 +122,21 @@ func TestGetFull(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "fa0d862f16ca4f14a0613e2c26562de6"
-	m := jl.NewManager(dbc)
-	a, err := m.GetFull(reqId)
+	s := joblog.NewStore(dbc)
+	a, err := s.GetFull(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
 	}
 
 	e := testdb.SavedJLs[reqId]
 
-	// Convert actual and expected from []proto.JobLog to proto.JobLogs so
+	// Convert actual and expected from []proto.JobLog to proto.JobLogById so
 	// that we can sort them.
-	var actual proto.JobLogs
+	var actual proto.JobLogById
 	for _, j := range a {
 		actual = append(actual, j)
 	}
-	var expected proto.JobLogs
+	var expected proto.JobLogById
 	for _, j := range e {
 		expected = append(expected, j)
 	}

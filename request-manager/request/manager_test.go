@@ -472,3 +472,26 @@ func TestStatusRunning(t *testing.T) {
 		t.Error(diff)
 	}
 }
+
+func TestIncrementFinishedJobs(t *testing.T) {
+	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
+	defer teardown(t, dbName)
+
+	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running
+	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	err := m.IncrementFinishedJobs(reqId)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	// Get the request from the db and make sure its FinishedJobs counter was incremented.
+	req, err := m.Get(reqId)
+	if err != nil {
+		t.Error(err)
+	}
+
+	expectedCount := testdb.SavedRequests[reqId].FinishedJobs + 1
+	if req.FinishedJobs != expectedCount {
+		t.Errorf("request FinishedJobs = %d, expected %d", req.FinishedJobs, expectedCount)
+	}
+}
