@@ -107,6 +107,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 			Type:      node.Datum.Type(),
 			Id:        node.Datum.Name(),
 			Bytes:     bytes,
+			Args:      node.Args,
 			Retry:     node.Retry,
 			RetryWait: node.RetryWait,
 		}
