@@ -9,12 +9,18 @@ import (
 	"io/ioutil"
 	"strings"
 
+	"github.com/rs/xid"
 	"github.com/satori/go.uuid"
 )
 
 // UUID generates a UUID without any "-" in it.
 func UUID() string {
 	return strings.Replace(uuid.NewV4().String(), "-", "", -1)
+}
+
+// XID generates a globally unique, 12-byte xid.
+func XID() xid.ID {
+	return xid.New()
 }
 
 // NewTLSConfig takes a cert, key, and ca file and creates a *tls.Config.

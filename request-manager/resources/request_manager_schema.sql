@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS `requests` (
-  `request_id`     BINARY(32) NOT NULL,
+  `request_id`     BINARY(12) NOT NULL,
   `type`           VARBINARY(75) NOT NULL,
   `state`          TINYINT UNSIGNED NOT NULL DEFAULT 0,
   `user`           VARCHAR(100) NULL DEFAULT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS `requests` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `raw_requests` (
-  `request_id` BINARY(32) NOT NULL,
+  `request_id` BINARY(12) NOT NULL,
   `request`    BLOB NOT NULL,
   `job_chain`  BLOB NOT NULL,
 
@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS `raw_requests` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `job_log` (
-  `request_id`  BINARY(32) NOT NULL,
-  `job_id`      VARBINARY(100) NOT NULL,
+  `request_id`  BINARY(12) NOT NULL,
+  `job_id`      BINARY(4) NOT NULL,
   `try`         SMALLINT NOT NULL DEFAULT 0,
   `type`        VARBINARY(75) NOT NULL,
   `state`       TINYINT UNSIGNED NOT NULL DEFAULT 0,

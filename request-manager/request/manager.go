@@ -52,15 +52,15 @@ type Manager interface {
 
 // manager implements the Manager interface.
 type manager struct {
-	gr  *grapher.Grapher
+	grf grapher.GrapherFactory
 	dbc db.Connector
 	jrc jr.Client
 	*sync.Mutex
 }
 
-func NewManager(gr *grapher.Grapher, dbc db.Connector, jrClient jr.Client) Manager {
+func NewManager(grf grapher.GrapherFactory, dbc db.Connector, jrClient jr.Client) Manager {
 	return &manager{
-		gr:    gr,
+		grf:   grf,
 		dbc:   dbc,
 		jrc:   jrClient,
 		Mutex: &sync.Mutex{},
@@ -73,9 +73,10 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 		return req, ErrInvalidParams
 	}
 
-	reqUuid := util.UUID()
+	reqIdBytes := util.XID()
+	reqId := reqIdBytes.String()
 	req = proto.Request{
-		Id:        reqUuid,
+		Id:        reqId,
 		Type:      reqParams.Type,
 		CreatedAt: time.Now(),
 		State:     proto.STATE_PENDING,
@@ -89,7 +90,8 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 	}
 
 	// Resolve the request into a graph, and convert to a proto.JobChain.
-	g, err := m.gr.CreateGraph(reqParams.Type, args)
+	gr := m.grf.Make()
+	g, err := gr.CreateGraph(reqParams.Type, args)
 	if err != nil {
 		return req, err
 	}
@@ -106,14 +108,16 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 		job := proto.Job{
 			Type:      node.Datum.Type(),
 			Id:        node.Datum.Name(),
+			Name:      node.Name,
 			Bytes:     bytes,
+			Args:      node.Args,
 			Retry:     node.Retry,
 			RetryWait: node.RetryWait,
 		}
 		jc.Jobs[name] = job
 	}
 	jc.State = proto.STATE_PENDING
-	jc.RequestId = reqUuid
+	jc.RequestId = reqId
 	req.JobChain = jc
 	req.TotalJobs = len(jc.Jobs)
 
@@ -142,7 +146,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 
 	q := "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
 	_, err = txn.Exec(q,
-		req.Id,
+		reqIdBytes,
 		req.Type,
 		req.State,
 		req.User,
@@ -155,7 +159,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 
 	q = "INSERT INTO raw_requests (request_id, request, job_chain) VALUES (?, ?, ?)"
 	if _, err = txn.Exec(q,
-		req.Id,
+		reqIdBytes,
 		rawParams,
 		rawJc); err != nil {
 		return req, err
@@ -372,7 +376,8 @@ func (m *manager) Specs() []proto.RequestSpec {
 		return requestList
 	}
 
-	req := m.gr.Sequences()
+	gr := m.grf.Make()
+	req := gr.Sequences()
 	sortedReqNames := make([]string, 0, len(req))
 	for name := range req {
 		sortedReqNames = append(sortedReqNames, name)

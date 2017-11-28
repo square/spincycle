@@ -3,4 +3,4 @@
 */
 
 -- a failed job chain
-INSERT INTO raw_requests (request_id, request, job_chain) VALUES ("8bff5def4f3f4e429bec07723e905265", '{"some":"param"}', '{"requestId":"8bff5def4f3f4e429bec07723e905265","jobs":{"vr34":{"id":"vr34","type":"noop","bytes":null,"state":4,"args":null,"data":null,"retry":0,"retryWait":0}},"adjacencyList":null,"state":4}');
+INSERT INTO raw_requests (request_id, request, job_chain) VALUES ("8bff5def4f3f", '{"some":"param"}', '{"requestId":"8bff5def4f3f","jobs":{"vr34":{"id":"vr34","type":"noop","bytes":null,"state":4,"args":null,"data":null,"retry":0,"retryWait":0}},"adjacencyList":null,"state":4}');

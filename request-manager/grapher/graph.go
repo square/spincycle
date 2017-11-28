@@ -12,8 +12,8 @@ type Graph struct {
 	Name     string              // Name of the Graph
 	First    *Node               // The source node of the graph
 	Last     *Node               // The sink node of the graph
-	Vertices map[string]*Node    // All vertices in the graph (node name -> node)
-	Edges    map[string][]string // All edges (source node name -> sink node name)
+	Vertices map[string]*Node    // All vertices in the graph (node id -> node)
+	Edges    map[string][]string // All edges (source node id -> sink node id)
 }
 
 // Node represents a single vertex within a Graph.
@@ -24,8 +24,9 @@ type Graph struct {
 // from Node, and Prev defines all the in edges to Node.
 type Node struct {
 	Datum     Payload                // Data stored at this Node
-	Next      map[string]*Node       // out edges ( node name -> Node )
-	Prev      map[string]*Node       // in edges ( node name -> Node )
+	Next      map[string]*Node       // out edges ( node id -> Node )
+	Prev      map[string]*Node       // in edges ( node id -> Node )
+	Name      string                 // the name of the node
 	Args      map[string]interface{} // the args the node was created with
 	Retry     uint                   // the number of times to retry a node
 	RetryWait uint                   // the time, in seconds, to sleep between retries
@@ -327,7 +328,7 @@ func findNodeAfterDFS(name string, n *Node) *Node {
 func hasCyclesDFS(seen map[string]*Node, start *Node) bool {
 	for _, next := range start.Next {
 
-		// If the next node has already  been seen, return true
+		// If the next node has already been seen, return true
 		if _, ok := seen[next.Datum.Name()]; ok {
 			return true
 		}
