@@ -17,6 +17,7 @@ import (
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
+	"github.com/square/spincycle/request-manager/id"
 	"github.com/square/spincycle/request-manager/jobchain"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
@@ -44,7 +45,7 @@ func main() {
 	}
 
 	// //////////////////////////////////////////////////////////////////////
-	// Request Resolver
+	// Grapher Factory
 	// //////////////////////////////////////////////////////////////////////
 	allGrapherCfgs := grapher.Config{
 		Sequences: map[string]*grapher.SequenceSpec{},
@@ -64,7 +65,8 @@ func main() {
 			allGrapherCfgs.NoopNode = grapherCfg.NoopNode
 		}
 	}
-	rr := grapher.NewGrapher(external.JobFactory, &allGrapherCfgs)
+	idf := id.NewGeneratorFactory(4, 100) // generate 4-character ids for jobs
+	grf := grapher.NewGrapherFactory(external.JobFactory, &allGrapherCfgs, idf)
 
 	// //////////////////////////////////////////////////////////////////////
 	// Job Runner Client
@@ -99,7 +101,7 @@ func main() {
 	// //////////////////////////////////////////////////////////////////////
 	// Request Manager, Job Log Store, and Job Chain Store
 	// //////////////////////////////////////////////////////////////////////
-	rm := request.NewManager(rr, dbc, jrClient)
+	rm := request.NewManager(grf, dbc, jrClient)
 	jls := joblog.NewStore(dbc)
 	jcs := jobchain.NewStore(dbc)
 

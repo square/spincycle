@@ -12,6 +12,7 @@ import (
 // must be unique within a job chain.
 type Job struct {
 	Id        string                 `json:"id"`        // unique id
+	Name      string                 `json:"string"`    // name of the job
 	Type      string                 `json:"type"`      // user-specific job type
 	Bytes     []byte                 `json:"bytes"`     // return value of Job.Serialize method
 	State     byte                   `json:"state"`     // STATE_* const

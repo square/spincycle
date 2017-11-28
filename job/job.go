@@ -64,7 +64,7 @@ type Job interface {
 	Status() string
 
 	// Name returns the name of the job.
-	Name() string
+	Name() string // @todo: change this to Id()
 
 	// Type returns the type of the job.
 	Type() string
