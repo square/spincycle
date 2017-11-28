@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/request-manager/id"
 	"github.com/square/spincycle/test/mock"
 )
 
@@ -72,7 +73,7 @@ func testGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm.yaml"
 	cfg, _ := ReadConfig(sequencesFile)
-	return NewGrapher(tf, cfg)
+	return NewGrapher(tf, cfg, id.NewGenerator(4, 100))
 }
 
 func TestNodeArgs(t *testing.T) {
@@ -88,16 +89,16 @@ func TestNodeArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for name, node := range g.Vertices {
+	for _, node := range g.Vertices {
 		// Verify that noop nodes do not have Args.
-		if strings.HasPrefix(name, "sequence_") || strings.HasPrefix(name, "repeat_") {
+		if strings.HasPrefix(node.Name, "sequence_") || strings.HasPrefix(node.Name, "repeat_") {
 			if len(node.Args) != 0 {
-				t.Errorf("node %s args = %#v, expected an empty map", name, node.Args)
+				t.Errorf("node %s args = %#v, expected an empty map", node.Name, node.Args)
 			}
 		}
 
 		// Check the Args on some nodes.
-		if strings.HasPrefix(name, "get-instances@") {
+		if node.Name == "get-instances" {
 			expectedArgs := map[string]interface{}{
 				"cluster": "test-cluster-001",
 			}
@@ -105,7 +106,7 @@ func TestNodeArgs(t *testing.T) {
 				t.Error(diff)
 			}
 		}
-		if strings.HasPrefix(name, "prep-1@") {
+		if node.Name == "prep-1" {
 			expectedArgs := map[string]interface{}{
 				"cluster":   "test-cluster-001",
 				"env":       "testing",
@@ -133,26 +134,26 @@ func TestNodeRetry(t *testing.T) {
 
 	// Verify that the retries are set correctly on all nodes. Only the "get-instances" node should have retries.
 	found := false
-	for name, node := range g.Vertices {
-		if strings.HasPrefix(name, "get-instances@") {
+	for _, node := range g.Vertices {
+		if node.Name == "get-instances" {
 			found = true
 			if node.Retry != 3 {
-				t.Errorf("%s node retries = %d, expected %d", name, node.Retry, 3)
+				t.Errorf("%s node retries = %d, expected %d", node.Name, node.Retry, 3)
 			}
 			if node.RetryWait != 10 {
-				t.Errorf("%s node retry delay = %d, expected %d", name, node.RetryWait, 10)
+				t.Errorf("%s node retry delay = %d, expected %d", node.Name, node.RetryWait, 10)
 			}
 		} else {
 			if node.Retry != 0 {
-				t.Errorf("%s node retries = %d, expected %d", name, node.Retry, 0)
+				t.Errorf("%s node retries = %d, expected %d", node.Name, node.Retry, 0)
 			}
 			if node.RetryWait != 0 {
-				t.Errorf("%s node retry delay = %d, expected %d", name, node.RetryWait, 0)
+				t.Errorf("%s node retry delay = %d, expected %d", node.Name, node.RetryWait, 0)
 			}
 		}
 	}
 	if !found {
-		t.Error("couldn't find vertix with node name 'get-instances@*'")
+		t.Error("couldn't find vertix with node name 'get-instances'")
 	}
 }
 
@@ -172,72 +173,72 @@ func TestCreateDecomGraph(t *testing.T) {
 	// validate the adjacency list
 	startNode := g.First.Datum.Name()
 
-	verifyStep(g.Edges[startNode], 1, "get-instances@", t)
+	verifyStep(g, g.Edges[startNode], 1, "get-instances", t)
 
 	currentStep := getNextStep(g.Edges, g.Edges[startNode])
-	verifyStep(currentStep, 1, "repeat_pre-flight-checks_start@", t)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "sequence_pre-flight-checks_start@", t)
+	verifyStep(g, currentStep, 4, "sequence_pre-flight-checks_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "check-ok@", t)
+	verifyStep(g, currentStep, 4, "check-ok", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "check-ok-again@", t)
+	verifyStep(g, currentStep, 4, "check-ok-again", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "sequence_pre-flight-checks_end@", t)
+	verifyStep(g, currentStep, 4, "sequence_pre-flight-checks_end", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 1, "repeat_pre-flight-checks_end@", t)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 1, "prep-1@", t)
+	verifyStep(g, currentStep, 1, "prep-1", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 1, "repeat_decommission-instances_start@", t)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "sequence_decommission-instances_start@", t)
+	verifyStep(g, currentStep, 4, "sequence_decommission-instances_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "decom-1@", t)
+	verifyStep(g, currentStep, 4, "decom-1", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "decom-2@", t)
+	verifyStep(g, currentStep, 4, "decom-2", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "decom-3@", t)
+	verifyStep(g, currentStep, 4, "decom-3", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 4, "sequence_decommission-instances_end@", t)
+	verifyStep(g, currentStep, 4, "sequence_decommission-instances_end", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 1, "repeat_decommission-instances_end@", t)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 1, "first-cleanup-job@", t)
+	verifyStep(g, currentStep, 1, "first-cleanup-job", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 1, "second-cleanup-job@", t)
+	verifyStep(g, currentStep, 1, "second-cleanup-job", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
 	if len(currentStep) != 2 {
-		t.Fatalf("Expected %s to have 2 out edges", "second-cleanup-job@")
+		t.Fatalf("Expected %s to have 2 out edges", "second-cleanup-job")
 	}
-	if !strings.HasPrefix(currentStep[0], "third-cleanup-job@") &&
-		!strings.HasPrefix(currentStep[1], "third-cleanup-job@") {
+	if g.Vertices[currentStep[0]].Name != "third-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name != "third-cleanup-job" {
 		t.Fatalf("third-cleanup-job@ missing")
 	}
 
-	if !strings.HasPrefix(currentStep[0], "fourth-cleanup-job@") &&
-		!strings.HasPrefix(currentStep[1], "fourth-cleanup-job@") {
+	if g.Vertices[currentStep[0]].Name != "fourth-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name != "fourth-cleanup-job" {
 		t.Fatalf("fourth-cleanup-job@ missing")
 	}
 
 	currentStep = getNextStep(g.Edges, currentStep)
-	verifyStep(currentStep, 1, "sequence_decommission-cluster_end@", t)
+	verifyStep(g, currentStep, 1, "sequence_decommission-cluster_end", t)
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -259,14 +260,13 @@ func getNextStep(edges map[string][]string, nodes []string) []string {
 	return nextStep
 }
 
-func verifyStep(nodes []string, expectedCount int, expectedPrefix string, t *testing.T) {
-	fmt.Println(nodes)
+func verifyStep(g *Graph, nodes []string, expectedCount int, expectedName string, t *testing.T) {
 	if len(nodes) != expectedCount {
 		t.Fatalf("%v: expected %d out edges, but got %d", nodes, expectedCount, len(nodes))
 	}
 	for _, n := range nodes {
-		if !strings.HasPrefix(n, expectedPrefix) {
-			t.Fatalf(" %v: unexpected node: %v, expecting: %s*", nodes, n, expectedPrefix)
+		if g.Vertices[n].Name != expectedName {
+			t.Fatalf("unexpected node: %v, expecting: %s*", g.Vertices[n].Name, expectedName)
 		}
 	}
 }
@@ -827,7 +827,7 @@ func TestOptArgs001(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := NewGrapher(tf, s)
+	g := NewGrapher(tf, s, id.NewGenerator(4, 100))
 
 	args := map[string]interface{}{
 		"cmd":  "sleep",
@@ -837,16 +837,22 @@ func TestOptArgs001(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j, ok := got.Vertices["job1name@3"]
-	if !ok {
+	// Find the node we want
+	var j *Node
+	for _, node := range got.Vertices {
+		if node.Name == "job1name" {
+			j = node
+		}
+	}
+	if j == nil {
 		t.Logf("%#v", got.Vertices)
-		t.Fatal("graph.Vertices[job1name@3] not set")
+		t.Fatal("graph.Vertices[job1name] not set")
 	}
 	if diff := deep.Equal(j.Args, args); diff != nil {
 		t.Logf("%#v\n", j.Args)
 		t.Error(diff)
 	}
-	job := tf.Created["job1name@3"]
+	job := tf.Created[j.Datum.Name()]
 	if diff := deep.Equal(job.CreatedWithArgs, args); diff != nil {
 		t.Logf("%#v\n", job)
 		t.Errorf("test job not created with args arg")
@@ -862,22 +868,27 @@ func TestOptArgs001(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g = NewGrapher(tf, s)
+	g = NewGrapher(tf, s, id.NewGenerator(4, 100))
 
 	got, err = g.CreateGraph("req", args)
 	if err != nil {
 		t.Fatal(err)
 	}
-	j, ok = got.Vertices["job1name@3"]
-	if !ok {
+	// Find the node we want
+	for _, node := range got.Vertices {
+		if node.Name == "job1name" {
+			j = node
+		}
+	}
+	if j == nil {
 		t.Logf("%#v", got.Vertices)
-		t.Fatal("graph.Vertices[job1name@3] not set")
+		t.Fatal("graph.Vertices[job1name] not set")
 	}
 	if diff := deep.Equal(j.Args, args); diff != nil {
 		t.Logf("%#v\n", j.Args)
 		t.Error(diff)
 	}
-	job = tf.Created["job1name@3"]
+	job = tf.Created[j.Datum.Name()]
 	if _, ok := job.CreatedWithArgs["args"]; !ok {
 		t.Error("jobArgs[args] does not exist, expected it to be set")
 	}
@@ -904,7 +915,7 @@ func TestBadEach001(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := NewGrapher(tf, s)
+	g := NewGrapher(tf, s, id.NewGenerator(4, 100))
 
 	args := map[string]interface{}{
 		"host": "foo",

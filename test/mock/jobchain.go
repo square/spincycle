@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inr.
+// Copyright 2017, Square, Inc.
 
 package mock
 

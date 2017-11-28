@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-	"sync"
 
 	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/request-manager/id"
 )
 
 // The Grapher struct contains the sequence specs required to construct graphs.
@@ -21,21 +21,49 @@ type Grapher struct {
 	JobFactory   job.Factory              // factory to create nodes' jobs.
 	NoopNode     *NodeSpec                // static no-op job that Grapher can use to signify start/end of sequences.
 
-	nextNodeId uint64     // next unique job id
-	m          sync.Mutex // mutex to lock nextNodeId
+	idgen id.Generator // Generates UIDs for the nodes created by the Grapher.
 }
 
-// NewGrapher returns a new Grapher interface. The caller of NewGrapher mut provide
+// NewGrapher returns a new Grapher struct. The caller of NewGrapher mut provide
 // a Job Factory for Grapher to create the jobs that will be stored at each node.
 // The caller must also specify a no-op job and args for Grapher to create no-op nodes.
-func NewGrapher(nf job.Factory, cfg *Config) *Grapher {
+// An id generator must also be provided (used for generating ids for nodes).
+//
+// A new Grapher should be made for every request.
+func NewGrapher(nf job.Factory, cfg *Config, idgen id.Generator) *Grapher {
 	o := &Grapher{
-		nextNodeId:   1,
 		JobFactory:   nf,
 		AllSequences: cfg.Sequences,
 		NoopNode:     cfg.NoopNode,
+		idgen:        idgen,
 	}
 	return o
+}
+
+// A GrapherFactory makes Graphers.
+type GrapherFactory interface {
+	// Make makes a Grapher. A new grapher should be made for every request.
+	Make() *Grapher
+}
+
+// grapherFactory implements the GrapherFactory interface.
+type grapherFactory struct {
+	jf     job.Factory
+	config *Config
+	idf    id.GeneratorFactory
+}
+
+// NewGrapherFactory creates a GrapherFactory.
+func NewGrapherFactory(jf job.Factory, cfg *Config, idf id.GeneratorFactory) GrapherFactory {
+	return &grapherFactory{
+		jf:     jf,
+		config: cfg,
+		idf:    idf,
+	}
+}
+
+func (gf *grapherFactory) Make() *Grapher {
+	return NewGrapher(gf.jf, gf.config, gf.idf.Make()) // create a Grapher with a new id Generator
 }
 
 // CreateGraph will create a graph. The user must provide a Sequence Name, to indicate
@@ -55,15 +83,6 @@ func (o *Grapher) CreateGraph(sequenceName string, args map[string]interface{}) 
 
 func (g *Grapher) Sequences() map[string]*SequenceSpec {
 	return g.AllSequences
-}
-
-// returns a unique id to be used for tagging nodes in graph creation
-func (o *Grapher) getNewNodeId() uint64 {
-	o.m.Lock()
-	defer o.m.Unlock()
-	myId := o.nextNodeId
-	o.nextNodeId += 1
-	return myId
 }
 
 // buildSequence will take in a sequence spec and return a Graph that represents the sequence
@@ -448,8 +467,11 @@ func (o *Grapher) newEmptyGraph(name string, nodeArgs map[string]interface{}) (*
 // NewStartNode creates an empty "start" node. There is no job defined for this node, but it can serve
 // as a marker for a sequence/request.
 func (o *Grapher) newNoopNode(name string, nodeArgs map[string]interface{}) (*Node, error) {
-	name = fmt.Sprintf("%s@%d", name, o.getNewNodeId())
-	rj, err := o.JobFactory.Make(o.NoopNode.NodeType, name)
+	id, err := o.idgen.UID()
+	if err != nil {
+		return nil, fmt.Errorf("Error making id for '%s %s' job: %s", o.NoopNode.Name, name, err)
+	}
+	rj, err := o.JobFactory.Make(o.NoopNode.NodeType, id)
 	if err != nil {
 		return nil, fmt.Errorf("Error making '%s %s' job: %s", o.NoopNode.Name, name, err)
 	}
@@ -462,6 +484,7 @@ func (o *Grapher) newNoopNode(name string, nodeArgs map[string]interface{}) (*No
 		Datum: rj,
 		Next:  map[string]*Node{},
 		Prev:  map[string]*Node{},
+		Name:  name,
 	}, nil
 }
 
@@ -476,23 +499,27 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 	}
 
 	// Make the name of this node unique within the request by assigning it an id.
-	name := fmt.Sprintf("%s@%d", j.Name, o.getNewNodeId())
+	id, err := o.idgen.UID()
+	if err != nil {
+		return nil, fmt.Errorf("Error making id for '%s %s' job: %s", j.NodeType, j.Name, err)
+	}
 
 	// Create the job
-	rj, err := o.JobFactory.Make(j.NodeType, name)
+	rj, err := o.JobFactory.Make(j.NodeType, id)
 	if err != nil {
-		return nil, fmt.Errorf("Error making '%s %s' job: %s", j.NodeType, name, err)
+		return nil, fmt.Errorf("Error making '%s %s' job: %s", j.NodeType, j.Name, err)
 	}
 
 	err = rj.Create(nodeArgs)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating '%s %s' job: %s", j.NodeType, name, err)
+		return nil, fmt.Errorf("Error creating '%s %s' job: %s", j.NodeType, j.Name, err)
 	}
 
 	return &Node{
 		Datum:     rj,
 		Next:      map[string]*Node{},
 		Prev:      map[string]*Node{},
+		Name:      j.Name,
 		Args:      originalArgs, // Args is the nodeArgs map that this node was created with
 		Retry:     j.Retry,
 		RetryWait: j.RetryWait,
@@ -509,4 +536,18 @@ func containsAll(m map[*NodeSpec]bool, ss []string, nodes map[string]*NodeSpec) 
 		}
 	}
 	return true
+}
+
+// ------------------------------------------------------------------------- //
+
+// Mock grapher factory for testing.
+type MockGrapherFactory struct {
+	MakeFunc func() *Grapher
+}
+
+func (gf *MockGrapherFactory) Make() *Grapher {
+	if gf.MakeFunc != nil {
+		return gf.MakeFunc()
+	}
+	return nil
 }

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS `raw_requests` (
 
 CREATE TABLE IF NOT EXISTS `job_log` (
   `request_id`  BINARY(32) NOT NULL,
-  `job_id`      VARBINARY(100) NOT NULL,
+  `job_id`      BINARY(4) NOT NULL,
   `try`         SMALLINT NOT NULL DEFAULT 0,
   `type`        VARBINARY(75) NOT NULL,
   `state`       TINYINT UNSIGNED NOT NULL DEFAULT 0,

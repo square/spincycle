@@ -12,6 +12,7 @@ import (
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
+	"github.com/square/spincycle/request-manager/id"
 	"github.com/square/spincycle/request-manager/request"
 	rmtest "github.com/square/spincycle/request-manager/test"
 	testdb "github.com/square/spincycle/request-manager/test/db"
@@ -21,7 +22,7 @@ import (
 
 var dbm testdb.Manager
 var dbc db.Connector
-var gr *grapher.Grapher
+var grf *grapher.MockGrapherFactory
 var dbSuffix string
 
 func setup(t *testing.T, dataFile string) string {
@@ -47,8 +48,8 @@ func setup(t *testing.T, dataFile string) string {
 		},
 	}
 
-	// Create a mock grapher.
-	if gr == nil {
+	// Create a mock grapher factory.
+	if grf == nil {
 		spec, err := grapher.ReadConfig(rmtest.SpecPath + "/a-b-c.yaml")
 		if err != nil {
 			t.Fatal(err)
@@ -66,7 +67,12 @@ func setup(t *testing.T, dataFile string) string {
 		testJobFactory.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
 			"aArg": "aValue",
 		}
-		gr = grapher.NewGrapher(testJobFactory, spec)
+		gr := grapher.NewGrapher(testJobFactory, spec, id.NewGenerator(4, 100))
+		grf = &grapher.MockGrapherFactory{
+			MakeFunc: func() *grapher.Grapher {
+				return gr
+			},
+		}
 	}
 
 	return dbName
@@ -84,7 +90,7 @@ func teardown(t *testing.T, dbName string) {
 // //////////////////////////////////////////////////////////////////////////
 
 func TestCreateMissingType(t *testing.T) {
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 
 	_, err := m.Create(proto.CreateRequestParams{})
 	if err != request.ErrInvalidParams {
@@ -96,7 +102,7 @@ func TestCreate(t *testing.T) {
 	dbName := setup(t, "")
 	defer teardown(t, dbName)
 
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 
 	// gr uses spec a-b-c.yaml which has reqest "three-nodes"
 	reqParams := proto.CreateRequestParams{
@@ -201,7 +207,7 @@ func TestGetNotFound(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "invalid"
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	_, err := m.Get(reqId)
 	if err != nil {
 		switch v := err.(type) {
@@ -220,7 +226,7 @@ func TestGet(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "0874a524aa1e4561b95218a43c5c54ea"
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	actual, err := m.Get(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -237,7 +243,7 @@ func TestStartNotPending(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	err := m.Start(reqId)
 	if err != db.ErrNotUpdated {
 		t.Errorf("error = %s, expected %s", err, db.ErrNotUpdated)
@@ -258,7 +264,7 @@ func TestStart(t *testing.T) {
 	}
 
 	reqId := "0874a524aa1e4561b95218a43c5c54ea" // request is pending
-	m := request.NewManager(gr, dbc, mockJRc)
+	m := request.NewManager(grf, dbc, mockJRc)
 	err := m.Start(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -284,7 +290,7 @@ func TestStopNotRunning(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "0874a524aa1e4561b95218a43c5c54ea" // request is pending
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	err := m.Stop(reqId)
 	if err != nil {
 		switch v := err.(type) {
@@ -313,7 +319,7 @@ func TestStopComplete(t *testing.T) {
 	}
 
 	reqId := "93ec156e204e4450b031259249b6992d" // request is running
-	m := request.NewManager(gr, dbc, mockJRc)
+	m := request.NewManager(grf, dbc, mockJRc)
 	err := m.Stop(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -338,7 +344,7 @@ func TestStop(t *testing.T) {
 	}
 
 	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running
-	m := request.NewManager(gr, dbc, mockJRc)
+	m := request.NewManager(grf, dbc, mockJRc)
 	err := m.Stop(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -357,7 +363,7 @@ func TestFinishNotRunning(t *testing.T) {
 	params := proto.FinishRequestParams{
 		State: proto.STATE_COMPLETE,
 	}
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	err := m.Finish(reqId, params)
 	if err != db.ErrNotUpdated {
 		t.Errorf("error = %s, expected %s", err, db.ErrNotUpdated)
@@ -372,7 +378,7 @@ func TestFinish(t *testing.T) {
 	params := proto.FinishRequestParams{
 		State: proto.STATE_COMPLETE,
 	}
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	err := m.Finish(reqId, params)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -420,7 +426,7 @@ func TestStatusRunning(t *testing.T) {
 		},
 	}
 
-	m := request.NewManager(gr, dbc, mockJRc)
+	m := request.NewManager(grf, dbc, mockJRc)
 	actual, err := m.Status(reqId)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
@@ -478,7 +484,7 @@ func TestIncrementFinishedJobs(t *testing.T) {
 	defer teardown(t, dbName)
 
 	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running
-	m := request.NewManager(gr, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	err := m.IncrementFinishedJobs(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
