@@ -73,9 +73,10 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 		return req, ErrInvalidParams
 	}
 
-	reqUuid := util.UUID()
+	reqIdBytes := util.XID()
+	reqId := reqIdBytes.String()
 	req = proto.Request{
-		Id:        reqUuid,
+		Id:        reqId,
 		Type:      reqParams.Type,
 		CreatedAt: time.Now(),
 		State:     proto.STATE_PENDING,
@@ -116,7 +117,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 		jc.Jobs[name] = job
 	}
 	jc.State = proto.STATE_PENDING
-	jc.RequestId = reqUuid
+	jc.RequestId = reqId
 	req.JobChain = jc
 	req.TotalJobs = len(jc.Jobs)
 
@@ -145,7 +146,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 
 	q := "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
 	_, err = txn.Exec(q,
-		req.Id,
+		reqIdBytes,
 		req.Type,
 		req.State,
 		req.User,
@@ -158,7 +159,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 
 	q = "INSERT INTO raw_requests (request_id, request, job_chain) VALUES (?, ?, ?)"
 	if _, err = txn.Exec(q,
-		req.Id,
+		reqIdBytes,
 		rawParams,
 		rawJc); err != nil {
 		return req, err

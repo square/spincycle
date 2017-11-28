@@ -77,7 +77,7 @@ func TestGetInvalid(t *testing.T) {
 	dbName := setup(t, test.DataPath+"/jc-bad.sql")
 	defer teardown(t, dbName)
 
-	reqId := "cd724fd1209247eea1c41d8d41b22830"
+	reqId := "cd724fd12092"
 	s := jobchain.NewStore(dbc)
 	_, err := s.Get(reqId)
 	if err == nil {
@@ -89,7 +89,7 @@ func TestGet(t *testing.T) {
 	dbName := setup(t, test.DataPath+"/jc-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "8bff5def4f3f4e429bec07723e905265"
+	reqId := "8bff5def4f3f"
 	s := jobchain.NewStore(dbc)
 	actual, err := s.Get(reqId)
 	if err != nil {

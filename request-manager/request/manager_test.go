@@ -225,7 +225,7 @@ func TestGet(t *testing.T) {
 	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "0874a524aa1e4561b95218a43c5c54ea"
+	reqId := "0874a524aa1e"
 	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	actual, err := m.Get(reqId)
 	if err != nil {
@@ -242,7 +242,7 @@ func TestStartNotPending(t *testing.T) {
 	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running
+	reqId := "454ae2f98a05" // request is running
 	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	err := m.Start(reqId)
 	if err != db.ErrNotUpdated {
@@ -263,7 +263,7 @@ func TestStart(t *testing.T) {
 		},
 	}
 
-	reqId := "0874a524aa1e4561b95218a43c5c54ea" // request is pending
+	reqId := "0874a524aa1e" // request is pending
 	m := request.NewManager(grf, dbc, mockJRc)
 	err := m.Start(reqId)
 	if err != nil {
@@ -289,7 +289,7 @@ func TestStopNotRunning(t *testing.T) {
 	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "0874a524aa1e4561b95218a43c5c54ea" // request is pending
+	reqId := "0874a524aa1e" // request is pending
 	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	err := m.Stop(reqId)
 	if err != nil {
@@ -318,7 +318,7 @@ func TestStopComplete(t *testing.T) {
 		},
 	}
 
-	reqId := "93ec156e204e4450b031259249b6992d" // request is running
+	reqId := "93ec156e204e" // request is running
 	m := request.NewManager(grf, dbc, mockJRc)
 	err := m.Stop(reqId)
 	if err != nil {
@@ -343,7 +343,7 @@ func TestStop(t *testing.T) {
 		},
 	}
 
-	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running
+	reqId := "454ae2f98a05" // request is running
 	m := request.NewManager(grf, dbc, mockJRc)
 	err := m.Stop(reqId)
 	if err != nil {
@@ -359,7 +359,7 @@ func TestFinishNotRunning(t *testing.T) {
 	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "0874a524aa1e4561b95218a43c5c54ea" // request is pending
+	reqId := "0874a524aa1e" // request is pending
 	params := proto.FinishRequestParams{
 		State: proto.STATE_COMPLETE,
 	}
@@ -374,7 +374,7 @@ func TestFinish(t *testing.T) {
 	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running
+	reqId := "454ae2f98a05" // request is running
 	params := proto.FinishRequestParams{
 		State: proto.STATE_COMPLETE,
 	}
@@ -399,7 +399,7 @@ func TestStatusRunning(t *testing.T) {
 	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running and has JLs
+	reqId := "454ae2f98a05" // request is running and has JLs
 
 	// Create a mock JR client that returns live status for some jobs.
 	mockJRc := &mock.JRClient{
@@ -483,7 +483,7 @@ func TestIncrementFinishedJobs(t *testing.T) {
 	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "454ae2f98a0549bcb693fa656d6f8eb5" // request is running
+	reqId := "454ae2f98a05" // request is running
 	m := request.NewManager(grf, dbc, &mock.JRClient{})
 	err := m.IncrementFinishedJobs(reqId)
 	if err != nil {

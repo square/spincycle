@@ -30,7 +30,7 @@ func init() {
 	// //////////////////////////////////////////////////////////////////////////
 	// Pending request
 	// //////////////////////////////////////////////////////////////////////////
-	reqId := "0874a524aa1e4561b95218a43c5c54ea"
+	reqId := "0874a524aa1e"
 	curTime, _ := time.Parse(time.RFC3339, "2017-09-13T00:00:00Z")
 	SavedRequests[reqId] = proto.Request{
 		Id:        reqId,
@@ -54,7 +54,7 @@ func init() {
 	// //////////////////////////////////////////////////////////////////////////
 	// Running request
 	// //////////////////////////////////////////////////////////////////////////
-	reqId = "454ae2f98a0549bcb693fa656d6f8eb5"
+	reqId = "454ae2f98a05"
 	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T01:00:00Z")
 
 	// Graph for this chain looks like this:
@@ -118,7 +118,7 @@ func init() {
 	// //////////////////////////////////////////////////////////////////////////
 	// Completed request
 	// //////////////////////////////////////////////////////////////////////////
-	reqId = "93ec156e204e4450b031259249b6992d"
+	reqId = "93ec156e204e"
 	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T02:00:00Z")
 	SavedRequests[reqId] = proto.Request{
 		Id:        reqId,
@@ -130,7 +130,7 @@ func init() {
 	// //////////////////////////////////////////////////////////////////////////
 	// Assortment of jls
 	// //////////////////////////////////////////////////////////////////////////
-	reqId = "fa0d862f16ca4f14a0613e2c26562de6"
+	reqId = "fa0d862f16ca"
 	SavedJLs[reqId] = []proto.JobLog{
 		proto.JobLog{
 			RequestId: reqId,
@@ -165,7 +165,7 @@ func init() {
 	// //////////////////////////////////////////////////////////////////////////
 	// Job chain
 	// //////////////////////////////////////////////////////////////////////////
-	reqId = "8bff5def4f3f4e429bec07723e905265"
+	reqId = "8bff5def4f3f"
 	SavedJCs[reqId] = proto.JobChain{
 		RequestId: reqId,
 		Jobs: map[string]proto.Job{
