@@ -89,7 +89,7 @@ func TestGet(t *testing.T) {
 	dbName := setup(t, test.DataPath+"/jc-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "8bff5def4f3f"
+	reqId := "8bff5def4f3fvh78skjy"
 	s := jobchain.NewStore(dbc)
 	actual, err := s.Get(reqId)
 	if err != nil {

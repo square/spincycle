@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS `raw_requests` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `job_log` (
-  `request_id`  BINARY(12) NOT NULL,
+  `request_id`  BINARY(20) NOT NULL,
   `job_id`      BINARY(4) NOT NULL,
   `try`         SMALLINT NOT NULL DEFAULT 0,
   `type`        VARBINARY(75) NOT NULL,

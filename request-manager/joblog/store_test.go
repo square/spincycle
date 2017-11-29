@@ -81,7 +81,7 @@ func TestCreateAndGet(t *testing.T) {
 	defer teardown(t, dbName)
 
 	// Insert two JLs.
-	reqId := "fa0d862f16ca"
+	reqId := "fa0d862f16casg200lkf"
 	jobId1 := "fh17"
 	jl1 := proto.JobLog{
 		RequestId: reqId,
@@ -121,7 +121,7 @@ func TestGetFull(t *testing.T) {
 	dbName := setup(t, test.DataPath+"/jl-default.sql")
 	defer teardown(t, dbName)
 
-	reqId := "fa0d862f16ca"
+	reqId := "fa0d862f16casg200lkf"
 	s := joblog.NewStore(dbc)
 	a, err := s.GetFull(reqId)
 	if err != nil {
