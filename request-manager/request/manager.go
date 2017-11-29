@@ -274,7 +274,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 		return reqStatus, err
 	}
 
-	q := "SELECT j1.job_id, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
+	q := "SELECT j1.job_id, j1.name, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
 		"j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try) WHERE j1.request_id = ? AND j2.try IS NULL"
 	rows, err := conn.Query(q, requestId)
 	if err != nil {
@@ -285,7 +285,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	var finishedS proto.JobStatuses
 	for rows.Next() {
 		var s proto.JobStatus
-		if err := rows.Scan(&s.JobId, &s.State); err != nil {
+		if err := rows.Scan(&s.JobId, &s.Name, &s.State); err != nil {
 			return reqStatus, err
 		}
 		s.RequestId = requestId
@@ -323,6 +323,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 		} else {
 			s := proto.JobStatus{
 				JobId: j.Id,
+				Name:  j.Name,
 				State: proto.STATE_PENDING,
 			}
 			allS = append(allS, s)

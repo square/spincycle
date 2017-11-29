@@ -41,11 +41,12 @@ func (s *store) Create(requestId string, jl proto.JobLog) (proto.JobLog, error) 
 		return jl, err
 	}
 
-	q := "INSERT INTO job_log (request_id, job_id, try, type, started_at, finished_at, state, `exit`, " +
-		"error, stdout, stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	q := "INSERT INTO job_log (request_id, job_id, name, try, type, started_at, finished_at, state, `exit`, " +
+		"error, stdout, stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	_, err = conn.Exec(q,
 		&jl.RequestId,
 		&jl.JobId,
+		&jl.Name,
 		&jl.Try,
 		&jl.Type,
 		&jl.StartedAt,
@@ -74,11 +75,12 @@ func (s *store) Get(requestId, jobId string) (proto.JobLog, error) {
 	var jErr, stdout, stderr sql.NullString // nullable columns
 	var exit sql.NullInt64
 
-	q := "SELECT request_id, job_id, type, state, started_at, finished_at, error, `exit`, stdout, stderr, try " +
+	q := "SELECT request_id, job_id, name, type, state, started_at, finished_at, error, `exit`, stdout, stderr, try " +
 		"FROM job_log WHERE request_id = ? AND job_id = ? ORDER BY try DESC LIMIT 1"
 	err = conn.QueryRow(q, requestId, jobId).Scan(
 		&jl.RequestId,
 		&jl.JobId,
+		&jl.Name,
 		&jl.Type,
 		&jl.State,
 		&jl.StartedAt,
@@ -120,7 +122,7 @@ func (s *store) GetFull(requestId string) ([]proto.JobLog, error) {
 	var jErr, stdout, stderr sql.NullString // nullable columns
 	var exit sql.NullInt64
 
-	q := "SELECT job_id, try, type, state, started_at, finished_at, error, `exit`, stdout, stderr " +
+	q := "SELECT job_id, name, try, type, state, started_at, finished_at, error, `exit`, stdout, stderr " +
 		"FROM job_log WHERE request_id = ?"
 	rows, err := conn.Query(q, requestId)
 	if err != nil {
@@ -136,6 +138,7 @@ func (s *store) GetFull(requestId string) ([]proto.JobLog, error) {
 		}
 		err := rows.Scan(
 			&l.JobId,
+			&l.Name,
 			&l.Try,
 			&l.Type,
 			&l.State,

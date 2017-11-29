@@ -65,7 +65,9 @@ func (c *Log) Run() error {
 		}
 		d := finished.Sub(started)
 
-		fmt.Printf("job:      %s\n", l.JobId)
+		fmt.Printf("job id:   %s\n", l.JobId)
+		fmt.Printf("job name: %s\n", l.Name)
+		fmt.Printf("job type: %s\n", l.Type)
 		fmt.Printf("state:    %s\n", proto.StateName[l.State])
 		fmt.Printf("exit:     %d\n", l.Exit)
 		fmt.Printf("error:    %s\n", l.Error)

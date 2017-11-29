@@ -135,6 +135,7 @@ func init() {
 		proto.JobLog{
 			RequestId: reqId,
 			JobId:     "k238",
+			Name:      "j1",
 			Try:       0,
 			Type:      "test",
 			State:     proto.STATE_PENDING,
@@ -142,6 +143,7 @@ func init() {
 		proto.JobLog{
 			RequestId: reqId,
 			JobId:     "fndu",
+			Name:      "j2",
 			Try:       0,
 			Type:      "test",
 			State:     proto.STATE_RUNNING,
@@ -149,6 +151,7 @@ func init() {
 		proto.JobLog{
 			RequestId: reqId,
 			JobId:     "g89d",
+			Name:      "j4",
 			Try:       0,
 			Type:      "test",
 			State:     proto.STATE_FAIL,
@@ -156,6 +159,7 @@ func init() {
 		proto.JobLog{
 			RequestId: reqId,
 			JobId:     "g89d",
+			Name:      "j3",
 			Try:       1,
 			Type:      "test",
 			State:     proto.STATE_COMPLETE,

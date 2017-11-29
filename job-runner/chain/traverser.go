@@ -298,8 +298,9 @@ func (t *traverser) Status() (proto.JobChainStatus, error) {
 	for jobId, runner := range activeRunners {
 		jobStatus := proto.JobStatus{
 			JobId:  jobId,
-			State:  t.chain.JobState(jobId), // get the state of the job
-			Status: runner.Status(),         // get the job status. this should return quickly
+			Name:   t.chain.JobChain.Jobs[jobId].Name, // the name of the job
+			State:  t.chain.JobState(jobId),           // get the state of the job
+			Status: runner.Status(),                   // get the job status. this should return quickly
 		}
 		jobStatuses = append(jobStatuses, jobStatus)
 	}
@@ -369,6 +370,7 @@ func (t *traverser) sendJL(pJob proto.Job, err error) {
 	jl := proto.JobLog{
 		RequestId:  t.chain.RequestId(),
 		JobId:      pJob.Id,
+		Name:       pJob.Name,
 		Type:       pJob.Type,
 		StartedAt:  0, // zero because the job never ran
 		FinishedAt: 0,

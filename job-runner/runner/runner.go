@@ -40,6 +40,7 @@ type runner struct {
 	rmc     rm.Client // client used to send JLs to the RM
 	// --
 	jobId     string
+	jobName   string
 	jobType   string
 	maxTries  uint
 	retryWait time.Duration
@@ -58,6 +59,7 @@ func NewRunner(pJob proto.Job, realJob job.Job, reqId string, rmc rm.Client) Run
 		rmc:     rmc,
 		// --
 		jobId:     pJob.Id,
+		jobName:   pJob.Name,
 		jobType:   pJob.Type,
 		maxTries:  1 + pJob.Retry, // + 1 because we always run once
 		retryWait: time.Duration(pJob.RetryWait) * time.Millisecond,
@@ -106,6 +108,7 @@ TRY_LOOP:
 		jl := proto.JobLog{
 			RequestId:  r.reqId,
 			JobId:      r.jobId,
+			Name:       r.jobName,
 			Type:       r.jobType,
 			Try:        tryNo,
 			StartedAt:  startedAt,

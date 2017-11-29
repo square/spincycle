@@ -12,7 +12,7 @@ import (
 // must be unique within a job chain.
 type Job struct {
 	Id        string                 `json:"id"`        // unique id
-	Name      string                 `json:"string"`    // name of the job
+	Name      string                 `json:"name"`      // name of the job
 	Type      string                 `json:"type"`      // user-specific job type
 	Bytes     []byte                 `json:"bytes"`     // return value of Job.Serialize method
 	State     byte                   `json:"state"`     // STATE_* const
@@ -67,6 +67,7 @@ type JobLog struct {
 	// These three fields uniquely identify an entry in the job log.
 	RequestId string `json:"requestId"`
 	JobId     string `json:"jobId"`
+	Name      string `json:"name"`
 	Try       uint   `json:"try"` // try number N of 1 + Job.Retry
 
 	Type       string `json:"type"`       // the type of the job
@@ -84,6 +85,7 @@ type JobLog struct {
 type JobStatus struct {
 	RequestId string  `json:"requestId"`
 	JobId     string  `json:"jobId"`
+	Name      string  `json:"name"`
 	State     byte    `json:"state"`
 	Status    string  `json:"status"`  // @todo: job.Status()
 	Runtime   float64 `json:"runtime"` // seconds
