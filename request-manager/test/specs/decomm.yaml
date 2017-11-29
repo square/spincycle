@@ -34,9 +34,10 @@ sequences:
       pre-flight-checks:
         category: sequence
         type: check-instance-is-ok
-        each: instances:instance # repeat for each node in nodes
-                                 # i.e. each iteration of the sequence check-container-is-active will
-                                 #      expect a variable "node" to be set in job args
+        each:
+          - instances:instance   # repeat for each instance in instances
+                                 # i.e. each iteration of the sequence check-instance-is-ok will
+                                 #      expect a variable "instance" to be set in job args
         args:
           - expected: instances
             given: instances
@@ -46,7 +47,8 @@ sequences:
       decommission-instances:
         category: sequence
         type: decommission-instance
-        each: instances:instance # repeat for each node in nodes
+        each: 
+          - instances:instance # repeat for each instance in instances
         args:
           - expected: instances
             given: instances
