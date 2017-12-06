@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+func init() { rand.Seed(time.Now().UTC().UnixNano()) }
+
 // The characters used in ids. This should not be modified.
 var CHARS = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
@@ -96,7 +98,6 @@ func (g *generator) UID() (string, error) {
 // ------------------------------------------------------------------------- //
 
 func randSeq(n int) string {
-	rand.Seed(time.Now().UTC().UnixNano())
 	b := make([]rune, n)
 	for i := range b {
 		b[i] = CHARS[rand.Intn(len(CHARS))]
