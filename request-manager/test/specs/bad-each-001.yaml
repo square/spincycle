@@ -33,6 +33,3 @@ sequences:
         args:
           - expected: container
             given: instance
-noop-node:
-  category: job
-  type: no-op

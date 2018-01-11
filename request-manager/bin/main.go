@@ -61,9 +61,6 @@ func main() {
 		for k, v := range grapherCfg.Sequences {
 			allGrapherCfgs.Sequences[k] = v
 		}
-		if grapherCfg.NoopNode != nil {
-			allGrapherCfgs.NoopNode = grapherCfg.NoopNode
-		}
 	}
 	idf := id.NewGeneratorFactory(4, 100) // generate 4-character ids for jobs
 	grf := grapher.NewGrapherFactory(external.JobFactory, &allGrapherCfgs, idf)
