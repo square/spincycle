@@ -1,7 +1,6 @@
 package grapher
 
 import (
-	"fmt"
 	"io/ioutil"
 
 	"gopkg.in/yaml.v2"
@@ -55,7 +54,6 @@ type ArgSpec struct {
 // All Sequences in the yaml. Also contains the user defined no-op job.
 type Config struct {
 	Sequences map[string]*SequenceSpec `yaml:"sequences"`
-	NoopNode  *NodeSpec                `yaml:"noop-node"`
 }
 
 // ReadConfig will read from configFile and return a Config that the user
@@ -78,12 +76,6 @@ func ReadConfig(configFile string) (*Config, error) {
 			node.Name = nodeName
 		}
 	}
-
-	if cfg.NoopNode == nil {
-		return nil, fmt.Errorf("Noop node spec is missing")
-	}
-
-	cfg.NoopNode.Name = "noop-job"
 
 	return cfg, nil
 }

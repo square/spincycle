@@ -139,6 +139,3 @@ sequences:
             given: instance
         sets: []
         deps: [decom-2]
-noop-node:
-  category: job
-  type: no-op

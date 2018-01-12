@@ -11,22 +11,18 @@ import (
 
 // The Grapher struct contains the sequence specs required to construct graphs.
 // The user must handle the creation of the Sequence Specs.
-// The user will also provide a "no-op" job that Grapher can use to create no-op
-// nodes in the graph.
 //
 // CreateGraph will create a graph. The user must provide a Sequence Type, to indicate
 // what graph will be created.
 type Grapher struct {
 	AllSequences map[string]*SequenceSpec // All sequences that were read in from the Config
 	JobFactory   job.Factory              // factory to create nodes' jobs.
-	NoopNode     *NodeSpec                // static no-op job that Grapher can use to signify start/end of sequences.
 
 	idgen id.Generator // Generates UIDs for the nodes created by the Grapher.
 }
 
 // NewGrapher returns a new Grapher struct. The caller of NewGrapher mut provide
 // a Job Factory for Grapher to create the jobs that will be stored at each node.
-// The caller must also specify a no-op job and args for Grapher to create no-op nodes.
 // An id generator must also be provided (used for generating ids for nodes).
 //
 // A new Grapher should be made for every request.
@@ -34,7 +30,6 @@ func NewGrapher(nf job.Factory, cfg *Config, idgen id.Generator) *Grapher {
 	o := &Grapher{
 		JobFactory:   nf,
 		AllSequences: cfg.Sequences,
-		NoopNode:     cfg.NoopNode,
 		idgen:        idgen,
 	}
 	return o
@@ -462,7 +457,7 @@ func (o *Grapher) newEmptyGraph(name string, nodeArgs map[string]interface{}) (*
 		Name: name,
 	}
 
-	nodeArgsCopy, err := o.remapNodeArgs(o.NoopNode, nodeArgs)
+	nodeArgsCopy, err := o.remapNodeArgs(noopSpec, nodeArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -477,7 +472,7 @@ func (o *Grapher) newEmptyGraph(name string, nodeArgs map[string]interface{}) (*
 		return nil, err
 	}
 
-	err = o.setNodeArgs(o.NoopNode, nodeArgs, nodeArgsCopy)
+	err = o.setNodeArgs(noopSpec, nodeArgs, nodeArgsCopy)
 	if err != nil {
 		return nil, err
 	}
@@ -497,15 +492,24 @@ func (o *Grapher) newEmptyGraph(name string, nodeArgs map[string]interface{}) (*
 func (o *Grapher) newNoopNode(name string, nodeArgs map[string]interface{}) (*Node, error) {
 	id, err := o.idgen.UID()
 	if err != nil {
-		return nil, fmt.Errorf("Error making id for '%s %s' job: %s", o.NoopNode.Name, name, err)
+		return nil, fmt.Errorf("Error making id for no-op node %s: %s", name, err)
 	}
-	rj, err := o.JobFactory.Make(o.NoopNode.NodeType, id)
+	rj, err := o.JobFactory.Make("noop", id)
 	if err != nil {
-		return nil, fmt.Errorf("Error making '%s %s' job: %s", o.NoopNode.Name, name, err)
+		switch err {
+		case job.ErrUnknownJobType:
+			// No custom noop job, use built-in default
+			rj = &noopJob{
+				jobType: "noop",
+				jobName: id,
+			}
+		default:
+			return nil, fmt.Errorf("Error making no-op node %s: %s", name, err)
+		}
 	}
 	err = rj.Create(nodeArgs)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating '%s %s' job: %s", o.NoopNode.Name, name, err)
+		return nil, fmt.Errorf("Error creating no-op node %s: %s", name, err)
 	}
 
 	return &Node{

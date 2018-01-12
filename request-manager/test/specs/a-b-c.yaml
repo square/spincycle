@@ -31,6 +31,3 @@ sequences:
         category: job
         type: cJobType
         deps: [b]
-noop-node:
-  category: job
-  type: no-op
