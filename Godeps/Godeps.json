@@ -1,15 +1,15 @@
 {
 	"ImportPath": "github.com/square/spincycle",
 	"GoVersion": "go1.7",
-	"GodepVersion": "v77",
+	"GodepVersion": "v79",
 	"Packages": [
 		"./..."
 	],
 	"Deps": [
 		{
 			"ImportPath": "github.com/Sirupsen/logrus",
-			"Comment": "v0.11.0",
-			"Rev": "d26492970760ca5d33129d2d799e34be5c4782eb"
+			"Comment": "1.0.2",
+			"Rev": "a3f95b5c423586578a4e099b11a46c2479628cac"
 		},
 		{
 			"ImportPath": "github.com/alexflint/go-arg",
@@ -36,20 +36,23 @@
 		},
 		{
 			"ImportPath": "github.com/garyburd/redigo/internal",
-			"Rev": "a47585eaae68b1d14b02940d2af1b9194f3caa9c"
+			"Comment": "v1.3.0",
+			"Rev": "47dc60e71eed504e3ef8e77ee3c6fe720f3be57f"
 		},
 		{
 			"ImportPath": "github.com/garyburd/redigo/redis",
-			"Rev": "a47585eaae68b1d14b02940d2af1b9194f3caa9c"
+			"Comment": "v1.3.0",
+			"Rev": "47dc60e71eed504e3ef8e77ee3c6fe720f3be57f"
 		},
 		{
 			"ImportPath": "github.com/go-sql-driver/mysql",
-			"Comment": "v1.3",
-			"Rev": "a0583e0143b1624142adab07e0e97fe106d99561"
+			"Comment": "v1.3-35-g7785c74",
+			"Rev": "7785c74297136c027fdf2fd6f8931c0e19be8aa7"
 		},
 		{
 			"ImportPath": "github.com/go-test/deep",
-			"Rev": "64dede292689f3a95b6fa7fb6f3efec6c2fecf06"
+			"Comment": "v1.0.0",
+			"Rev": "9898238679c264cfb10411539f14a0553dc8b295"
 		},
 		{
 			"ImportPath": "github.com/labstack/echo",
@@ -115,15 +118,19 @@
 		},
 		{
 			"ImportPath": "golang.org/x/net/context",
-			"Rev": "da118f7b8e5954f39d0d2130ab35d4bf0e3cb344"
+			"Rev": "66aacef3dd8a676686c7ae3716979581e8b03c47"
 		},
 		{
 			"ImportPath": "golang.org/x/sys/unix",
-			"Rev": "d75a52659825e75fff6158388dddc6a5b04f9ba5"
+			"Rev": "d8f5ea21b9295e315e612b4bcf4bedea93454d4d"
 		},
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
-			"Rev": "a3f3340b5840cee44f372bddb5880fcbc419b46a"
+			"Rev": "cd8b52f8269e0feb286dfeef29f8fe4d5b397e0b"
+		},
+		{
+			"ImportPath": "github.com/go-mysql/conn",
+			"Rev": "a6bc22f7176712a67188435bb6111447a0afa1df"
 		}
 	]
 }
