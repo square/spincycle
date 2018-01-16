@@ -3,21 +3,21 @@
 package joblog_test
 
 import (
-	"database/sql"
 	"sort"
 	"testing"
 
+	myconn "github.com/go-mysql/conn"
 	"github.com/go-test/deep"
+
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/test"
 	testdb "github.com/square/spincycle/request-manager/test/db"
-	"github.com/square/spincycle/test/mock"
 )
 
 var dbm testdb.Manager
-var dbc db.Connector
+var dbc myconn.Connector
 
 func setup(t *testing.T, dataFile string) string {
 	// Setup a db manager to handle databases for all tests.
@@ -35,12 +35,13 @@ func setup(t *testing.T, dataFile string) string {
 		t.Fatal(err)
 	}
 
-	// Create a mock connector the connects to the test db.
-	dbc = &mock.Connector{
-		ConnectFunc: func() (*sql.DB, error) {
-			return dbm.Connect(dbName)
-		},
+	db, err := dbm.Connect(dbName)
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	// Create a real myconn.Pool using the db and sql.DB created above.
+	dbc = myconn.NewPool(db)
 
 	return dbName
 }

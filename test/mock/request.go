@@ -21,6 +21,7 @@ type RequestManager struct {
 	StatusFunc                func(string) (proto.RequestStatus, error)
 	IncrementFinishedJobsFunc func(string) error
 	SpecsFunc                 func() []proto.RequestSpec
+	JobChainFunc              func(string) (proto.JobChain, error)
 }
 
 func (r *RequestManager) Create(reqParams proto.CreateRequestParams) (proto.Request, error) {
@@ -77,4 +78,11 @@ func (r *RequestManager) Specs() []proto.RequestSpec {
 		return r.SpecsFunc()
 	}
 	return []proto.RequestSpec{}
+}
+
+func (r *RequestManager) JobChain(reqId string) (proto.JobChain, error) {
+	if r.JobChainFunc != nil {
+		return r.JobChainFunc(reqId)
+	}
+	return proto.JobChain{}, nil
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-test/deep"
 	"github.com/labstack/echo"
+
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/api"
 	testutil "github.com/square/spincycle/test"
@@ -18,8 +19,8 @@ import (
 
 var server *httptest.Server
 
-func setup(rm *mock.RequestManager, jls *mock.JLStore, jcs *mock.JCStore, middleware ...echo.MiddlewareFunc) {
-	a := api.NewAPI(rm, jls, jcs, &mock.RMStatus{})
+func setup(rm *mock.RequestManager, jls *mock.JLStore, middleware ...echo.MiddlewareFunc) {
+	a := api.NewAPI(rm, jls, &mock.RMStatus{})
 	a.Use(middleware...)
 	server = httptest.NewServer(a)
 }
@@ -42,7 +43,7 @@ func baseURL() string {
 
 func TestNewRequestHandlerInvalidPayload(t *testing.T) {
 	payload := `"bad":"json"}` // Bad payload.
-	setup(&mock.RequestManager{}, &mock.JLStore{}, &mock.JCStore{})
+	setup(&mock.RequestManager{}, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -68,7 +69,7 @@ func TestNewRequestHandlerRMError(t *testing.T) {
 			return proto.Request{}, mock.ErrRequestManager
 		},
 	}
-	setup(rm, &mock.JLStore{}, &mock.JCStore{})
+	setup(rm, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -118,7 +119,7 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 			return h(c)
 		}
 	}
-	setup(rm, &mock.JLStore{}, &mock.JCStore{}, middlewareFunc)
+	setup(rm, &mock.JLStore{}, middlewareFunc)
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -174,7 +175,7 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 			return req, nil
 		},
 	}
-	setup(rm, &mock.JLStore{}, &mock.JCStore{})
+	setup(rm, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -197,7 +198,7 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 
 func TestStartRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	setup(&mock.RequestManager{}, &mock.JLStore{}, &mock.JCStore{})
+	setup(&mock.RequestManager{}, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -223,7 +224,7 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	setup(rm, &mock.JLStore{}, &mock.JCStore{})
+	setup(rm, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -248,7 +249,7 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 
 func TestStopRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	setup(&mock.RequestManager{}, &mock.JLStore{}, &mock.JCStore{})
+	setup(&mock.RequestManager{}, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -282,7 +283,7 @@ func TestStatusRequestHandlerSuccess(t *testing.T) {
 			return reqStatus, nil
 		},
 	}
-	setup(rm, &mock.JLStore{}, &mock.JCStore{})
+	setup(rm, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -310,12 +311,12 @@ func TestGetJobChainRequestHandlerSuccess(t *testing.T) {
 		State:     proto.STATE_RUNNING,
 	}
 	// Create a mock jobchain store that will return a job chain.
-	jcs := &mock.JCStore{
-		GetFunc: func(r string) (proto.JobChain, error) {
+	rm := &mock.RequestManager{
+		JobChainFunc: func(r string) (proto.JobChain, error) {
 			return jc, nil
 		},
 	}
-	setup(&mock.RequestManager{}, &mock.JLStore{}, jcs)
+	setup(rm, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -349,7 +350,7 @@ func TestGetJLHandlerSuccess(t *testing.T) {
 			return jl, nil
 		},
 	}
-	setup(&mock.RequestManager{}, jls, &mock.JCStore{})
+	setup(&mock.RequestManager{}, jls)
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -395,7 +396,7 @@ func TestCreateJLHandlerSuccess(t *testing.T) {
 		},
 	}
 
-	setup(rm, jls, &mock.JCStore{})
+	setup(rm, jls)
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -449,7 +450,7 @@ func TestCreateJLHandlerJobFailed(t *testing.T) {
 		},
 	}
 
-	setup(rm, jls, &mock.JCStore{})
+	setup(rm, jls)
 	defer cleanup()
 
 	// Make the HTTP request.

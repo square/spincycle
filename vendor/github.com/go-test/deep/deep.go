@@ -1,5 +1,5 @@
 // Package deep provides function deep.Equal which is like reflect.DeepEqual but
-// retunrs a list of differences. This is helpful when comparing complex types
+// returns a list of differences. This is helpful when comparing complex types
 // like structures and maps.
 package deep
 
@@ -47,6 +47,8 @@ type cmp struct {
 	floatFormat string
 }
 
+var errorType = reflect.TypeOf((*error)(nil)).Elem()
+
 // Equal compares variables a and b, recursing into their structure up to
 // MaxDepth levels deep, and returns a list of differences, or nil if there are
 // none. Some differences may not be found if an error is also returned.
@@ -61,6 +63,17 @@ func Equal(a, b interface{}) []string {
 		buff:        []string{},
 		floatFormat: fmt.Sprintf("%%.%df", FloatPrecision),
 	}
+	if a == nil && b == nil {
+		return nil
+	} else if a == nil && b != nil {
+		c.saveDiff(b, "<nil pointer>")
+	} else if a != nil && b == nil {
+		c.saveDiff(a, "<nil pointer>")
+	}
+	if len(c.diff) > 0 {
+		return c.diff
+	}
+
 	c.equals(aVal, bVal, 0)
 	if len(c.diff) > 0 {
 		return c.diff // diffs
@@ -74,6 +87,17 @@ func (c *cmp) equals(a, b reflect.Value, level int) {
 		return
 	}
 
+	// Check if one value is nil, e.g. T{x: *X} and T.x is nil
+	if !a.IsValid() || !b.IsValid() {
+		if a.IsValid() && !b.IsValid() {
+			c.saveDiff(a.Type(), "<nil pointer>")
+		} else if !a.IsValid() && b.IsValid() {
+			c.saveDiff("<nil pointer>", b.Type())
+		}
+		return
+	}
+
+	// If differenet types, they can't be equal
 	aType := a.Type()
 	bType := b.Type()
 	if aType != bType {
@@ -82,29 +106,37 @@ func (c *cmp) equals(a, b reflect.Value, level int) {
 		return
 	}
 
+	// Primitive https://golang.org/pkg/reflect/#Kind
 	aKind := a.Kind()
 	bKind := b.Kind()
-	if aKind == reflect.Ptr || aKind == reflect.Interface {
-		a = a.Elem()
-		aKind = a.Kind()
-		if a.IsValid() {
-			aType = a.Type()
-		}
-	}
-	if bKind == reflect.Ptr || bKind == reflect.Interface {
-		b = b.Elem()
-		if b.IsValid() {
-			bType = b.Type()
+
+	// If both types implement the error interface, compare the error strings.
+	// This must be done before dereferencing because the interface is on a
+	// pointer receiver.
+	if aType.Implements(errorType) && bType.Implements(errorType) {
+		if a.Elem().IsValid() && b.Elem().IsValid() { // both err != nil
+			aString := a.MethodByName("Error").Call(nil)[0].String()
+			bString := b.MethodByName("Error").Call(nil)[0].String()
+			if aString != bString {
+				c.saveDiff(aString, bString)
+			}
+			return
 		}
 	}
 
-	// For example: T{x: *X} and T.x is nil.
-	if !a.IsValid() || !b.IsValid() {
-		if a.IsValid() && !b.IsValid() {
-			c.saveDiff(aType, "<nil pointer>")
-		} else if !a.IsValid() && b.IsValid() {
-			c.saveDiff("<nil pointer>", bType)
+	// Dereference pointers and interface{}
+	if aElem, bElem := (aKind == reflect.Ptr || aKind == reflect.Interface),
+		(bKind == reflect.Ptr || bKind == reflect.Interface); aElem || bElem {
+
+		if aElem {
+			a = a.Elem()
 		}
+
+		if bElem {
+			b = b.Elem()
+		}
+
+		c.equals(a, b, level+1)
 		return
 	}
 
@@ -301,10 +333,6 @@ func (c *cmp) saveDiff(aval, bval interface{}) {
 	} else {
 		c.diff = append(c.diff, fmt.Sprintf("%v != %v", aval, bval))
 	}
-}
-
-func init() {
-	log.SetFlags(log.Lshortfile)
 }
 
 func logError(err error) {
