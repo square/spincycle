@@ -4,6 +4,7 @@
 package request
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -11,7 +12,9 @@ import (
 	"sync"
 	"time"
 
+	myconn "github.com/go-mysql/conn"
 	"github.com/go-sql-driver/mysql"
+
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
@@ -48,17 +51,20 @@ type Manager interface {
 
 	// Specs returns a list of all the request specs the the RM knows about.
 	Specs() []proto.RequestSpec
+
+	// JobChain returns the job chain for the given request id.
+	JobChain(requestId string) (proto.JobChain, error)
 }
 
 // manager implements the Manager interface.
 type manager struct {
 	grf grapher.GrapherFactory
-	dbc db.Connector
+	dbc myconn.Connector
 	jrc jr.Client
 	*sync.Mutex
 }
 
-func NewManager(grf grapher.GrapherFactory, dbc db.Connector, jrClient jr.Client) Manager {
+func NewManager(grf grapher.GrapherFactory, dbc myconn.Connector, jrClient jr.Client) Manager {
 	return &manager{
 		grf:   grf,
 		dbc:   dbc,
@@ -131,21 +137,24 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 		return req, fmt.Errorf("cannot marshal request params: %s", err)
 	}
 
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	// Connect to database
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
 	if err != nil {
 		return req, err
 	}
+	defer m.dbc.Close(conn) // don't leak conn
 
 	// Begin a transaction to insert the request into the requests table, as
 	// well as the jc and raw request params into the raw_requests table.
-	txn, err := conn.Begin()
+	txn, err := conn.BeginTx(ctx, nil)
 	if err != nil {
 		return req, err
 	}
 	defer txn.Rollback()
 
 	q := "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
-	_, err = txn.Exec(q,
+	_, err = txn.ExecContext(ctx, q,
 		reqIdBytes,
 		req.Type,
 		req.State,
@@ -158,7 +167,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 	}
 
 	q = "INSERT INTO raw_requests (request_id, request, job_chain) VALUES (?, ?, ?)"
-	if _, err = txn.Exec(q,
+	if _, err = txn.ExecContext(ctx, q,
 		reqIdBytes,
 		rawParams,
 		rawJc); err != nil {
@@ -269,14 +278,16 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	// //////////////////////////////////////////////////////////////////////
 
 	// Get the status of all finished jobs from the db.
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
 	if err != nil {
 		return reqStatus, err
 	}
+	defer m.dbc.Close(conn) // don't leak conn
 
 	q := "SELECT j1.job_id, j1.name, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
 		"j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try) WHERE j1.request_id = ? AND j2.try IS NULL"
-	rows, err := conn.Query(q, requestId)
+	rows, err := conn.QueryContext(ctx, q, requestId)
 	if err != nil {
 		return reqStatus, err
 	}
@@ -339,13 +350,15 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 }
 
 func (m *manager) IncrementFinishedJobs(requestId string) error {
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
 	if err != nil {
 		return err
 	}
+	defer m.dbc.Close(conn) // don't leak conn
 
 	q := "UPDATE requests SET finished_jobs = finished_jobs + 1 WHERE request_id = ?"
-	res, err := conn.Exec(q, &requestId)
+	res, err := conn.ExecContext(ctx, q, &requestId)
 	if err != nil {
 		return err
 	}
@@ -414,16 +427,48 @@ func (m *manager) Specs() []proto.RequestSpec {
 	return requestList
 }
 
+func (s *manager) JobChain(requestId string) (proto.JobChain, error) {
+	var jc proto.JobChain
+	var rawJc []byte // raw job chains are stored as blobs in the db.
+
+	ctx := context.TODO()
+	conn, err := s.dbc.Open(ctx)
+	if err != nil {
+		return jc, err
+	}
+	defer s.dbc.Close(conn) // don't leak conn
+
+	// Get the job chain from the raw_requests table.
+	q := "SELECT job_chain FROM raw_requests WHERE request_id = ?"
+	if err := conn.QueryRowContext(ctx, q, requestId).Scan(&rawJc); err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			return jc, db.NewErrNotFound("job chain")
+		default:
+			return jc, err
+		}
+	}
+
+	// Unmarshal the job chain into a proto.JobChain.
+	if err := json.Unmarshal(rawJc, &jc); err != nil {
+		return jc, fmt.Errorf("cannot unmarshal job chain: %s", err)
+	}
+
+	return jc, nil
+}
+
 // ------------------------------------------------------------------------- //
 
 // get a request without its jc
 func (m *manager) get(requestId string) (proto.Request, error) {
 	var req proto.Request
 
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
 	if err != nil {
 		return req, err
 	}
+	defer m.dbc.Close(conn) // don't leak conn
 
 	// Nullable columns.
 	var user sql.NullString
@@ -432,7 +477,7 @@ func (m *manager) get(requestId string) (proto.Request, error) {
 
 	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
 		"finished_jobs FROM requests WHERE request_id = ?"
-	if err := conn.QueryRow(q, requestId).Scan(
+	if err := conn.QueryRowContext(ctx, q, requestId).Scan(
 		&req.Id,
 		&req.Type,
 		&req.State,
@@ -470,15 +515,17 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 		return req, err
 	}
 
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
 	if err != nil {
 		return req, err
 	}
+	defer m.dbc.Close(conn) // don't leak conn
 
 	var jc proto.JobChain
 	var rawJc []byte // raw job chains are stored as blobs in the db.
 	q := "SELECT job_chain FROM raw_requests WHERE request_id = ?"
-	if err := conn.QueryRow(q, requestId).Scan(&rawJc); err != nil {
+	if err := conn.QueryRowContext(ctx, q, requestId).Scan(&rawJc); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return req, db.NewErrNotFound("job chain")
@@ -496,14 +543,16 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 }
 
 func (m *manager) updateRequest(req proto.Request, curState byte) error {
-	conn, err := m.dbc.Connect() // connection is from a pool. do not close
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
 	if err != nil {
 		return err
 	}
+	defer m.dbc.Close(conn) // don't leak conn
 
 	// Fields that should never be updated by this package are not listed in this query.
 	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ? WHERE request_id = ? AND state = ?"
-	res, err := conn.Exec(q,
+	res, err := conn.ExecContext(ctx, q,
 		req.State,
 		req.StartedAt,
 		req.FinishedAt,

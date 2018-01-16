@@ -3,22 +3,24 @@
 package main
 
 import (
-	"crypto/tls"
+	"database/sql"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
+	myconn "github.com/go-mysql/conn"
+	"github.com/go-sql-driver/mysql"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
+
 	"github.com/square/spincycle/config"
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/job/external"
 	"github.com/square/spincycle/request-manager/api"
-	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/request-manager/id"
-	"github.com/square/spincycle/request-manager/jobchain"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
@@ -84,23 +86,29 @@ func main() {
 	// //////////////////////////////////////////////////////////////////////
 	// DB Connection Pool
 	// //////////////////////////////////////////////////////////////////////
-	var dbTLSConfig *tls.Config
+	dsn := cfg.Db.DSN + "?parseTime=true" // always needs to be set
 	if cfg.Db.TLS.CAFile != "" && cfg.Db.TLS.CertFile != "" && cfg.Db.TLS.KeyFile != "" {
-		var err error
-		dbTLSConfig, err = util.NewTLSConfig(cfg.Db.TLS.CAFile,
-			cfg.Db.TLS.CertFile, cfg.Db.TLS.KeyFile)
+		tlsConfig, err := util.NewTLSConfig(cfg.Db.TLS.CAFile, cfg.Db.TLS.CertFile, cfg.Db.TLS.KeyFile)
 		if err != nil {
-			log.Fatalf("error loading DB Accessor TLS config: %s", err)
+			log.Fatalf("error loading database TLS config: %s", err)
 		}
+		mysql.RegisterTLSConfig("custom", tlsConfig)
+		dsn += "&tls=custom"
 	}
-	dbc := db.NewConnectionPool(10, 5, cfg.Db.DSN, dbTLSConfig)
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		log.Fatal("error creating sql.DB: %s", err)
+	}
+	db.SetMaxIdleConns(10)
+	db.SetMaxOpenConns(100)
+	db.SetConnMaxLifetime(12 * time.Hour)
+	dbc := myconn.NewPool(db)
 
 	// //////////////////////////////////////////////////////////////////////
 	// Request Manager, Job Log Store, and Job Chain Store
 	// //////////////////////////////////////////////////////////////////////
 	rm := request.NewManager(grf, dbc, jrClient)
 	jls := joblog.NewStore(dbc)
-	jcs := jobchain.NewStore(dbc)
 
 	// //////////////////////////////////////////////////////////////////////
 	// System Status
@@ -113,7 +121,7 @@ func main() {
 	// //////////////////////////////////////////////////////////////////////
 	// API
 	// //////////////////////////////////////////////////////////////////////
-	api := api.NewAPI(rm, jls, jcs, stat)
+	api := api.NewAPI(rm, jls, stat)
 
 	// If you want to add custom middleware for authentication, authorization,
 	// etc., you should do that here. See https://echo.labstack.com/middleware

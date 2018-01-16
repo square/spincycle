@@ -4,9 +4,12 @@
 package status
 
 import (
+	"context"
 	"sort"
 
+	myconn "github.com/go-mysql/conn"
 	"github.com/go-sql-driver/mysql"
+
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
@@ -33,11 +36,11 @@ const (
 )
 
 type manager struct {
-	dbc db.Connector
+	dbc myconn.Connector
 	jrc jr.Client
 }
 
-func NewManager(dbc db.Connector, jrClient jr.Client) Manager {
+func NewManager(dbc myconn.Connector, jrClient jr.Client) Manager {
 	return &manager{
 		dbc: dbc,
 		jrc: jrClient,
@@ -69,11 +72,12 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 		return status, nil
 	}
 
-	// Do not close the db. It's a long-running connection pool.
-	conn, err := m.dbc.Connect()
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
 	if err != nil {
 		return status, err
 	}
+	defer m.dbc.Close(conn) // don't leak conn
 
 	seen := map[string]bool{}
 	ids := []string{}
@@ -87,7 +91,7 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 
 	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs" +
 		" FROM requests WHERE request_id IN (" + db.IN(ids) + ")"
-	rows, err := conn.Query(q)
+	rows, err := conn.QueryContext(ctx, q)
 	if err != nil {
 		return status, err
 	}

@@ -3,12 +3,13 @@
 package request_test
 
 import (
-	"database/sql"
 	"fmt"
 	"sort"
 	"testing"
 
+	myconn "github.com/go-mysql/conn"
 	"github.com/go-test/deep"
+
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
@@ -21,7 +22,7 @@ import (
 )
 
 var dbm testdb.Manager
-var dbc db.Connector
+var dbc myconn.Connector
 var grf *grapher.MockGrapherFactory
 var dbSuffix string
 
@@ -41,12 +42,13 @@ func setup(t *testing.T, dataFile string) string {
 		t.Fatal(err)
 	}
 
-	// Create a mock connector the connects to the test db.
-	dbc = &mock.Connector{
-		ConnectFunc: func() (*sql.DB, error) {
-			return dbm.Connect(dbName)
-		},
+	db, err := dbm.Connect(dbName)
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	// Create a real myconn.Pool using the db and sql.DB created above.
+	dbc = myconn.NewPool(db)
 
 	// Create a mock grapher factory.
 	if grf == nil {
@@ -499,5 +501,52 @@ func TestIncrementFinishedJobs(t *testing.T) {
 	expectedCount := testdb.SavedRequests[reqId].FinishedJobs + 1
 	if req.FinishedJobs != expectedCount {
 		t.Errorf("request FinishedJobs = %d, expected %d", req.FinishedJobs, expectedCount)
+	}
+}
+
+func TestJobChainNotFound(t *testing.T) {
+	dbName := setup(t, rmtest.DataPath+"/jc-default.sql")
+	defer teardown(t, dbName)
+
+	reqId := "invalid"
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	_, err := m.JobChain(reqId)
+	if err != nil {
+		switch v := err.(type) {
+		case db.ErrNotFound:
+			break // this is what we expect
+		default:
+			t.Errorf("error is of type %s, expected db.ErrNotFound", v)
+		}
+	} else {
+		t.Error("expected an error, did not get one")
+	}
+}
+
+func TestJobChainInvalid(t *testing.T) {
+	dbName := setup(t, rmtest.DataPath+"/jc-bad.sql")
+	defer teardown(t, dbName)
+
+	reqId := "cd724fd12092"
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	_, err := m.JobChain(reqId)
+	if err == nil {
+		t.Errorf("expected an error unmarshaling the job chain, did not get one")
+	}
+}
+
+func TestJobChain(t *testing.T) {
+	dbName := setup(t, rmtest.DataPath+"/jc-default.sql")
+	defer teardown(t, dbName)
+
+	reqId := "8bff5def4f3fvh78skjy"
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	actual, err := m.JobChain(reqId)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	if diff := deep.Equal(actual, testdb.SavedJCs[reqId]); diff != nil {
+		t.Error(diff)
 	}
 }

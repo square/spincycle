@@ -12,9 +12,9 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/engine"
 	"github.com/labstack/echo/engine/standard"
+
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
-	"github.com/square/spincycle/request-manager/jobchain"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
@@ -29,7 +29,6 @@ const (
 type API struct {
 	rm   request.Manager
 	jls  joblog.Store
-	jcs  jobchain.Store
 	stat status.Manager
 	echo *echo.Echo
 }
@@ -37,11 +36,10 @@ type API struct {
 // NewAPI cretes a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
 // @todo: create a struct of managers and pass that in here instead?
-func NewAPI(rm request.Manager, jls joblog.Store, jcs jobchain.Store, stat status.Manager) *API {
+func NewAPI(rm request.Manager, jls joblog.Store, stat status.Manager) *API {
 	api := &API{
 		rm:   rm,
 		jls:  jls,
-		jcs:  jcs,
 		stat: stat,
 		echo: echo.New(),
 	}
@@ -206,7 +204,7 @@ func (api *API) jobChainRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
 	// Get the request's job chain from the rm.
-	jc, err := api.jcs.Get(reqId)
+	jc, err := api.rm.JobChain(reqId)
 	if err != nil {
 		return handleError(err)
 	}
