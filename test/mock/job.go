@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package mock
 
@@ -13,28 +13,26 @@ var (
 )
 
 type JobFactory struct {
-	MockJobs map[string]*Job // keyed on job type
+	MockJobs map[string]*Job // keyed on type
 	MakeErr  error
 	cnt      uint
-	Created  map[string]*Job // keyed on name
+	Created  map[string]*Job // keyed on name not id
 }
 
-func (f *JobFactory) Make(jobType, jobName string) (job.Job, error) {
+func (f *JobFactory) Make(jid job.Id) (job.Job, error) {
 	// Test-provided job
-	job, ok := f.MockJobs[jobType]
+	job, ok := f.MockJobs[jid.Type]
 	if !ok {
 		// Auto-create new mock job
 		f.cnt++
 		job = &Job{
-			TypeResp: jobType,
-			NameResp: jobName,
+			IdResp: jid,
 		}
 		if f.Created != nil {
-			f.Created[jobName] = job
+			f.Created[jid.Name] = job // keyed on name not id
 		}
 	} else {
-		job.NameResp = jobName
-		job.TypeResp = jobType
+		job.IdResp = jid
 	}
 	return job, f.MakeErr
 }
@@ -49,10 +47,9 @@ type Job struct {
 	RunFunc         func(jobData map[string]interface{}) (job.Return, error) // can use this instead of RunErr and RunFunc for more involved mocks
 	StopErr         error
 	StatusResp      string
-	NameResp        string
-	TypeResp        string
 	CreatedWithArgs map[string]interface{}
 	SetJobArgs      map[string]interface{}
+	IdResp          job.Id
 }
 
 func (j *Job) Create(jobArgs map[string]interface{}) error {
@@ -91,10 +88,6 @@ func (j *Job) Status() string {
 	return j.StatusResp
 }
 
-func (j *Job) Name() string {
-	return j.NameResp
-}
-
-func (j *Job) Type() string {
-	return j.TypeResp
+func (j *Job) Id() job.Id {
+	return j.IdResp
 }

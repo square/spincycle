@@ -1,3 +1,5 @@
+// Copyright 2017-2018, Square, Inc.
+
 package grapher
 
 import (

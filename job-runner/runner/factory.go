@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package runner
 
@@ -28,7 +28,7 @@ func NewFactory(jf job.Factory, rmc rm.Client) Factory {
 
 func (f *factory) Make(pJob proto.Job, requestId string) (Runner, error) {
 	// Instantiate a "blank" job of the given type.
-	realJob, err := f.jf.Make(pJob.Type, pJob.Id)
+	realJob, err := f.jf.Make(job.NewId(pJob.Type, pJob.Name, pJob.Id))
 	if err != nil {
 		return nil, err
 	}
