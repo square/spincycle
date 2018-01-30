@@ -1,3 +1,5 @@
+// Copyright 2017-2018, Square, Inc.
+
 package job
 
 import (
@@ -17,6 +19,11 @@ var (
 
 	// ErrRunTimeout should be returned by a job when it times out.
 	ErrRunTimeout = errors.New("run timeout")
+
+	// ErrWrongJobId is returned when the external job factory (EJF) creates a
+	// job that does not return the same Id values. This is a bug in the EJF,
+	// not Spin Cycle.
+	ErrWrongJobId = errors.New("wrong job.Id")
 )
 
 // ErrArgNotSet should be returned by a job when a required key is not set in jobArgs.

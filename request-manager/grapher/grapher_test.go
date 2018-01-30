@@ -1,3 +1,5 @@
+// Copyright 2017-2018, Square, Inc.
+
 package grapher
 
 import (
@@ -5,27 +7,26 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-test/deep"
 	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/request-manager/id"
 	"github.com/square/spincycle/test/mock"
+
+	"github.com/go-test/deep"
 )
 
 type testFactory struct {
 }
 
-func (f *testFactory) Make(t, n string) (job.Job, error) {
+func (f *testFactory) Make(id job.Id) (job.Job, error) {
 	j := testJob{
-		name:      n,
-		jobtype:   t,
+		id:        id,
 		givenArgs: map[string]interface{}{},
 	}
 	return j, nil
 }
 
 type testJob struct {
-	name      string
-	jobtype   string
+	id        job.Id
 	givenArgs map[string]interface{}
 }
 
@@ -35,7 +36,7 @@ func (tj testJob) Create(args map[string]interface{}) error {
 		tj.givenArgs[k] = v
 	}
 
-	switch tj.jobtype {
+	switch tj.id.Type {
 	case "get-cluster-instances":
 		return createGetClusterMembers(args)
 	case "prep-job-1":
@@ -59,9 +60,8 @@ func (tj testJob) Create(args map[string]interface{}) error {
 	return nil
 }
 
+func (tj testJob) Id() job.Id                 { return tj.id }
 func (tj testJob) Serialize() ([]byte, error) { return nil, nil }
-func (tj testJob) Type() string               { return tj.jobtype }
-func (tj testJob) Name() string               { return tj.name }
 func (tj testJob) Deserialize(b []byte) error { return nil }
 func (tj testJob) Stop() error                { return nil }
 func (tj testJob) Status() string             { return "" }
@@ -171,7 +171,7 @@ func TestCreateDecomGraph(t *testing.T) {
 	}
 
 	// validate the adjacency list
-	startNode := g.First.Datum.Name()
+	startNode := g.First.Datum.Id().Id
 
 	verifyStep(g, g.Edges[startNode], 1, "get-instances", t)
 
@@ -400,9 +400,9 @@ func createEndNode(args map[string]interface{}) error {
 // three nodes in a straight line
 func g1() *Graph {
 	tf := &testFactory{}
-	n1, _ := tf.Make("g1n1", "g1n1")
-	n2, _ := tf.Make("g1n2", "g1n2")
-	n3, _ := tf.Make("g1n3", "g1n3")
+	n1, _ := tf.Make(job.NewId("g1n1", "g1n1", "g1n1"))
+	n2, _ := tf.Make(job.NewId("g1n2", "g1n2", "g1n2"))
+	n3, _ := tf.Make(job.NewId("g1n3", "g1n3", "g1n3"))
 	g1n1 := &Node{Datum: n1}
 	g1n2 := &Node{Datum: n2}
 	g1n3 := &Node{Datum: n3}
@@ -440,10 +440,10 @@ func g1() *Graph {
 //
 func g3() *Graph {
 	tf := &testFactory{}
-	n1, _ := tf.Make("g3n1", "g3n1")
-	n2, _ := tf.Make("g3n2", "g3n2")
-	n3, _ := tf.Make("g3n3", "g3n3")
-	n4, _ := tf.Make("g3n4", "g3n4")
+	n1, _ := tf.Make(job.NewId("g3n1", "g3n1", "g3n1"))
+	n2, _ := tf.Make(job.NewId("g3n2", "g3n2", "g3n2"))
+	n3, _ := tf.Make(job.NewId("g3n3", "g3n3", "g3n3"))
+	n4, _ := tf.Make(job.NewId("g3n4", "g3n4", "g3n4"))
 	g3n1 := &Node{Datum: n1}
 	g3n2 := &Node{Datum: n2}
 	g3n3 := &Node{Datum: n3}
@@ -482,7 +482,7 @@ func g2() *Graph {
 	n := [20]*Node{}
 	for i := 0; i < 20; i++ {
 		m := fmt.Sprintf("g2n%d", i)
-		p, _ := tf.Make(m, m)
+		p, _ := tf.Make(job.NewId(m, m, m))
 		n[i] = &Node{
 			Datum: p,
 			Next:  map[string]*Node{},
@@ -852,7 +852,10 @@ func TestOptArgs001(t *testing.T) {
 		t.Logf("%#v\n", j.Args)
 		t.Error(diff)
 	}
-	job := tf.Created[j.Datum.Name()]
+	job := tf.Created[j.Datum.Id().Name]
+	if job == nil {
+		t.Fatal("job job1name not created")
+	}
 	if diff := deep.Equal(job.CreatedWithArgs, args); diff != nil {
 		t.Logf("%#v\n", job)
 		t.Errorf("test job not created with args arg")
@@ -888,7 +891,10 @@ func TestOptArgs001(t *testing.T) {
 		t.Logf("%#v\n", j.Args)
 		t.Error(diff)
 	}
-	job = tf.Created[j.Datum.Name()]
+	job = tf.Created[j.Datum.Id().Name]
+	if job == nil {
+		t.Fatal("job job1name not created")
+	}
 	if _, ok := job.CreatedWithArgs["args"]; !ok {
 		t.Error("jobArgs[args] does not exist, expected it to be set")
 	}

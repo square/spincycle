@@ -1,3 +1,5 @@
+// Copyright 2017-2018, Square, Inc.
+
 package grapher
 
 import (
@@ -443,7 +445,7 @@ func (o *Grapher) buildSingleVertexGraph(nodeDef *NodeSpec, nodeArgs map[string]
 		Name:     nodeDef.Name,
 		First:    n,
 		Last:     n,
-		Vertices: map[string]*Node{n.Datum.Name(): n},
+		Vertices: map[string]*Node{n.Datum.Id().Id: n},
 		Edges:    map[string][]string{},
 	}
 	return g, nil
@@ -477,13 +479,13 @@ func (o *Grapher) newEmptyGraph(name string, nodeArgs map[string]interface{}) (*
 		return nil, err
 	}
 
-	g.First.Next[g.Last.Datum.Name()] = g.Last
-	g.Last.Prev[g.First.Datum.Name()] = g.First
+	g.First.Next[g.Last.Datum.Id().Id] = g.Last
+	g.Last.Prev[g.First.Datum.Id().Id] = g.First
 	g.Vertices = map[string]*Node{
-		g.First.Datum.Name(): g.First,
-		g.Last.Datum.Name():  g.Last,
+		g.First.Datum.Id().Id: g.First,
+		g.Last.Datum.Id().Id:  g.Last,
 	}
-	g.Edges = map[string][]string{g.First.Datum.Name(): []string{g.Last.Datum.Name()}}
+	g.Edges = map[string][]string{g.First.Datum.Id().Id: []string{g.Last.Datum.Id().Id}}
 	return g, nil
 }
 
@@ -494,14 +496,14 @@ func (o *Grapher) newNoopNode(name string, nodeArgs map[string]interface{}) (*No
 	if err != nil {
 		return nil, fmt.Errorf("Error making id for no-op node %s: %s", name, err)
 	}
-	rj, err := o.JobFactory.Make("noop", id)
+	jid := job.NewId("noop", "noop", id)
+	rj, err := o.JobFactory.Make(jid)
 	if err != nil {
 		switch err {
 		case job.ErrUnknownJobType:
 			// No custom noop job, use built-in default
 			rj = &noopJob{
-				jobType: "noop",
-				jobName: id,
+				id: jid,
 			}
 		default:
 			return nil, fmt.Errorf("Error making no-op node %s: %s", name, err)
@@ -537,7 +539,7 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 	}
 
 	// Create the job
-	rj, err := o.JobFactory.Make(j.NodeType, id)
+	rj, err := o.JobFactory.Make(job.NewId(j.NodeType, j.Name, id))
 	if err != nil {
 		return nil, fmt.Errorf("Error making '%s %s' job: %s", j.NodeType, j.Name, err)
 	}

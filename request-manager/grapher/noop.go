@@ -1,3 +1,5 @@
+// Copyright 2017-2018, Square, Inc.
+
 package grapher
 
 import (
@@ -15,8 +17,7 @@ var noopSpec = &NodeSpec{
 // noopJob is a no-op job that does nothing and always returns success. It's used
 // as the default for sequence start and end.
 type noopJob struct {
-	jobType string
-	jobName string
+	id job.Id
 }
 
 func (j *noopJob) Create(jobArgs map[string]interface{}) error {
@@ -50,10 +51,6 @@ func (j *noopJob) Stop() error {
 	return nil
 }
 
-func (j *noopJob) Type() string {
-	return j.jobType
-}
-
-func (j *noopJob) Name() string {
-	return j.jobName
+func (j *noopJob) Id() job.Id {
+	return j.id
 }

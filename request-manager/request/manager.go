@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package request provides an interface for managing requests.
 package request
@@ -106,28 +106,28 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 		Jobs:          map[string]proto.Job{},
 		AdjacencyList: g.Edges,
 	}
-	for name, node := range g.Vertices {
+	for jobId, node := range g.Vertices {
 		bytes, err := node.Datum.Serialize()
 		if err != nil {
 			return req, err
 		}
 		job := proto.Job{
-			Type:      node.Datum.Type(),
-			Id:        node.Datum.Name(),
-			Name:      node.Name,
+			Type:      node.Datum.Id().Type,
+			Id:        node.Datum.Id().Id,
+			Name:      node.Datum.Id().Name,
 			Bytes:     bytes,
 			Args:      node.Args,
 			Retry:     node.Retry,
 			RetryWait: node.RetryWait,
 		}
-		jc.Jobs[name] = job
+		jc.Jobs[jobId] = job
 	}
 	jc.State = proto.STATE_PENDING
 	jc.RequestId = reqId
 	req.JobChain = jc
 	req.TotalJobs = len(jc.Jobs)
 
-	// Marshal the the job chain and request params.
+	// Marshal the job chain and request params.
 	rawJc, err := json.Marshal(req.JobChain)
 	if err != nil {
 		return req, fmt.Errorf("cannot marshal job chain: %s", err)

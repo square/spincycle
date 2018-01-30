@@ -1,7 +1,11 @@
+// Copyright 2017-2018, Square, Inc.
+
 package grapher
 
 import (
 	"fmt"
+
+	"github.com/square/spincycle/job"
 )
 
 // Graph represents a graph. It represents a graph via
@@ -23,7 +27,7 @@ type Graph struct {
 // should be retried on error. Next defines all the out edges
 // from Node, and Prev defines all the in edges to Node.
 type Node struct {
-	Datum     Payload                // Data stored at this Node
+	Datum     job.Job                // Data stored at this Node
 	Next      map[string]*Node       // out edges ( node id -> Node )
 	Prev      map[string]*Node       // in edges ( node id -> Node )
 	Name      string                 // the name of the node
@@ -32,24 +36,9 @@ type Node struct {
 	RetryWait uint                   // the time, in seconds, to sleep between retries
 }
 
-// Payload defines the interface of structs that can be
-// stored within Graphs. The Create() function will
-// be used by Grapher to actually create the Payload.
-type Payload interface {
-	Create(map[string]interface{}) error
-	Serialize() ([]byte, error)
-	Type() string
-	Name() string
-}
-
-// Finds a node (identified by name) in g. Assumes that g contains no cycles
-func (g *Graph) FindNode(name string) *Node {
-	return findNodeAfterDFS(name, g.First)
-}
-
 // returns true iff the graph has at least one cycle in it
 func (g *Graph) HasCycles() bool {
-	seen := map[string]*Node{g.First.Datum.Name(): g.First}
+	seen := map[string]*Node{g.First.Datum.Id().Id: g.First}
 	return hasCyclesDFS(seen, g.First)
 }
 
@@ -99,16 +88,6 @@ func (g *Graph) IsValidGraph() bool {
 	return !g.HasCycles() && g.IsConnected() && g.AdjacencyListMatchesLL()
 }
 
-// Returns true iff every node in nodes is in g
-func (g *Graph) ContainsNodes(nodes []string) bool {
-	for _, node := range nodes {
-		if g.FindNode(node) == nil {
-			return false
-		}
-	}
-	return true
-}
-
 // Prints out g in DOT graph format.
 // To use the output, please refer to the graphviz specs found at: http://www.graphviz.org/
 func (g *Graph) PrintDot() {
@@ -119,7 +98,7 @@ func (g *Graph) PrintDot() {
 	fmt.Printf("\tfontsize=22\n")
 	for vertexName, vertex := range g.Vertices {
 		fmt.Printf("\tnode [style=filled,color=\"%s\",shape=box]\n", "#86cedf")
-		fmt.Printf("\t\"%s\" [label=\"%s :\\n ", vertexName, vertex.Datum.Name())
+		fmt.Printf("\t\"%s\" [label=\"%s :\\n ", vertexName, vertex.Datum.Id().Id)
 		for k, v := range vertex.Args {
 			fmt.Printf(" %s : %s \\n ", k, v)
 		}
@@ -192,16 +171,16 @@ func (g *Graph) insertComponentBetween(component *Graph, prev *Node, next *Node)
 	}
 
 	// have component point to prev and next nodes
-	component.First.Prev[prev.Datum.Name()] = prev
-	component.Last.Next[next.Datum.Name()] = next
+	component.First.Prev[prev.Datum.Id().Id] = prev
+	component.Last.Next[next.Datum.Id().Id] = next
 
 	// have prev and next nodes point to component
-	prev.Next[component.First.Datum.Name()] = component.First
-	next.Prev[component.Last.Datum.Name()] = component.Last
+	prev.Next[component.First.Datum.Id().Id] = component.First
+	next.Prev[component.Last.Datum.Id().Id] = component.Last
 
 	// Remove edges between prev and next if it exists
-	delete(prev.Next, next.Datum.Name())
-	delete(next.Prev, prev.Datum.Name())
+	delete(prev.Next, next.Datum.Id().Id)
+	delete(next.Prev, prev.Datum.Id().Id)
 
 	// update vertices list
 
@@ -216,19 +195,19 @@ func (g *Graph) insertComponentBetween(component *Graph, prev *Node, next *Node)
 	}
 
 	// for the edges of the previous node, add the start node of this component
-	g.Edges[prev.Datum.Name()] = append(g.Edges[prev.Datum.Name()], component.First.Datum.Name())
+	g.Edges[prev.Datum.Id().Id] = append(g.Edges[prev.Datum.Id().Id], component.First.Datum.Id().Id)
 
 	// for the edges of the last node of this component, add the next node
-	if find(g.Edges[component.Last.Datum.Name()], next.Datum.Name()) < 0 {
-		g.Edges[component.Last.Datum.Name()] = append(g.Edges[component.Last.Datum.Name()], next.Datum.Name())
+	if find(g.Edges[component.Last.Datum.Id().Id], next.Datum.Id().Id) < 0 {
+		g.Edges[component.Last.Datum.Id().Id] = append(g.Edges[component.Last.Datum.Id().Id], next.Datum.Id().Id)
 	}
 
 	// Remove all occurences next from the adjacency list of prev
-	i := find(g.Edges[prev.Datum.Name()], next.Datum.Name())
+	i := find(g.Edges[prev.Datum.Id().Id], next.Datum.Id().Id)
 	for i >= 0 {
-		g.Edges[prev.Datum.Name()][i] = g.Edges[prev.Datum.Name()][len(g.Edges[prev.Datum.Name()])-1]
-		g.Edges[prev.Datum.Name()] = g.Edges[prev.Datum.Name()][:len(g.Edges[prev.Datum.Name()])-1]
-		i = find(g.Edges[prev.Datum.Name()], next.Datum.Name())
+		g.Edges[prev.Datum.Id().Id][i] = g.Edges[prev.Datum.Id().Id][len(g.Edges[prev.Datum.Id().Id])-1]
+		g.Edges[prev.Datum.Id().Id] = g.Edges[prev.Datum.Id().Id][:len(g.Edges[prev.Datum.Id().Id])-1]
+		i = find(g.Edges[prev.Datum.Id().Id], next.Datum.Id().Id)
 	}
 
 	// verify resulting graph is ok
@@ -264,7 +243,7 @@ func (g *Graph) createAdjacencyList() (map[string][]string, map[string]*Node) {
 	for name, node := range n.Next {
 		frontier[name] = node
 	}
-	seen[n.Datum.Name()] = n
+	seen[n.Datum.Id().Id] = n
 
 	// Search while the frontier set is non-empty
 	for len(frontier) > 0 {
@@ -302,39 +281,18 @@ func (g *Graph) createAdjacencyList() (map[string][]string, map[string]*Node) {
 	return edges, seen
 }
 
-// find node (identified by name) that appears after n using DFS.
-// Precondition: graph has no cycles.
-func findNodeAfterDFS(name string, n *Node) *Node {
-	if n == nil {
-		return nil
-	}
-	if n.Datum.Name() == name {
-		return n
-	}
-	if n.Next == nil || len(n.Next) == 0 {
-		return nil
-	}
-	for _, next := range n.Next {
-		found := findNodeAfterDFS(name, next)
-		if found != nil {
-			return found
-		}
-	}
-	return nil
-}
-
 // Determines if a graph has cycles, using dfs
 // precondition: start node is already in seen list
 func hasCyclesDFS(seen map[string]*Node, start *Node) bool {
 	for _, next := range start.Next {
 
 		// If the next node has already been seen, return true
-		if _, ok := seen[next.Datum.Name()]; ok {
+		if _, ok := seen[next.Datum.Id().Id]; ok {
 			return true
 		}
 
 		// Add next node to seen list
-		seen[next.Datum.Name()] = next
+		seen[next.Datum.Id().Id] = next
 
 		// Continue searching after next node
 		if hasCyclesDFS(seen, next) {
@@ -342,7 +300,7 @@ func hasCyclesDFS(seen map[string]*Node, start *Node) bool {
 		}
 
 		// Remove next node from seen list
-		delete(seen, next.Datum.Name())
+		delete(seen, next.Datum.Id().Id)
 	}
 	return false
 }

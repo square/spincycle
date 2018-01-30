@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package example provides an example job and job factory. The job type is
 // "shell-command", and the factory only build this job type. By default, this
@@ -26,12 +26,12 @@ type factory struct {
 // Make makes a job of the given type, with the given name. This factory only
 // makes "shell-command" type jobs. If jobType is any other value, a job.ErrUnknownJobType
 // error is returned.
-func (f factory) Make(jobType, jobName string) (job.Job, error) {
-	switch jobType {
+func (f factory) Make(jid job.Id) (job.Job, error) {
+	switch jid.Type {
 	case "noop":
-		return NewNop(jobType, jobName), nil
+		return NewNop(jid), nil
 	case "shell-command":
-		return NewShellCommand(jobName), nil
+		return NewShellCommand(jid), nil
 	}
 	return nil, job.ErrUnknownJobType
 }
@@ -47,16 +47,14 @@ type ShellCommand struct {
 	*sync.RWMutex
 
 	// Meta
-	jobName string
-	jobType string
+	id job.Id
 }
 
 // NewShellCommand instantiates a new ShellCommand job. This should only be called
 // by the Factory. jobName must be unique within a job chain.
-func NewShellCommand(jobName string) *ShellCommand {
+func NewShellCommand(jid job.Id) *ShellCommand {
 	return &ShellCommand{
-		jobName: jobName,
-		jobType: "shell-command",
+		id:      jid,
 		RWMutex: &sync.RWMutex{},
 	}
 }
@@ -142,13 +140,8 @@ func (j *ShellCommand) Status() string {
 }
 
 // Name is a job.Job interface method.
-func (j *ShellCommand) Name() string {
-	return j.jobName
-}
-
-// Type is a job.Job interface method.
-func (j *ShellCommand) Type() string {
-	return j.jobType
+func (j *ShellCommand) Id() job.Id {
+	return j.id
 }
 
 // setStatus is a private method, not a job.Job interface method.
@@ -161,14 +154,12 @@ func (j *ShellCommand) setStatus(msg string) {
 // Nop is a no-op job that does nothing and always returns success. It's used in
 // place of jobs that we want to include in a job chain but haven't implemented yet.
 type Nop struct {
-	jobType string
-	jobName string
+	id job.Id
 }
 
-func NewNop(jobType, jobName string) *Nop {
+func NewNop(jid job.Id) *Nop {
 	n := &Nop{
-		jobType: jobType,
-		jobName: jobName,
+		id: jid,
 	}
 	return n
 }
@@ -204,10 +195,6 @@ func (j *Nop) Stop() error {
 	return nil
 }
 
-func (j *Nop) Type() string {
-	return j.jobType
-}
-
-func (j *Nop) Name() string {
-	return j.jobName
+func (j *Nop) Id() job.Id {
+	return j.id
 }

@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package request_test
 
@@ -10,6 +10,7 @@ import (
 	myconn "github.com/go-mysql/conn"
 	"github.com/go-test/deep"
 
+	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
@@ -62,8 +63,7 @@ func setup(t *testing.T, dataFile string) string {
 		for i, c := range []string{"a", "b", "c"} {
 			jobType := c + "JobType"
 			testJobFactory.MockJobs[jobType] = &mock.Job{
-				NameResp: fmt.Sprintf("%s@%d", c, i),
-				TypeResp: jobType,
+				IdResp: job.NewId(jobType, c, fmt.Sprintf("id%d", i)),
 			}
 		}
 		testJobFactory.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
