@@ -2,9 +2,11 @@
 
 // Package example provides an example job and job factory. The job type is
 // "shell-command", and the factory only build this job type. By default, this
+
+///
 // factory is imported in ../external/factory.go, which allows Spin Cycle to be
 // build without external jobs.
-package example
+package jobs
 
 import (
 	"bytes"

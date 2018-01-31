@@ -146,10 +146,3 @@ type Return struct {
 	Stdout string // stdout output
 	Stderr string // stderr output
 }
-
-// A Repo stores jobs, abstracting away the actual storage method.
-type Repo interface {
-	Add(Job) error
-	Remove(Job) error
-	Get(jobName string) (Job, error)
-}

@@ -13,10 +13,6 @@ var (
 	// make the requested job type.
 	ErrUnknownJobType = errors.New("unknown job type")
 
-	// ErrJobNotFound is returned by a job.Repo when the repo doesn't contain
-	// the requested job by name.
-	ErrJobNotFound = errors.New("job not found")
-
 	// ErrRunTimeout should be returned by a job when it times out.
 	ErrRunTimeout = errors.New("run timeout")
 

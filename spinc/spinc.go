@@ -5,6 +5,7 @@ package spinc
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 
 	rm "github.com/square/spincycle/request-manager"
@@ -208,7 +209,13 @@ func makeRMC(ctx *app.Context) (rm.Client, error) {
 	if ctx.Options.Debug {
 		app.Debug("addr: %s", ctx.Options.Addr)
 	}
-	httpClient, err := ctx.Factories.HTTPClient.Make(*ctx)
+	var httpClient *http.Client
+	var err error
+	if ctx.Factories.HTTPClient != nil {
+		httpClient, err = ctx.Factories.HTTPClient.Make(*ctx)
+	} else {
+		httpClient = &http.Client{}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("Error making http.Client: %s", err)
 	}

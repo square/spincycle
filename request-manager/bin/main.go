@@ -17,7 +17,7 @@ import (
 
 	"github.com/square/spincycle/config"
 	jr "github.com/square/spincycle/job-runner"
-	"github.com/square/spincycle/job/external"
+	"github.com/square/spincycle/jobs"
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/request-manager/id"
@@ -32,13 +32,17 @@ func main() {
 	// Config
 	// //////////////////////////////////////////////////////////////////////
 	var cfgFile string
-	switch os.Getenv("ENVIRONMENT") {
-	case "staging":
-		cfgFile = "config/staging.yaml"
-	case "production":
-		cfgFile = "config/staging.yaml"
-	default:
-		cfgFile = "config/development.yaml"
+	if len(os.Args) > 1 {
+		cfgFile = os.Args[1]
+	} else {
+		switch os.Getenv("ENVIRONMENT") {
+		case "staging":
+			cfgFile = "config/staging.yaml"
+		case "production":
+			cfgFile = "config/staging.yaml"
+		default:
+			cfgFile = "config/development.yaml"
+		}
 	}
 	var cfg config.RequestManager
 	err := config.Load(cfgFile, &cfg)
@@ -65,7 +69,7 @@ func main() {
 		}
 	}
 	idf := id.NewGeneratorFactory(4, 100) // generate 4-character ids for jobs
-	grf := grapher.NewGrapherFactory(external.JobFactory, &allGrapherCfgs, idf)
+	grf := grapher.NewGrapherFactory(jobs.Factory, &allGrapherCfgs, idf)
 
 	// //////////////////////////////////////////////////////////////////////
 	// Job Runner Client
