@@ -16,7 +16,7 @@ import (
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job-runner/status"
-	"github.com/square/spincycle/job/external"
+	"github.com/square/spincycle/jobs"
 	rm "github.com/square/spincycle/request-manager"
 	"github.com/square/spincycle/util"
 )
@@ -26,13 +26,17 @@ func main() {
 	// Config
 	// //////////////////////////////////////////////////////////////////////
 	var cfgFile string
-	switch os.Getenv("ENVIRONMENT") {
-	case "staging":
-		cfgFile = "config/staging.yaml"
-	case "production":
-		cfgFile = "config/staging.yaml"
-	default:
-		cfgFile = "config/development.yaml"
+	if len(os.Args) > 1 {
+		cfgFile = os.Args[1]
+	} else {
+		switch os.Getenv("ENVIRONMENT") {
+		case "staging":
+			cfgFile = "config/staging.yaml"
+		case "production":
+			cfgFile = "config/staging.yaml"
+		default:
+			cfgFile = "config/development.yaml"
+		}
 	}
 	var cfg config.JobRunner
 	err := config.Load(cfgFile, &cfg)
@@ -83,7 +87,7 @@ func main() {
 	// //////////////////////////////////////////////////////////////////////
 	// Various factories, repos, and managers
 	// //////////////////////////////////////////////////////////////////////
-	rf := runner.NewFactory(external.JobFactory, rmClient)
+	rf := runner.NewFactory(jobs.Factory, rmClient)
 	trRepo := cmap.New()
 	trFactory := chain.NewTraverserFactory(chainRepo, rf, rmClient)
 	stat := status.NewManager(chainRepo)

@@ -1,0 +1,276 @@
+#!/usr/bin/env bash
+
+set -eu
+
+# ###########################################################################
+# Parse and validate command line
+# ###########################################################################
+
+usage() {
+  echo "Usage: $0 [options]" 1>&2
+  echo 1>&2
+  echo "Run Spin Cycle locally in a sandbox. See README for details." 1>&2
+  echo 1>&2
+  echo "Options": 1>&2
+  echo "  --build     Rebuild binaries (always build if nonexistent)" 1>&2
+  echo "  --jr-port   Job Runner port       (default: 9999)"          1>&2
+  echo "  --rm-port   Request Manager port  (default: 8888)"          1>&2
+  echo "  --run-jr    Run Job Runner        (default: yes)"           1>&2
+  echo "  --run-rm    Run Request Manager   (default: yes)"           1>&2
+  echo "  --redis     Use Redis for Job Runner job chain store"       1>&2
+  echo "  --truncate  Truncate MySQL and Redis data"                  1>&2
+}
+
+err() {
+  echo "$*" >&2
+  exit 1
+}
+
+bool() {
+  local val="$(echo $1 | tr '[:upper:]' '[:lower:]')"
+  if [[ "$val" = "yes" || "$val" = "true" ]]; then
+    echo "yes"
+  elif [[ "$val" = "no" || "$val" = "false" ]]; then
+    echo ""
+  else
+    err "Invalid option value: $val. Valid values: yes, no, true, false"
+  fi
+}
+
+# Env vars corresponding to options. Options override env vars, so if called
+# like "JR_PORT=5000 run-spincycle --jr-port 9000" then JR_PORT=9000.
+BUILD="${BUILD:-""}"
+JR_PORT="${JR_PORT:-"9999"}"
+RM_PORT="${RM_PORT:-"8888"}"
+RUN_JR="${RUN_JR:-"yes"}"
+RUN_RM="${RUN_RM:-"yes"}"
+REDIS="${REDIS:-""}"
+TRUNCATE="${TRUNCATE:-""}"
+
+while [[ $# > 0 ]]; do
+  opt="$1"
+  case "$opt" in
+    --build)
+      BUILD="yes"
+      shift 1
+      ;;
+    --run-jr)
+      [[ $# -le 1 ]] && err "--run-jr requires a value: true|yes|false|no"
+      RUN_JR="$(bool $2)"
+      shift 2
+      ;;
+    --run-rm)
+      [[ $# -le 2 ]] && err "--run-rm requires a value: true|yes|false|no"
+      RUN_RM="$(bool $2)"
+      shift 2
+      ;;
+    --jr-port)
+      [[ $# -le 2 ]] && err "--jr-port requires a value"
+      JR_PORT="$2"
+      shift 2
+      ;;
+    --rm-port)
+      [[ $# -le 2 ]] && err "--rm-port requires a value"
+      RM_PORT="$2"
+      shift 2
+      ;;
+    --truncate)
+      TRUNCATE="yes"
+      shift 1
+      ;;
+    -h|-?|-help|--rlowe|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $opt" 1>&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+# ###########################################################################
+# Env vars/globals
+# ###########################################################################
+
+REPO_ROOT_DIR="$( cd "$( dirname "$0" )"/.. && pwd )"
+if [[ ! -d "$REPO_ROOT_DIR/dev" ]] || [[ ! -d "$REPO_ROOT_DIR/spinc" ]] || [[ ! -d "$REPO_ROOT_DIR/request-manager" ]] || [[ ! -d "$REPO_ROOT_DIR/job-runner" ]]; then
+  err "Auto-detected REPO_ROOT_DIR $REPO_ROOT_DIR does not contain dev/, spinc/, request-manager/, or job-runnner/"
+fi
+
+DEV_DIR="$REPO_ROOT_DIR/dev"
+
+SANDBOX_DIR="${SANDBOX_DIR:-"$REPO_ROOT_DIR/dev/sandbox"}"
+[[ ! -d "$SANDBOX_DIR" ]] && mkdir "$SANDBOX_DIR"
+
+RM_BIN="$SANDBOX_DIR/request-manager"
+RM_CONFIG="$SANDBOX_DIR/rm-config.yaml"
+RM_LOG="$SANDBOX_DIR/rm.log"
+RM_PID=""
+
+JR_BIN="$SANDBOX_DIR/job-runner"
+JR_CONFIG="$SANDBOX_DIR/jr-config.yaml"
+JR_LOG="$SANDBOX_DIR/jr.log"
+JR_PID=""
+
+SPINC_BIN="$SANDBOX_DIR/spinc"
+
+MYCNF="$SANDBOX_DIR/my.cnf"
+MYSQL="$(which mysql)"
+[[ -z "$MYSQL" ]] && err "mysql command is not in PATH, specify by setting env var MYSQL"
+
+# ###########################################################################
+# Functions
+# ###########################################################################
+
+copy_config_files() {
+  if [[ ! -f "$RM_CONFIG" ]]; then
+    sed -e "s/8888/$RM_PORT/" -e "s/^#.*//g" "$DEV_DIR/rm-config.yaml" | cat -s > "$RM_CONFIG"
+    echo "Wrote Request Manager config: $RM_CONFIG"
+  else
+    echo "Request Manager config exists, not writing"
+  fi
+
+  if [[ ! -f "$JR_CONFIG" ]]; then
+    local config="$DEV_DIR/jr-mem-config.yaml"
+    [[ "$REDIS" ]] && config="$DEV_DIR/jr-redis-config.yaml"
+    sed -e "s/9999/$JR_PORT/" -e "s/^#.*//g" "$config" | cat -s > "$JR_CONFIG"
+    echo "Wrote Job Runner config: $JR_CONFIG"
+  else
+    echo "Job Runner config exists, not writing"
+  fi
+}
+
+ping_mysql() {
+  DB="$(grep dsn $RM_CONFIG | cut -d'/' -f2 | sed -e 's/"//g')"
+  NET="$(grep dsn $RM_CONFIG | cut -d'@' -f2 | cut -d'(' -f1)"
+  USER="$(grep dsn $RM_CONFIG | cut -d'@' -f1 | sed -e 's/.*"//' | cut -d':' -f1)"
+  PASS="$(grep dsn $RM_CONFIG | cut -d'@' -f1 | sed -e 's/.*"//' | cut -d':' -f2)"
+  ADDR="$(grep dsn $RM_CONFIG | cut -d'(' -f2 | cut -d')' -f1 | cut -d':' -f1)"
+  PORT="$(grep dsn $RM_CONFIG | cut -d'(' -f2 | cut -d')' -f1 | cut -d':' -f2)"
+
+  [[ -z "$DB" ]]    && DB="spincycle_dev"
+  [[ -z "$PORT" ]]  && PORT="3306"
+
+  echo "[mysql]"         > "$MYCNF"
+  echo "user=$USER"     >> "$MYCNF"
+  echo "password=$PASS" >> "$MYCNF"
+  if [[ "$NET" = "tcp" ]]; then
+    echo "host=$ADDR"   >> "$MYCNF"
+    echo "port=$PORT"   >> "$MYCNF"
+  elif [[ "$NET" = "unix" ]]; then
+    echo "socket=$ADDR" >> "$MYCNF"
+  fi
+
+  echo "MySQL"
+  echo " mysql: $MYSQL"
+  echo "   net: $NET"
+  echo "  addr: $ADDR"
+  echo "  port: $PORT"
+  echo "  user: $USER"
+  if [[ "$PASS" ]]; then
+    echo "  pass: (set but hidden)"
+  else
+    echo "  pass: (empty)"
+  fi
+  echo "    db: $DB"
+  echo "Testing MySQL connection..."
+  DB_EXISTS="$($MYSQL --defaults-file="$MYCNF" -sse "SHOW DATABASES LIKE '$DB'")"
+}
+
+create_db() {
+  if [[ -n "$DB_EXISTS" && -z "$TRUNCATE" ]]; then
+    echo "Database $DB exists, not creating or truncating"
+    return
+  fi
+
+  if [[ -z "$DB_EXISTS" ]]; then
+    echo "Creating database $DB..."
+  else
+    echo "Truncating database $DB..."
+  fi
+  $MYSQL --defaults-file="$MYCNF" -e "DROP DATABASE IF EXISTS \`$DB\`" >/dev/null
+  $MYSQL --defaults-file="$MYCNF" -e "CREATE DATABASE \`$DB\`"    >/dev/null
+  $MYSQL --defaults-file="$MYCNF" -D "$DB" < "$REPO_ROOT_DIR/request-manager/resources/request_manager_schema.sql" > /dev/null
+  echo "Database $DB is ready"
+}
+
+build() {
+  if [[ ! -x "$RM_BIN" ]] || [[ "$BUILD" ]]; then
+    echo "Building request manager..."
+    cd "$REPO_ROOT_DIR/request-manager/bin"
+    go build -o "$RM_BIN"
+  else
+    echo "Not building request manager (specify --build to rebuild)"
+  fi
+
+  if [[ ! -x "$JR_BIN" ]] || [[ "$BUILD" ]]; then
+    echo "Building job runner..."
+    cd "$REPO_ROOT_DIR/job-runner/bin"
+    go build -o "$JR_BIN"
+  else
+    echo "Not building job runner (specify --build to rebuild)"
+  fi
+  
+  if [[ ! -x "$SPINC_BIN" ]] || [[ "$BUILD" ]]; then
+    echo "Building spinc..."
+    cd "$REPO_ROOT_DIR/spinc/bin"
+    go build -o "$SPINC_BIN"
+  else
+    echo "Not building spinc (specify --build to rebuild)"
+  fi
+}
+
+run() {
+  cd "$SANDBOX_DIR"
+  if [[ "$RUN_RM" ]]; then
+    (
+      "$RM_BIN" "$RM_CONFIG" > "$RM_LOG" 2>&1
+    )&
+    RM_PID=$!
+    echo "Started Request Manager (PID: $RM_PID)"
+  fi
+
+  if [[ "$RUN_JR" ]]; then
+    (
+      "$JR_BIN" "$JR_CONFIG" > "$JR_LOG" 2>&1
+    )&
+    JR_PID=$!
+    echo "Started Job Runner (PID: $JR_PID)"
+  fi
+
+  sleep 1
+  "$SPINC_BIN" --addr "http://127.0.0.1:8888" help >/dev/null
+
+  echo
+  echo "#"
+  echo "# OK, Spin Cycle is running"
+  echo "#"
+
+  tail -f "$RM_LOG" "$JR_LOG"
+}
+
+cleanup() {
+  echo
+  [[ "$RM_PID" ]] && kill $RM_PID && echo "Stopped request manager ($RM_PID)"
+  [[ "$JR_PID" ]] && kill $JR_PID && echo "Stopped job runner ($JR_PID)"
+  echo "Waiting for request manager ($RM_PID) and job runner ($JR_PID) to terminate..."
+  wait
+}
+
+# ###########################################################################
+# Run it
+# ###########################################################################
+
+copy_config_files
+
+ping_mysql
+create_db
+
+build
+
+trap cleanup TERM INT
+run
+
+# Script keeps running tail -f. The trap will catch ctrl-c and clean up.
