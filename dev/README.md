@@ -4,9 +4,10 @@ The `run-spincycle` script configures and runs a Spin Cycle in a sandbox (all fi
 
 Presuming,
 
-1. All Go package dependencies are installed
-2. MySQL is running on localhost:3306 with root user having no password
-3. Have not run the script before
+1. All Go package dependencies are installed (not described here)
+1. The `jobs` symlink points to the jobs repo you want (default: `dev/jobs`)
+1. MySQL is running on localhost:3306 with root user having no password
+1. Have not run the script before
 
 then running `run-spincycle` should "Just Work" and "Do the Right Thing", like:
 
@@ -72,3 +73,13 @@ Those values are the defaults. If not correct, the script will fail to connect o
 The user needs full privileges on the database.
 
 If the database does not exist, it's created. Or, specify `--truncate` to drop and create the database.
+
+## Troubleshoot
+
+`run-spincycle` is just a Bash script, no magic. If there's a problem, run with `/bin/bash -x` and debug. Also good to start clean:
+
+```
+killall request-manager ; killall job-runner
+rm -rf dev/sandbox
+mysql -e "DROP DATABASE IF EXISTS spincycle_dev"
+```

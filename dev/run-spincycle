@@ -245,7 +245,9 @@ run() {
 
   echo
   echo "#"
-  echo "# OK, Spin Cycle is running"
+  echo "# OK, Spin Cycle is running on port $RM_PORT"
+  echo "#"
+  echo "# $SANDBOX_DIR/spinc --addr http://127.0.0.1:$RM_PORT help"
   echo "#"
 
   tail -f "$RM_LOG" "$JR_LOG"
