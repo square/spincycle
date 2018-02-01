@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package api provides controllers for each api endpoint. Controllers are
 // "dumb wiring"; there is little to no application logic in this package.
