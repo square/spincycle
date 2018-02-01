@@ -12,9 +12,10 @@ import (
 	"os"
 
 	"github.com/labstack/echo"
-	"github.com/labstack/echo/engine"
-	"github.com/labstack/echo/engine/standard"
+	"github.com/labstack/echo/middleware"
 	"github.com/orcaman/concurrent-map"
+
+	"github.com/square/spincycle/job-runner/app"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/job-runner/status"
 	"github.com/square/spincycle/proto"
@@ -33,6 +34,7 @@ var (
 
 // api provides controllers for endpoints it registers with a router.
 type API struct {
+	appCtx           app.Context
 	traverserFactory chain.TraverserFactory
 	traverserRepo    cmap.ConcurrentMap
 	stat             status.Manager
@@ -42,8 +44,9 @@ type API struct {
 
 // NewAPI cretes a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
-func NewAPI(traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager) *API {
+func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager) *API {
 	api := &API{
+		appCtx:           appCtx,
 		traverserFactory: traverserFactory,
 		traverserRepo:    traverserRepo,
 		stat:             stat,
@@ -63,20 +66,58 @@ func NewAPI(traverserFactory chain.TraverserFactory, traverserRepo cmap.Concurre
 
 	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler)
 
+	// //////////////////////////////////////////////////////////////////////
+	// Middleware and hooks
+	// //////////////////////////////////////////////////////////////////////
+	api.echo.Use(middleware.Recover())
+	api.echo.Use(middleware.Logger())
+
+	// Auth hook
+	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if appCtx.Hooks.Auth == nil {
+				return next(c) // no auth
+			}
+			ok, err := appCtx.Hooks.Auth(c.Request())
+			if err != nil {
+				return err
+			}
+			if !ok {
+				//c.Response().Header().Set(echo.HeaderWWWAuthenticate, basic+" realm="+realm)
+				return echo.ErrUnauthorized // 401
+			}
+			return next(c) // auth OK
+		}
+	}))
+
+	// SetUsername hook
+	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if appCtx.Hooks.SetUsername == nil {
+				return next(c) // no auth
+			}
+			username, err := appCtx.Hooks.SetUsername(c.Request())
+			if err != nil {
+				return err
+			}
+			c.Set("username", username)
+			return next(c)
+		}
+	}))
+
 	return api
 }
 
-// ServeHTTP allows the API to statisfy the http.HandlerFunc interface.
-func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	es := standard.WithConfig(engine.Config{})
-	es.SetHandler(api.echo)
-	es.ServeHTTP(w, r)
+func (api *API) Run() error {
+	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
+		return api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
+	} else {
+		return api.echo.Start(api.appCtx.Config.Server.ListenAddress)
+	}
 }
 
-// Use adds middleware to the echo web server in the API. See
-// https://echo.labstack.com/middleware for more details.
-func (api *API) Use(middleware ...echo.MiddlewareFunc) {
-	api.echo.Use(middleware...)
+func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	api.echo.ServeHTTP(w, r)
 }
 
 // ============================== CONTROLLERS ============================== //
