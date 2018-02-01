@@ -16,17 +16,35 @@ stack.
 
 There are no dependencies on external binaries, so you can easily integrate it in automated build processes.
 
-## 1.0.0 incompatiliby notice
+## Changelog
+
+### 2.3.1
+
+Lua changes: added `cjson` library, and `redis.sha1hex()`.
+
+### 2.3
+
+Added the `EVAL`, `EVALSHA`, and `SCRIPT` commands. Uses a pure Go Lua interpreter. Please open an issue if there are problems with any Lua code.
+
+### 2.2
+
+Introduced `StartAddr()`.
+
+### 2.1
+
+Internal cleanups. No changes in functionality.
+
+### 2.0
 
 2.0.0 improves TTLs to be `time.Duration` values. `.Expire()` is removed and
 replaced by `.TTL()`, which returns the TTL as a `time.Duration`.
 This should be the change needed to upgrade:
 
-1.0.0:
+1.0:
 
     m.Expire() == 4
    
-2.0.0:
+2.0:
 
     m.TTL() == 4 * time.Second
 
@@ -164,6 +182,12 @@ Implemented commands:
    - ZSCORE
    - ZUNIONSTORE
    - ZSCAN
+ - Scripting
+   - EVAL
+   - EVALSHA
+   - SCRIPT LOAD
+   - SCRIPT EXISTS
+   - SCRIPT FLUSH
 
 
 Since miniredis is intended to be used in unittests TTLs don't decrease
@@ -196,18 +220,18 @@ func TestSomething(t *testing.T) {
 
 	// Optionally check values in redis...
 	if got, err := s.Get("foo"); err != nil || got != "bar" {
-        t.Error("'foo' has the wrong value")
-    }
-    // ... or use a helper for that:
-    s.CheckGet(t, "foo", "bar")
+		t.Error("'foo' has the wrong value")
+	}
+	// ... or use a helper for that:
+	s.CheckGet(t, "foo", "bar")
 
-    // TTL and expiration:
-    s.Set("foo", "bar")
-    s.SetTTL("foo", 10 * time.Second)
-    s.FastForward(11 * time.Second)
-    if s.Exists("foo") {
-        t.Fatal("'foo' should not have existed anymore")
-    }
+	// TTL and expiration:
+	s.Set("foo", "bar")
+	s.SetTTL("foo", 10*time.Second)
+	s.FastForward(11 * time.Second)
+	if s.Exists("foo") {
+		t.Fatal("'foo' should not have existed anymore")
+	}
 }
 ```
 
@@ -243,10 +267,9 @@ Commands which will probably not be implemented:
     - ~~PUNSUBSCRIBE~~
     - ~~SUBSCRIBE~~
     - ~~UNSUBSCRIBE~~
- - Scripting (all)
-    - ~~EVAL~~
-    - ~~EVALSHA~~
-    - ~~SCRIPT *~~
+ - Scripting
+    - ~~SCRIPT DEBUG~~
+    - ~~SCRIPT KILL~~
  - Server
     - ~~BGSAVE~~
     - ~~BGWRITEAOF~~
@@ -269,7 +292,7 @@ Commands which will probably not be implemented:
 ## &c.
 
 See https://github.com/alicebob/miniredis_vs_redis for tests comparing
-miniredis against the real thing. Tests are run against Redis 3.2.5 (Debian).
+miniredis against the real thing. Tests are run against Redis 4.0.6 (Debian).
 
 
 [![Build Status](https://travis-ci.org/alicebob/miniredis.svg?branch=master)](https://travis-ci.org/alicebob/miniredis) 

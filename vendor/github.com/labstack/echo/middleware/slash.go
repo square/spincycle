@@ -7,9 +7,19 @@ import (
 type (
 	// TrailingSlashConfig defines the config for TrailingSlash middleware.
 	TrailingSlashConfig struct {
+		// Skipper defines a function to skip middleware.
+		Skipper Skipper
+
 		// Status code to be used when redirecting the request.
 		// Optional, but when provided the request is redirected using this code.
 		RedirectCode int `json:"redirect_code"`
+	}
+)
+
+var (
+	// DefaultTrailingSlashConfig is the default TrailingSlash middleware config.
+	DefaultTrailingSlashConfig = TrailingSlashConfig{
+		Skipper: DefaultSkipper,
 	}
 )
 
@@ -18,18 +28,27 @@ type (
 //
 // Usage `Echo#Pre(AddTrailingSlash())`
 func AddTrailingSlash() echo.MiddlewareFunc {
-	return AddTrailingSlashWithConfig(TrailingSlashConfig{})
+	return AddTrailingSlashWithConfig(DefaultTrailingSlashConfig)
 }
 
-// AddTrailingSlashWithConfig returns a AddTrailingSlash middleware from config.
+// AddTrailingSlashWithConfig returns a AddTrailingSlash middleware with config.
 // See `AddTrailingSlash()`.
 func AddTrailingSlashWithConfig(config TrailingSlashConfig) echo.MiddlewareFunc {
+	// Defaults
+	if config.Skipper == nil {
+		config.Skipper = DefaultTrailingSlashConfig.Skipper
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			if config.Skipper(c) {
+				return next(c)
+			}
+
 			req := c.Request()
-			url := req.URL()
-			path := url.Path()
-			qs := url.QueryString()
+			url := req.URL
+			path := url.Path
+			qs := c.QueryString()
 			if path != "/" && path[len(path)-1] != '/' {
 				path += "/"
 				uri := path
@@ -43,8 +62,8 @@ func AddTrailingSlashWithConfig(config TrailingSlashConfig) echo.MiddlewareFunc 
 				}
 
 				// Forward
-				req.SetURI(uri)
-				url.SetPath(path)
+				req.RequestURI = uri
+				url.Path = path
 			}
 			return next(c)
 		}
@@ -59,15 +78,24 @@ func RemoveTrailingSlash() echo.MiddlewareFunc {
 	return RemoveTrailingSlashWithConfig(TrailingSlashConfig{})
 }
 
-// RemoveTrailingSlashWithConfig returns a RemoveTrailingSlash middleware from config.
+// RemoveTrailingSlashWithConfig returns a RemoveTrailingSlash middleware with config.
 // See `RemoveTrailingSlash()`.
 func RemoveTrailingSlashWithConfig(config TrailingSlashConfig) echo.MiddlewareFunc {
+	// Defaults
+	if config.Skipper == nil {
+		config.Skipper = DefaultTrailingSlashConfig.Skipper
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			if config.Skipper(c) {
+				return next(c)
+			}
+
 			req := c.Request()
-			url := req.URL()
-			path := url.Path()
-			qs := url.QueryString()
+			url := req.URL
+			path := url.Path
+			qs := c.QueryString()
 			l := len(path) - 1
 			if l >= 0 && path != "/" && path[l] == '/' {
 				path = path[:l]
@@ -82,8 +110,8 @@ func RemoveTrailingSlashWithConfig(config TrailingSlashConfig) echo.MiddlewareFu
 				}
 
 				// Forward
-				req.SetURI(uri)
-				url.SetPath(path)
+				req.RequestURI = uri
+				url.Path = path
 			}
 			return next(c)
 		}

@@ -41,7 +41,7 @@ func (m ConcurrentMap) MSet(data map[string]interface{}) {
 }
 
 // Sets the given value under the specified key.
-func (m *ConcurrentMap) Set(key string, value interface{}) {
+func (m ConcurrentMap) Set(key string, value interface{}) {
 	// Get map shard.
 	shard := m.GetShard(key)
 	shard.Lock()
@@ -56,7 +56,7 @@ func (m *ConcurrentMap) Set(key string, value interface{}) {
 type UpsertCb func(exist bool, valueInMap interface{}, newValue interface{}) interface{}
 
 // Insert or Update - updates existing element or inserts a new one using UpsertCb
-func (m *ConcurrentMap) Upsert(key string, value interface{}, cb UpsertCb) (res interface{}) {
+func (m ConcurrentMap) Upsert(key string, value interface{}, cb UpsertCb) (res interface{}) {
 	shard := m.GetShard(key)
 	shard.Lock()
 	v, ok := shard.items[key]
@@ -67,7 +67,7 @@ func (m *ConcurrentMap) Upsert(key string, value interface{}, cb UpsertCb) (res 
 }
 
 // Sets the given value under the specified key if no value was associated with it.
-func (m *ConcurrentMap) SetIfAbsent(key string, value interface{}) bool {
+func (m ConcurrentMap) SetIfAbsent(key string, value interface{}) bool {
 	// Get map shard.
 	shard := m.GetShard(key)
 	shard.Lock()
@@ -103,7 +103,7 @@ func (m ConcurrentMap) Count() int {
 }
 
 // Looks up an item under specified key
-func (m *ConcurrentMap) Has(key string) bool {
+func (m ConcurrentMap) Has(key string) bool {
 	// Get shard
 	shard := m.GetShard(key)
 	shard.RLock()
@@ -114,7 +114,7 @@ func (m *ConcurrentMap) Has(key string) bool {
 }
 
 // Removes an element from the map.
-func (m *ConcurrentMap) Remove(key string) {
+func (m ConcurrentMap) Remove(key string) {
 	// Try to get shard.
 	shard := m.GetShard(key)
 	shard.Lock()
@@ -122,8 +122,28 @@ func (m *ConcurrentMap) Remove(key string) {
 	shard.Unlock()
 }
 
+// RemoveCb is a callback executed in a map.RemoveCb() call, while Lock is held
+// If returns true, the element will be removed from the map
+type RemoveCb func(key string, v interface{}, exists bool) bool
+
+// RemoveCb locks the shard containing the key, retrieves its current value and calls the callback with those params
+// If callback returns true and element exists, it will remove it from the map
+// Returns the value returned by the callback (even if element was not present in the map)
+func (m ConcurrentMap) RemoveCb(key string, cb RemoveCb) bool {
+	// Try to get shard.
+	shard := m.GetShard(key)
+	shard.Lock()
+	v, ok := shard.items[key]
+	remove := cb(key, v, ok)
+	if remove && ok {
+		delete(shard.items, key)
+	}
+	shard.Unlock()
+	return remove
+}
+
 // Removes an element from the map and returns it
-func (m *ConcurrentMap) Pop(key string) (v interface{}, exists bool) {
+func (m ConcurrentMap) Pop(key string) (v interface{}, exists bool) {
 	// Try to get shard.
 	shard := m.GetShard(key)
 	shard.Lock()
@@ -134,7 +154,7 @@ func (m *ConcurrentMap) Pop(key string) (v interface{}, exists bool) {
 }
 
 // Checks if map is empty.
-func (m *ConcurrentMap) IsEmpty() bool {
+func (m ConcurrentMap) IsEmpty() bool {
 	return m.Count() == 0
 }
 
@@ -148,50 +168,64 @@ type Tuple struct {
 //
 // Deprecated: using IterBuffered() will get a better performence
 func (m ConcurrentMap) Iter() <-chan Tuple {
+	chans := snapshot(m)
 	ch := make(chan Tuple)
-	go func() {
-		wg := sync.WaitGroup{}
-		wg.Add(SHARD_COUNT)
-		// Foreach shard.
-		for _, shard := range m {
-			go func(shard *ConcurrentMapShared) {
-				// Foreach key, value pair.
-				shard.RLock()
-				for key, val := range shard.items {
-					ch <- Tuple{key, val}
-				}
-				shard.RUnlock()
-				wg.Done()
-			}(shard)
-		}
-		wg.Wait()
-		close(ch)
-	}()
+	go fanIn(chans, ch)
 	return ch
 }
 
 // Returns a buffered iterator which could be used in a for range loop.
 func (m ConcurrentMap) IterBuffered() <-chan Tuple {
-	ch := make(chan Tuple, m.Count())
-	go func() {
-		wg := sync.WaitGroup{}
-		wg.Add(SHARD_COUNT)
-		// Foreach shard.
-		for _, shard := range m {
-			go func(shard *ConcurrentMapShared) {
-				// Foreach key, value pair.
-				shard.RLock()
-				for key, val := range shard.items {
-					ch <- Tuple{key, val}
-				}
-				shard.RUnlock()
-				wg.Done()
-			}(shard)
-		}
-		wg.Wait()
-		close(ch)
-	}()
+	chans := snapshot(m)
+	total := 0
+	for _, c := range chans {
+		total += cap(c)
+	}
+	ch := make(chan Tuple, total)
+	go fanIn(chans, ch)
 	return ch
+}
+
+// Returns a array of channels that contains elements in each shard,
+// which likely takes a snapshot of `m`.
+// It returns once the size of each buffered channel is determined,
+// before all the channels are populated using goroutines.
+func snapshot(m ConcurrentMap) (chans []chan Tuple) {
+	chans = make([]chan Tuple, SHARD_COUNT)
+	wg := sync.WaitGroup{}
+	wg.Add(SHARD_COUNT)
+	// Foreach shard.
+	for index, shard := range m {
+		go func(index int, shard *ConcurrentMapShared) {
+			// Foreach key, value pair.
+			shard.RLock()
+			chans[index] = make(chan Tuple, len(shard.items))
+			wg.Done()
+			for key, val := range shard.items {
+				chans[index] <- Tuple{key, val}
+			}
+			shard.RUnlock()
+			close(chans[index])
+		}(index, shard)
+	}
+	wg.Wait()
+	return chans
+}
+
+// fanIn reads elements from channels `chans` into channel `out`
+func fanIn(chans []chan Tuple, out chan Tuple) {
+	wg := sync.WaitGroup{}
+	wg.Add(len(chans))
+	for _, ch := range chans {
+		go func(ch chan Tuple) {
+			for t := range ch {
+				out <- t
+			}
+			wg.Done()
+		}(ch)
+	}
+	wg.Wait()
+	close(out)
 }
 
 // Returns all items as map[string]interface{}
@@ -214,9 +248,9 @@ type IterCb func(key string, v interface{})
 
 // Callback based iterator, cheapest way to read
 // all elements in a map.
-func (m *ConcurrentMap) IterCb(fn IterCb) {
-	for idx := range *m {
-		shard := (*m)[idx]
+func (m ConcurrentMap) IterCb(fn IterCb) {
+	for idx := range m {
+		shard := (m)[idx]
 		shard.RLock()
 		for key, value := range shard.items {
 			fn(key, value)
@@ -249,9 +283,9 @@ func (m ConcurrentMap) Keys() []string {
 	}()
 
 	// Generate keys
-	keys := make([]string, count)
-	for i := 0; i < count; i++ {
-		keys[i] = <-ch
+	keys := make([]string, 0, count)
+	for k := range ch {
+		keys = append(keys, k)
 	}
 	return keys
 }

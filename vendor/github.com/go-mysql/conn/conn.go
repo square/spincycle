@@ -53,6 +53,10 @@ var (
 	ErrTimeout = errors.New("timeout")
 )
 
+// A Connector creates sql.Conn without exposing how connections are made.
+// Code that connects to MySQL is passed a Connector and it opens and closes
+// unique connections as needed. Every connection open must be closed, else
+// connection will be leaked.
 type Connector interface {
 	// Open opens a sql.Conn from the pool. It returns the error from sql.Conn,
 	// if any. The caller should pass the error to Error to return a high-level
