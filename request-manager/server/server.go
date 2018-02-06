@@ -31,8 +31,8 @@ type Server struct {
 	api    *api.API
 }
 
-func NewServer(appCtx app.Context) Server {
-	return Server{
+func NewServer(appCtx app.Context) *Server {
+	return &Server{
 		appCtx: appCtx,
 	}
 }
