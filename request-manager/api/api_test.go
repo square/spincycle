@@ -9,19 +9,18 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
-	"github.com/labstack/echo"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/api"
+	"github.com/square/spincycle/request-manager/app"
 	testutil "github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
 )
 
 var server *httptest.Server
 
-func setup(rm *mock.RequestManager, jls *mock.JLStore, middleware ...echo.MiddlewareFunc) {
-	a := api.NewAPI(rm, jls, &mock.RMStatus{})
-	a.Use(middleware...)
+func setup(rm *mock.RequestManager, jls *mock.JLStore) {
+	a := api.NewAPI(app.Defaults(), rm, jls, &mock.RMStatus{})
 	server = httptest.NewServer(a)
 }
 
@@ -89,7 +88,7 @@ func TestNewRequestHandlerRMError(t *testing.T) {
 		Args: map[string]interface{}{
 			"first": "arg1",
 		},
-		User: "?", // the value from the payload is overwritten
+		User: "admin", // the value from the payload is overwritten
 	}
 	if diff := deep.Equal(rmReqParams, expectedReqParams); diff != nil {
 		t.Error(diff)
@@ -112,14 +111,8 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 			return req, nil
 		},
 	}
-	// Add middleware to the API to hardcode the caller's username to "john".
-	middlewareFunc := func(h echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			c.Set("username", "john")
-			return h(c)
-		}
-	}
-	setup(rm, &mock.JLStore{}, middlewareFunc)
+
+	setup(rm, &mock.JLStore{})
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -156,7 +149,7 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 			"first":  "arg1",
 			"second": "arg2",
 		},
-		User: "john",
+		User: "admin",
 	}
 	if diff := deep.Equal(rmReqParams, expectedReqParams); diff != nil {
 		t.Error(diff)

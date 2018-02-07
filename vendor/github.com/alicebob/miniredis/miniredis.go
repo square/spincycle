@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	redigo "github.com/garyburd/redigo/redis"
+
 	"github.com/alicebob/miniredis/server"
 )
 
@@ -48,9 +50,9 @@ type Miniredis struct {
 	srv        *server.Server
 	port       int
 	password   string
-	listen     net.Listener
 	dbs        map[int]*RedisDB
-	selectedDB int // DB id used in the direct Get(), Set() &c.
+	selectedDB int               // DB id used in the direct Get(), Set() &c.
+	scripts    map[string]string // sha1 -> lua src
 	signal     *sync.Cond
 	now        time.Time // used to make a duration from EXPIREAT. time.Now() if not set.
 }
@@ -75,7 +77,8 @@ type connCtx struct {
 // NewMiniRedis makes a new, non-started, Miniredis object.
 func NewMiniRedis() *Miniredis {
 	m := Miniredis{
-		dbs: map[int]*RedisDB{},
+		dbs:     map[int]*RedisDB{},
+		scripts: map[string]string{},
 	}
 	m.signal = sync.NewCond(&m)
 	return &m
@@ -105,13 +108,26 @@ func Run() (*Miniredis, error) {
 // Start starts a server. It listens on a random port on localhost. See also
 // Addr().
 func (m *Miniredis) Start() error {
-	m.Lock()
-	defer m.Unlock()
-
 	s, err := server.NewServer(fmt.Sprintf("127.0.0.1:%d", m.port))
 	if err != nil {
 		return err
 	}
+	return m.start(s)
+}
+
+// StartAddr runs miniredis with a given addr. Examples: "127.0.0.1:6379",
+// ":6379", or "127.0.0.1:0"
+func (m *Miniredis) StartAddr(addr string) error {
+	s, err := server.NewServer(addr)
+	if err != nil {
+		return err
+	}
+	return m.start(s)
+}
+
+func (m *Miniredis) start(s *server.Server) error {
+	m.Lock()
+	defer m.Unlock()
 	m.srv = s
 	m.port = s.Addr().Port
 
@@ -124,6 +140,7 @@ func (m *Miniredis) Start() error {
 	commandsSet(m)
 	commandsSortedSet(m)
 	commandsTransaction(m)
+	commandsScripting(m)
 
 	return nil
 }
@@ -221,6 +238,13 @@ func (m *Miniredis) FastForward(duration time.Duration) {
 	for _, db := range m.dbs {
 		db.fastForward(duration)
 	}
+}
+
+// redigo returns a redigo.Conn, connected using net.Pipe
+func (m *Miniredis) redigo() redigo.Conn {
+	c1, c2 := net.Pipe()
+	m.srv.ServeConn(c1)
+	return redigo.NewConn(c2, 0, 0)
 }
 
 // Dump returns a text version of the selected DB, usable for debugging.

@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 func errUnknownCommand(cmd string) string {
@@ -53,22 +54,27 @@ func (s *Server) serve(l net.Listener) {
 		if err != nil {
 			return
 		}
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			defer conn.Close()
-			s.mu.Lock()
-			s.peers[conn] = struct{}{}
-			s.infoConns++
-			s.mu.Unlock()
-
-			s.servePeer(conn)
-
-			s.mu.Lock()
-			delete(s.peers, conn)
-			s.mu.Unlock()
-		}()
+		s.ServeConn(conn)
 	}
+}
+
+// ServeConn handles a net.Conn. Nice with net.Pipe()
+func (s *Server) ServeConn(conn net.Conn) {
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer conn.Close()
+		s.mu.Lock()
+		s.peers[conn] = struct{}{}
+		s.infoConns++
+		s.mu.Unlock()
+
+		s.servePeer(conn)
+
+		s.mu.Lock()
+		delete(s.peers, conn)
+		s.mu.Unlock()
+	}()
 }
 
 // Addr has the net.Addr struct
@@ -185,12 +191,12 @@ func (c *Peer) Close() {
 
 // WriteError writes a redis 'Error'
 func (c *Peer) WriteError(e string) {
-	fmt.Fprintf(c.w, "-%s\r\n", e)
+	fmt.Fprintf(c.w, "-%s\r\n", toInline(e))
 }
 
 // WriteInline writes a redis inline string
 func (c *Peer) WriteInline(s string) {
-	fmt.Fprintf(c.w, "+%s\r\n", s)
+	fmt.Fprintf(c.w, "+%s\r\n", toInline(s))
 }
 
 // WriteOK write the inline string `OK`
@@ -216,4 +222,13 @@ func (c *Peer) WriteLen(n int) {
 // WriteInt writes an integer
 func (c *Peer) WriteInt(i int) {
 	fmt.Fprintf(c.w, ":%d\r\n", i)
+}
+
+func toInline(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return ' '
+		}
+		return r
+	}, s)
 }

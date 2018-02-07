@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package api provides controllers for each api endpoint. Controllers are
 // "dumb wiring"; there is little to no application logic in this package.
@@ -10,10 +10,10 @@ import (
 	"net/url"
 
 	"github.com/labstack/echo"
-	"github.com/labstack/echo/engine"
-	"github.com/labstack/echo/engine/standard"
+	"github.com/labstack/echo/middleware"
 
 	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/request-manager/app"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
@@ -27,26 +27,32 @@ const (
 // API provides controllers for endpoints it registers with a router.
 // It satisfies the http.HandlerFunc interface.
 type API struct {
-	rm   request.Manager
-	jls  joblog.Store
-	stat status.Manager
+	appCtx app.Context
+	rm     request.Manager
+	jls    joblog.Store
+	stat   status.Manager
+	// --
 	echo *echo.Echo
 }
 
 // NewAPI cretes a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
 // @todo: create a struct of managers and pass that in here instead?
-func NewAPI(rm request.Manager, jls joblog.Store, stat status.Manager) *API {
+func NewAPI(appCtx app.Context, rm request.Manager, jls joblog.Store, stat status.Manager) *API {
 	api := &API{
-		rm:   rm,
-		jls:  jls,
-		stat: stat,
+		appCtx: appCtx,
+		rm:     rm,
+		jls:    jls,
+		stat:   stat,
+		// --
 		echo: echo.New(),
 	}
 
 	// //////////////////////////////////////////////////////////////////////
-	// Request
+	// Routes
 	// //////////////////////////////////////////////////////////////////////
+
+	// Request
 	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)                   // create
 	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                // get
 	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)        // start
@@ -55,33 +61,67 @@ func NewAPI(rm request.Manager, jls joblog.Store, stat status.Manager) *API {
 	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)      // status
 	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler) // job chain
 
-	// //////////////////////////////////////////////////////////////////////
 	// Job Log
-	// //////////////////////////////////////////////////////////////////////
 	api.echo.POST(API_ROOT+"requests/:reqId/log", api.createJLHandler)    // create
 	api.echo.GET(API_ROOT+"requests/:reqId/log", api.getFullJLHandler)    // per request
 	api.echo.GET(API_ROOT+"requests/:reqId/log/:jobId", api.getJLHandler) // per job
 
-	// //////////////////////////////////////////////////////////////////////
 	// Meta
-	// //////////////////////////////////////////////////////////////////////
 	api.echo.GET(API_ROOT+"request-list", api.requestListHandler)     // request list
 	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler) // running requests
+
+	// //////////////////////////////////////////////////////////////////////
+	// Middleware and hooks
+	// //////////////////////////////////////////////////////////////////////
+	api.echo.Use(middleware.Recover())
+	api.echo.Use(middleware.Logger())
+
+	// Auth hook
+	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if appCtx.Hooks.Auth == nil {
+				return next(c) // no auth
+			}
+			ok, err := appCtx.Hooks.Auth(c.Request())
+			if err != nil {
+				return err
+			}
+			if !ok {
+				//c.Response().Header().Set(echo.HeaderWWWAuthenticate, basic+" realm="+realm)
+				return echo.ErrUnauthorized // 401
+			}
+			return next(c) // auth OK
+		}
+	}))
+
+	// SetUsername hook
+	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if appCtx.Hooks.SetUsername == nil {
+				return next(c) // no auth
+			}
+			username, err := appCtx.Hooks.SetUsername(c.Request())
+			if err != nil {
+				return err
+			}
+			c.Set("username", username)
+			return next(c)
+		}
+	}))
 
 	return api
 }
 
-// ServeHTTP allows the API to statisfy the http.HandlerFunc interface.
-func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	es := standard.WithConfig(engine.Config{})
-	es.SetHandler(api.echo)
-	es.ServeHTTP(w, r)
+func (api *API) Run() error {
+	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
+		return api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
+	} else {
+		return api.echo.Start(api.appCtx.Config.Server.ListenAddress)
+	}
 }
 
-// Use adds middleware to the echo web server in the API. See
-// https://echo.labstack.com/middleware for more details.
-func (api *API) Use(middleware ...echo.MiddlewareFunc) {
-	api.echo.Use(middleware...)
+func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	api.echo.ServeHTTP(w, r)
 }
 
 // ============================== CONTROLLERS ============================== //

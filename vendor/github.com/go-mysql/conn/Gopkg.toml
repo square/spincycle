@@ -1,0 +1,9 @@
+ignored = ["github.com/go-sql-driver/mysql"]
+
+[[constraint]]
+  name = "github.com/go-test/deep"
+  version = "1.0.*"
+
+[prune]
+  go-tests = true
+  unused-packages = true

@@ -11,7 +11,9 @@ import (
 
 	"github.com/go-test/deep"
 	"github.com/orcaman/concurrent-map"
+
 	"github.com/square/spincycle/job-runner/api"
+	"github.com/square/spincycle/job-runner/app"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/proto"
 	testutil "github.com/square/spincycle/test"
@@ -25,7 +27,7 @@ var (
 
 func setup(traverserFactory *mock.TraverserFactory) {
 	traverserRepo = cmap.New()
-	api := api.NewAPI(traverserFactory, traverserRepo, &mock.JRStatus{})
+	api := api.NewAPI(app.Defaults(), traverserFactory, traverserRepo, &mock.JRStatus{})
 	server = httptest.NewServer(api)
 }
 
