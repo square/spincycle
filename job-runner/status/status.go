@@ -33,14 +33,14 @@ func (m *manager) Running() ([]proto.JobStatus, error) {
 
 	running := []proto.JobStatus{}
 	for _, c := range chains {
-		for jobId, j := range c.Running {
-			startTime := time.Unix(0, j.StartTs)
+		for jobId, runningJob := range c.Running {
+			startTime := time.Unix(0, runningJob.StartTs)
 			s := proto.JobStatus{
 				RequestId: c.RequestId(),
 				JobId:     jobId,
 				State:     proto.STATE_RUNNING, // must be since it's in chain.Running
 				Runtime:   time.Now().Sub(startTime).Seconds(),
-				N:         j.N,
+				N:         runningJob.N,
 			}
 			running = append(running, s)
 		}

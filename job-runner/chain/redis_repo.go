@@ -5,7 +5,6 @@ package chain
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/garyburd/redigo/redis"
@@ -111,7 +110,6 @@ func (r *RedisRepo) Get(id string) (*chain, error) {
 	if err != nil {
 		return nil, err
 	}
-	chain.RWMutex = &sync.RWMutex{} // Need to initialize the mutex
 
 	return chain, nil
 }
@@ -201,5 +199,5 @@ func (r *RedisRepo) fmtIdKey(id string) string {
 // fmtChainKey takes a Chain and returns the key where that Chain is stored in
 // redis.
 func (r *RedisRepo) fmtChainKey(chain *chain) string {
-	return r.fmtIdKey(chain.JobChain.RequestId)
+	return r.fmtIdKey(chain.RequestId())
 }

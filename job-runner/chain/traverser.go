@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package chain
 
@@ -166,10 +166,6 @@ func (t *traverser) Run() error {
 	// from right below this.
 	go t.runJobs()
 
-	// Set the state of the first job in the chain to RUNNING.
-	t.chain.SetJobState(firstJob.Id, proto.STATE_RUNNING)
-	t.chainRepo.Set(t.chain)
-
 	// Add the first job in the chain to the runJobChan.
 	t.logger.Infof("sending the first job (%s) to runJobChan", firstJob.Id)
 	t.runJobChan <- firstJob
@@ -238,13 +234,6 @@ JOB_REAPER:
 				nextJ.Data[k] = v
 			}
 
-			// Set the state of the job in the chain to "Running".
-			// @todo: this should be in the goroutine in runJobs, because it's not
-			//        truly running until that point, but then this causes race conditions
-			//        which indicates we need to more closely examine concurrent
-			//        access to internal chain data.
-			t.chain.SetJobState(nextJ.Id, proto.STATE_RUNNING)
-
 			t.runJobChan <- nextJ // add the job to the run queue
 		}
 
@@ -284,30 +273,30 @@ func (t *traverser) Stop() error {
 // Status returns the status of currently running jobs in the chain.
 func (t *traverser) Status() (proto.JobChainStatus, error) {
 	t.logger.Infof("getting the status of all running jobs")
-	var jcStatus proto.JobChainStatus
-	var jobStatuses []proto.JobStatus
 
-	// Get all of the active runners for this traverser from the repo. Only runners
-	// that are in the repo will have their statuses queried.
 	activeRunners, err := t.runnerRepo.Items()
 	if err != nil {
-		return jcStatus, err
+		return proto.JobChainStatus{}, err
 	}
 
-	// Get the status and state of each job runner.
-	for jobId, runner := range activeRunners {
-		jobStatus := proto.JobStatus{
-			JobId:  jobId,
-			Name:   t.chain.JobChain.Jobs[jobId].Name, // the name of the job
-			State:  t.chain.JobState(jobId),           // get the state of the job
-			Status: runner.Status(),                   // get the job status. this should return quickly
+	runningJobs := t.chain.Running()
+	status := make([]proto.JobStatus, len(runningJobs))
+	i := 0
+	for jobId, jobStatus := range runningJobs {
+		runner := activeRunners[jobId]
+		if runner == nil {
+			// The job finished between the call to chain.Running() and now,
+			// so it's runner no longer exists in the runner.Repo.
+			jobStatus.Status = "(finished)"
+		} else {
+			jobStatus.Status = runner.Status()
 		}
-		jobStatuses = append(jobStatuses, jobStatus)
+		status[i] = jobStatus
+		i++
 	}
-
-	jcStatus = proto.JobChainStatus{
+	jcStatus := proto.JobChainStatus{
 		RequestId:   t.chain.RequestId(),
-		JobStatuses: jobStatuses,
+		JobStatuses: status,
 	}
 	return jcStatus, nil
 }
@@ -351,6 +340,9 @@ func (t *traverser) runJobs() {
 				return
 			default:
 			}
+
+			// Set the state of the job in the chain to "Running".
+			t.chain.SetJobState(pJob.Id, proto.STATE_RUNNING)
 
 			// Run the job. This is a blocking operation that could take a long time.
 			finalState := runner.Run(pJob.Data)

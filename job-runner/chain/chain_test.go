@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package chain
 
@@ -39,7 +39,7 @@ func TestFirstJobOne(t *testing.T) {
 	}
 	c := NewChain(jc)
 
-	expectedFirstJob := c.JobChain.Jobs["job1"]
+	expectedFirstJob := jc.Jobs["job1"]
 	firstJob, err := c.FirstJob()
 
 	if !reflect.DeepEqual(firstJob, expectedFirstJob) {
@@ -59,7 +59,7 @@ func TestLastJobMultiple(t *testing.T) {
 	}
 	c := NewChain(jc)
 
-	_, err := c.LastJob()
+	_, err := c.lastJob()
 	if err == nil {
 		t.Errorf("expected an error, but did not get one")
 	}
@@ -76,8 +76,8 @@ func TestLastJobOne(t *testing.T) {
 	}
 	c := NewChain(jc)
 
-	expectedLastJob := c.JobChain.Jobs["job4"]
-	lastJob, err := c.LastJob()
+	expectedLastJob := jc.Jobs["job4"]
+	lastJob, err := c.lastJob()
 
 	if !reflect.DeepEqual(lastJob, expectedLastJob) {
 		t.Errorf("lastJob = %v, expected %v", lastJob, expectedLastJob)
@@ -98,7 +98,7 @@ func TestNextJobs(t *testing.T) {
 	}
 	c := NewChain(jc)
 
-	expectedNextJobs := proto.Jobs{c.JobChain.Jobs["job2"], c.JobChain.Jobs["job3"]}
+	expectedNextJobs := proto.Jobs{jc.Jobs["job2"], jc.Jobs["job3"]}
 	sort.Sort(expectedNextJobs)
 	nextJobs := c.NextJobs("job1")
 	sort.Sort(nextJobs)
@@ -125,16 +125,16 @@ func TestPreviousJobs(t *testing.T) {
 	}
 	c := NewChain(jc)
 
-	expectedPreviousJobs := proto.Jobs{c.JobChain.Jobs["job2"], c.JobChain.Jobs["job3"]}
+	expectedPreviousJobs := proto.Jobs{jc.Jobs["job2"], jc.Jobs["job3"]}
 	sort.Sort(expectedPreviousJobs)
-	previousJobs := c.PreviousJobs("job4")
+	previousJobs := c.previousJobs("job4")
 	sort.Sort(previousJobs)
 
 	if !reflect.DeepEqual(previousJobs, expectedPreviousJobs) {
 		t.Errorf("previousJobs = %v, want %v", previousJobs, expectedPreviousJobs)
 	}
 
-	previousJobs = c.PreviousJobs("job1")
+	previousJobs = c.previousJobs("job1")
 
 	if len(previousJobs) != 0 {
 		t.Errorf("previousJobs count = %d, want 0", len(previousJobs))
@@ -254,8 +254,8 @@ func TestSetJobState(t *testing.T) {
 	c := NewChain(jc)
 
 	c.SetJobState("job1", proto.STATE_COMPLETE)
-	if c.JobChain.Jobs["job1"].State != proto.STATE_COMPLETE {
-		t.Errorf("State = %d, want %d", c.JobChain.Jobs["job1"].State, proto.STATE_COMPLETE)
+	if jc.Jobs["job1"].State != proto.STATE_COMPLETE {
+		t.Errorf("State = %d, want %d", jc.Jobs["job1"].State, proto.STATE_COMPLETE)
 	}
 }
 
@@ -264,8 +264,8 @@ func TestSetState(t *testing.T) {
 	c := NewChain(jc)
 
 	c.SetState(proto.STATE_RUNNING)
-	if c.JobChain.State != proto.STATE_RUNNING {
-		t.Errorf("State = %d, want %d", c.JobChain.State, proto.STATE_RUNNING)
+	if c.State() != proto.STATE_RUNNING {
+		t.Errorf("State = %d, want %d", c.State(), proto.STATE_RUNNING)
 	}
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package chain_test
 
@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/job-runner/chain"
@@ -65,8 +66,8 @@ func TestRunComplete(t *testing.T) {
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	if c.JobChain.State != proto.STATE_COMPLETE {
-		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
+	if c.State() != proto.STATE_COMPLETE {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_COMPLETE)
 	}
 
 	_, err = chainRepo.Get(requestId)
@@ -104,11 +105,11 @@ func TestRunNotComplete(t *testing.T) {
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	if c.JobChain.State != proto.STATE_FAIL {
-		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_FAIL)
+	if c.State() != proto.STATE_FAIL {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_FAIL)
 	}
-	if c.JobChain.Jobs["job4"].State != proto.STATE_PENDING {
-		t.Errorf("job4 state = %d, expected %d", c.JobChain.Jobs["job4"].State, proto.STATE_PENDING)
+	if c.JobState("job4") != proto.STATE_PENDING {
+		t.Errorf("job4 state = %d, expected %d", c.JobState("job4"), proto.STATE_PENDING)
 	}
 
 	_, err = chainRepo.Get("abc")
@@ -140,7 +141,7 @@ func TestJobUnknownState(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc)
-	for _, j := range c.JobChain.Jobs {
+	for _, j := range jc.Jobs {
 		j.State = proto.STATE_UNKNOWN
 	}
 	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
@@ -148,8 +149,8 @@ func TestJobUnknownState(t *testing.T) {
 	if err := traverser.Run(); err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	if c.JobChain.State != proto.STATE_COMPLETE {
-		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
+	if c.State() != proto.STATE_COMPLETE {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_COMPLETE)
 	}
 
 	_, err := chainRepo.Get("abc")
@@ -304,17 +305,17 @@ func TestStop(t *testing.T) {
 	// Wait for the traverser to finish.
 	<-doneChan
 
-	if c.JobChain.State != proto.STATE_FAIL {
-		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
+	if c.State() != proto.STATE_FAIL {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_COMPLETE)
 	}
-	if c.JobChain.Jobs["job2"].State != proto.STATE_FAIL {
-		t.Errorf("job2 state = %d, expected %d", c.JobChain.Jobs["job2"].State, proto.STATE_FAIL)
+	if c.JobState("job2") != proto.STATE_FAIL {
+		t.Errorf("job2 state = %d, expected %d", c.JobState("job2"), proto.STATE_FAIL)
 	}
-	if c.JobChain.Jobs["job3"].State != proto.STATE_FAIL {
-		t.Errorf("job3 state = %d, expected %d", c.JobChain.Jobs["job3"].State, proto.STATE_FAIL)
+	if c.JobState("job3") != proto.STATE_FAIL {
+		t.Errorf("job3 state = %d, expected %d", c.JobState("job3"), proto.STATE_FAIL)
 	}
-	if c.JobChain.Jobs["job4"].State != proto.STATE_PENDING {
-		t.Errorf("job4 state = %d, expected %d", c.JobChain.Jobs["job4"].State, proto.STATE_PENDING)
+	if c.JobState("job4") != proto.STATE_PENDING {
+		t.Errorf("job4 state = %d, expected %d", c.JobState("job4"), proto.STATE_PENDING)
 	}
 
 	_, err = chainRepo.Get("abc")
@@ -325,6 +326,8 @@ func TestStop(t *testing.T) {
 
 // Get the status from all running jobs.
 func TestStatus(t *testing.T) {
+	now := time.Now().UnixNano()
+
 	chainRepo := chain.NewMemoryRepo()
 	var runWg sync.WaitGroup
 	runWg.Add(2)
@@ -338,6 +341,11 @@ func TestStatus(t *testing.T) {
 	}
 	rmc := &mock.RMClient{}
 
+	/*
+					    +- job2 -+
+				job1 -> |        |-> job4
+		                +- job3 -+
+	*/
 	jc := &proto.JobChain{
 		RequestId: "abc",
 		Jobs:      testutil.InitJobs(4),
@@ -365,21 +373,41 @@ func TestStatus(t *testing.T) {
 		RequestId: "abc",
 		JobStatuses: proto.JobStatuses{
 			proto.JobStatus{
-				JobId:  "job2",
-				State:  proto.STATE_RUNNING,
-				Status: "job2 running",
-				N:      0,
+				RequestId: "abc",
+				JobId:     "job2",
+				State:     proto.STATE_RUNNING,
+				Status:    "job2 running",
+				N:         0, // see below
+				Args:      map[string]interface{}{},
 			},
 			proto.JobStatus{
-				JobId:  "job3",
-				State:  proto.STATE_RUNNING,
-				Status: "job3 running",
-				N:      0,
+				RequestId: "abc",
+				JobId:     "job3",
+				State:     proto.STATE_RUNNING,
+				Status:    "job3 running",
+				N:         0, // see below
+				Args:      map[string]interface{}{},
 			},
 		},
 	}
 	status, err := traverser.Status()
 	sort.Sort(status.JobStatuses)
+
+	for i, j := range status.JobStatuses {
+		if j.StartedAt < now {
+			t.Error("StartedAt <= 0: %+v", j)
+		}
+		status.JobStatuses[i].StartedAt = 0
+
+		// Don't know if job2 or job3 will run first. They're enqueued at same
+		// time, but no way to guarantee which makes in into queue and runs first.
+		// But either way, N should be only 2 or 3 because they're are the 2nd
+		// and 3rd jobs ran.
+		if j.N != 2 && j.N != 3 {
+			t.Error("got N = %d, expected 2 or 3", j.N)
+		}
+		status.JobStatuses[i].N = 0
+	}
 
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
@@ -391,7 +419,7 @@ func TestStatus(t *testing.T) {
 	// Wait for the traverser to finish.
 	<-doneChan
 
-	if c.JobChain.State != proto.STATE_COMPLETE {
-		t.Errorf("chain state = %d, expected %d", c.JobChain.State, proto.STATE_COMPLETE)
+	if c.State() != proto.STATE_COMPLETE {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_COMPLETE)
 	}
 }

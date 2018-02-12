@@ -67,12 +67,12 @@ type JobLog struct {
 	// These three fields uniquely identify an entry in the job log.
 	RequestId string `json:"requestId"`
 	JobId     string `json:"jobId"`
-	Name      string `json:"name"`
 	Try       uint   `json:"try"` // try number N of 1 + Job.Retry
 
-	Type       string `json:"type"`       // the type of the job
-	StartedAt  int64  `json:"startedAt"`  // when the job runner started the job
-	FinishedAt int64  `json:"finishedAt"` // when the job returned, regardless of state
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	StartedAt  int64  `json:"startedAt"`  // when job started (UnixNano)
+	FinishedAt int64  `json:"finishedAt"` // when job finished, regardless of state (UnixNano)
 
 	State  byte   `json:"state"`  // STATE_* const
 	Exit   int64  `json:"exit"`   // unix exit code
@@ -83,13 +83,15 @@ type JobLog struct {
 
 // JobStatus represents the status of one job in a job chain.
 type JobStatus struct {
-	RequestId string  `json:"requestId"`
-	JobId     string  `json:"jobId"`
-	Name      string  `json:"name"`
-	State     byte    `json:"state"`
-	Status    string  `json:"status"`  // @todo: job.Status()
-	Runtime   float64 `json:"runtime"` // seconds
-	N         uint    `json:"n"`       // Nth job ran in chain
+	RequestId string                 `json:"requestId"`
+	JobId     string                 `json:"jobId"`
+	Type      string                 `json:"type"`
+	Name      string                 `json:"name"`
+	Args      map[string]interface{} `json:"jobArgs"`
+	StartedAt int64                  `json:"startedAt"` // when job started (UnixNano)
+	State     byte                   `json:"state"`     // usually proto.STATE_RUNNING
+	Status    string                 `json:"status"`    // @todo: job.Status()
+	N         uint                   `json:"n"`         // Nth job ran in chain
 }
 
 // JobChainStatus represents the status of a job chain reported by the Job Runner.
@@ -130,11 +132,11 @@ func (js JobStatuses) Len() int           { return len(js) }
 func (js JobStatuses) Less(i, j int) bool { return js[i].JobId < js[j].JobId }
 func (js JobStatuses) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
 
-type JobStatusByRuntime []JobStatus
+type JobStatusByStartTime []JobStatus
 
-func (js JobStatusByRuntime) Len() int           { return len(js) }
-func (js JobStatusByRuntime) Less(i, j int) bool { return js[i].Runtime > js[j].Runtime }
-func (js JobStatusByRuntime) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
+func (js JobStatusByStartTime) Len() int           { return len(js) }
+func (js JobStatusByStartTime) Less(i, j int) bool { return js[i].StartedAt > js[j].StartedAt }
+func (js JobStatusByStartTime) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
 
 // JobLogById is a slice of job logs sorted by request id + job id.
 type JobLogById []JobLog

@@ -11,8 +11,8 @@ import (
 // Repo is a small wrapper around a concurrent map that provides the ability to
 // store and retreive Runners in a thread-safe way.
 type Repo interface {
-	Set(key string, value Runner)
-	Remove(key string)
+	Set(jobId string, runner Runner)
+	Remove(jobId string)
 	Items() (map[string]Runner, error)
 }
 
@@ -27,26 +27,24 @@ func NewRepo() Repo {
 }
 
 // Set sets a Runner in the repo.
-func (r *repo) Set(key string, value Runner) {
-	r.c.Set(key, value)
+func (r *repo) Set(jobId string, runner Runner) {
+	r.c.Set(jobId, runner)
 }
 
 // Remove removes a runner from the repo.
-func (r *repo) Remove(key string) {
-	r.c.Remove(key)
+func (r *repo) Remove(jobId string) {
+	r.c.Remove(jobId)
 }
 
-// Items returns a map of key => Runner with all the Runners in the repo.
+// Items returns a map of jobId => Runner with all the Runners in the repo.
 func (r *repo) Items() (map[string]Runner, error) {
-	runners := map[string]Runner{} // key => runner
-	vals := r.c.Items()
-	for key, val := range vals {
-		runner, ok := val.(Runner)
+	runners := map[string]Runner{} // jobId => runner
+	for jobId, v := range r.c.Items() {
+		runner, ok := v.(Runner)
 		if !ok {
-			return runners, fmt.Errorf("invalid runner in repo for key=%s", key) // should be impossible
+			return runners, fmt.Errorf("invalid runner in repo for jobId=%s", jobId) // should be impossible
 		}
-		runners[key] = runner
+		runners[jobId] = runner
 	}
-
 	return runners, nil
 }

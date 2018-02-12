@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/square/spincycle/spinc/app"
 )
@@ -42,23 +43,25 @@ func (c *Ps) Run() error {
 		return nil
 	}
 
-	hdr := fmt.Sprintf("%%-32s  %%4s  %%5s  %%6s  %%s\n")
-	line := fmt.Sprintf("%%-32s  %%4d  %%5d  %%6s  %%s\n")
+	now := time.Now()
+
+	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s\n")
+	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s\n")
 	fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "JOB")
 	for _, r := range status.Jobs {
-		runtime := fmt.Sprintf("%.1f", r.Runtime)
-		job := r.JobId
-		m := 0
+		runtime := fmt.Sprintf("%.1f", now.Sub(time.Unix(0, r.StartedAt)).Seconds())
+		nJobs := 0
 		if status.Requests != nil {
 			if r, ok := status.Requests[r.RequestId]; ok {
-				m = r.TotalJobs
+				nJobs = r.TotalJobs
 			}
 		}
-		if len(job) > JOB_COL_LEN {
-			// "long_job_id@5" -> "..._job_id@5"
-			job = "..." + job[len(job)-(JOB_COL_LEN-3):len(job)] // +3 for "..."
+		jobNameLen := len(r.Name)
+		if jobNameLen > JOB_COL_LEN {
+			// "very_long_job_name" -> "very_long_job_..."
+			r.Name = r.Name[jobNameLen-(JOB_COL_LEN-3):jobNameLen] + "..." // -3 for "..."
 		}
-		fmt.Fprintf(c.ctx.Out, line, r.RequestId, r.N, m, runtime, r.JobId)
+		fmt.Fprintf(c.ctx.Out, line, r.RequestId, r.N, nJobs, runtime, r.Name)
 	}
 
 	return nil
