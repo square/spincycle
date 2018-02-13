@@ -4,8 +4,6 @@
 package status
 
 import (
-	"time"
-
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/proto"
 )
@@ -33,16 +31,8 @@ func (m *manager) Running() ([]proto.JobStatus, error) {
 
 	running := []proto.JobStatus{}
 	for _, c := range chains {
-		for jobId, j := range c.Running {
-			startTime := time.Unix(0, j.StartTs)
-			s := proto.JobStatus{
-				RequestId: c.RequestId(),
-				JobId:     jobId,
-				State:     proto.STATE_RUNNING, // must be since it's in chain.Running
-				Runtime:   time.Now().Sub(startTime).Seconds(),
-				N:         j.N,
-			}
-			running = append(running, s)
+		for _, jobStatus := range c.Running() {
+			running = append(running, jobStatus)
 		}
 	}
 

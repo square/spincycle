@@ -1,10 +1,11 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package chain implements a job chain. It provides the ability to traverse a chain
 // and run all of the jobs in it.
 package chain
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -14,15 +15,12 @@ import (
 
 // chain represents a job chain and some meta information about it.
 type chain struct {
-	JobChain *proto.JobChain       `json:"jobChain"`
-	Running  map[string]RunningJob `json:"running"` // keyed on job ID => start time (Unix nano)
-	N        uint
-	*sync.RWMutex
-}
+	jcMux    *sync.RWMutex
+	jobChain *proto.JobChain
 
-type RunningJob struct {
-	N       uint  `json:"n"`
-	StartTs int64 `json:"startTs"`
+	runningMux *sync.RWMutex
+	running    map[string]proto.JobStatus // keyed on job id
+	n          uint                       // N jobs ran
 }
 
 // NewChain takes a JobChain proto (from the RM) and turns it into a Chain that
@@ -36,10 +34,12 @@ func NewChain(jc *proto.JobChain) *chain {
 	}
 
 	return &chain{
-		JobChain: jc,
-		Running:  map[string]RunningJob{},
-		N:        0,
-		RWMutex:  &sync.RWMutex{},
+		jcMux:    &sync.RWMutex{},
+		jobChain: jc,
+
+		runningMux: &sync.RWMutex{},
+		running:    map[string]proto.JobStatus{},
+		n:          0,
 	}
 }
 
@@ -69,35 +69,17 @@ func (c *chain) FirstJob() (proto.Job, error) {
 		}
 	}
 
-	return c.JobChain.Jobs[jobIds[0]], nil
-}
-
-// LastJob finds the job in the chain with outdegree 0. If there is not
-// exactly one of these jobs, it returns an error.
-func (c *chain) LastJob() (proto.Job, error) {
-	var jobIds []string
-	for jobId, count := range c.outdegreeCounts() {
-		if count == 0 {
-			jobIds = append(jobIds, jobId)
-		}
-	}
-
-	if len(jobIds) != 1 {
-		return proto.Job{}, ErrInvalidChain{
-			Message: fmt.Sprintf("chain has %d last job(s), should "+
-				"have one (last job(s) = %v)", len(jobIds), jobIds),
-		}
-	}
-
-	return c.JobChain.Jobs[jobIds[0]], nil
+	return c.jobChain.Jobs[jobIds[0]], nil
 }
 
 // NextJobs finds all of the jobs adjacent to the given job.
 func (c *chain) NextJobs(jobId string) proto.Jobs {
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
 	var nextJobs proto.Jobs
-	if nextJobIds, ok := c.JobChain.AdjacencyList[jobId]; ok {
+	if nextJobIds, ok := c.jobChain.AdjacencyList[jobId]; ok {
 		for _, id := range nextJobIds {
-			if val, ok := c.JobChain.Jobs[id]; ok {
+			if val, ok := c.jobChain.Jobs[id]; ok {
 				nextJobs = append(nextJobs, val)
 			}
 		}
@@ -106,30 +88,18 @@ func (c *chain) NextJobs(jobId string) proto.Jobs {
 	return nextJobs
 }
 
-// PreviousJobs finds all of the immediately previous jobs to a given job.
-func (c *chain) PreviousJobs(jobId string) proto.Jobs {
-	var prevJobs proto.Jobs
-	for curJob, nextJobs := range c.JobChain.AdjacencyList {
-		if contains(nextJobs, jobId) {
-			if val, ok := c.JobChain.Jobs[curJob]; ok {
-				prevJobs = append(prevJobs, val)
-			}
-		}
-	}
-	return prevJobs
-}
-
 // JobIsReady returns whether or not a job is ready to run. A job is considered
 // ready to run if all of its previous jobs are complete. If any previous jobs
 // are not complete, the job is not ready to run.
 func (c *chain) JobIsReady(jobId string) bool {
-	isReady := true
-	for _, job := range c.PreviousJobs(jobId) {
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
+	for _, job := range c.previousJobs(jobId) {
 		if job.State != proto.STATE_COMPLETE {
-			isReady = false
+			return false
 		}
 	}
-	return isReady
+	return true
 }
 
 // IsDone returns two booleans - the first one indicates whether or not the
@@ -142,6 +112,9 @@ func (c *chain) JobIsReady(jobId string) bool {
 //
 // A chain is complete if every job in it completed successfully.
 func (c *chain) IsDone() (done bool, complete bool) {
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
+
 	done = true
 	complete = true
 	pendingJobs := proto.Jobs{}
@@ -150,7 +123,7 @@ func (c *chain) IsDone() (done bool, complete bool) {
 	// track of the jobs that aren't running or in a finished state so
 	// that we can later check to see if they are capable of running.
 LOOP:
-	for _, job := range c.JobChain.Jobs {
+	for _, job := range c.jobChain.Jobs {
 		switch job.State {
 		case proto.STATE_RUNNING:
 			// If any jobs are running, the chain can't be done
@@ -178,7 +151,7 @@ LOOP:
 	for _, job := range pendingJobs {
 		complete = false
 		allPrevComplete := true
-		for _, prevJob := range c.PreviousJobs(job.Id) {
+		for _, prevJob := range c.previousJobs(job.Id) {
 			if prevJob.State != proto.STATE_COMPLETE {
 				allPrevComplete = false
 				// We can break out of this loop if a single
@@ -208,14 +181,12 @@ func (c *chain) Validate() error {
 	}
 
 	// Make sure there is one first job.
-	_, err := c.FirstJob()
-	if err != nil {
+	if _, err := c.FirstJob(); err != nil {
 		return err
 	}
 
 	// Make sure there is one last job.
-	_, err = c.LastJob()
-	if err != nil {
+	if _, err := c.lastJob(); err != nil {
 		return err
 	}
 
@@ -229,57 +200,172 @@ func (c *chain) Validate() error {
 
 // RequestId returns the request id of the job chain.
 func (c *chain) RequestId() string {
-	return c.JobChain.RequestId
+	return c.jobChain.RequestId
 }
 
 // JobState returns the state of a given job.
 func (c *chain) JobState(jobId string) byte {
-	c.RLock()         // -- lock
-	defer c.RUnlock() // -- unlock
-	return c.JobChain.Jobs[jobId].State
-}
-
-// Set the state of a job in the chain.
-func (c *chain) SetJobState(jobId string, state byte) {
-	c.Lock() // -- lock
-	j := c.JobChain.Jobs[jobId]
-	j.State = state
-	c.JobChain.Jobs[jobId] = j
-
-	// Keep chain.Running up to date
-	if state == proto.STATE_RUNNING {
-		c.N += 1 // Nth job to run
-		// @todo: on sequence retry, we need to N-- for all jobs in the sequence
-
-		c.Running[jobId] = RunningJob{
-			N:       c.N,
-			StartTs: time.Now().UnixNano(),
-		}
-	} else {
-		// STATE_RUNNING is the only running state, and it's not that, so the
-		// job must not be running.
-		delete(c.Running, jobId)
-	}
-	c.Unlock() // -- unlock
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
+	return c.jobChain.Jobs[jobId].State
 }
 
 // SetState sets the chain's state.
 func (c *chain) SetState(state byte) {
-	c.Lock() // -- lock
-	c.JobChain.State = state
-	c.Unlock() // -- unlock
+	c.jcMux.Lock() // -- lock
+	c.jobChain.State = state
+	c.jcMux.Unlock() // -- unlock
+}
+
+// State returns the chain's state.
+func (c *chain) State() byte {
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
+	return c.jobChain.State
+}
+
+// State returns the chain's state.
+func (c *chain) JobChain() *proto.JobChain {
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
+	return c.jobChain
+}
+
+// Set the state of a job in the chain.
+func (c *chain) SetJobState(jobId string, state byte) {
+	now := time.Now().UnixNano()
+
+	c.jcMux.Lock() // -- lock
+	j := c.jobChain.Jobs[jobId]
+	j.State = state
+	c.jobChain.Jobs[jobId] = j
+	c.jcMux.Unlock() // -- unlock
+
+	// Keep chain.running up to date
+	c.runningMux.Lock()
+	defer c.runningMux.Unlock()
+	if state == proto.STATE_RUNNING {
+		c.n += 1 // Nth job to run
+		// @todo: on sequence retry, we need to N-- for all jobs in the sequence
+
+		jobStatus := proto.JobStatus{
+			RequestId: c.jobChain.RequestId,
+			JobId:     jobId,
+			Type:      j.Type,
+			Name:      j.Name,
+			Args:      map[string]interface{}{},
+			StartedAt: now,
+			State:     state,
+			N:         c.n,
+		}
+		for k, v := range j.Args {
+			jobStatus.Args[k] = v
+		}
+		c.running[jobId] = jobStatus
+	} else {
+		// STATE_RUNNING is the only running state, and it's not that, so the
+		// job must not be running.
+		delete(c.running, jobId)
+	}
+}
+
+// Running returns a list of running jobs.
+func (c *chain) Running() map[string]proto.JobStatus {
+	// Return copy of c.running
+	c.runningMux.Lock()
+	defer c.runningMux.Unlock()
+	running := make(map[string]proto.JobStatus, len(c.running))
+	for jobId, jobStatus := range c.running {
+		running[jobId] = jobStatus
+	}
+	return running
+}
+
+// //////////////////////////////////////////////////////////////////////////
+// Implement JOSN interfaces for custom (un)marshalling by chain.Repo
+// //////////////////////////////////////////////////////////////////////////
+
+type chainJSON struct {
+	JobChain *proto.JobChain            `json:"jobChain"`
+	Running  map[string]proto.JobStatus `json:"running"`
+	N        uint                       `"json:"n"`
+}
+
+func (c *chain) MarshalJSON() ([]byte, error) {
+	c.jcMux.Lock()
+	defer c.jcMux.Unlock()
+
+	c.runningMux.Lock()
+	defer c.runningMux.Unlock()
+
+	m := chainJSON{
+		JobChain: c.jobChain,
+		Running:  c.running,
+		N:        c.n,
+	}
+	return json.Marshal(m)
+}
+
+func (c *chain) UnmarshalJSON(bytes []byte) error {
+	var m chainJSON
+	err := json.Unmarshal(bytes, &m)
+	if err != nil {
+		return err
+	}
+
+	c.jcMux = &sync.RWMutex{}
+	c.jobChain = m.JobChain
+
+	c.runningMux = &sync.RWMutex{}
+	c.running = m.Running
+	c.n = m.N
+
+	return nil
 }
 
 // -------------------------------------------------------------------------- //
 
+// previousJobs finds all of the immediately previous jobs to a given job.
+func (c *chain) previousJobs(jobId string) proto.Jobs {
+	var prevJobs proto.Jobs
+	for curJob, nextJobs := range c.jobChain.AdjacencyList {
+		if contains(nextJobs, jobId) {
+			if val, ok := c.jobChain.Jobs[curJob]; ok {
+				prevJobs = append(prevJobs, val)
+			}
+		}
+	}
+	return prevJobs
+}
+
+// lastJob finds the job in the chain with outdegree 0. If there is not
+// exactly one of these jobs, it returns an error.
+func (c *chain) lastJob() (proto.Job, error) {
+	var jobIds []string
+	for jobId, count := range c.outdegreeCounts() {
+		if count == 0 {
+			jobIds = append(jobIds, jobId)
+		}
+	}
+
+	if len(jobIds) != 1 {
+		return proto.Job{}, ErrInvalidChain{
+			Message: fmt.Sprintf("chain has %d last job(s), should "+
+				"have one (last job(s) = %v)", len(jobIds), jobIds),
+		}
+	}
+
+	return c.jobChain.Jobs[jobIds[0]], nil
+}
+
 // indegreeCounts finds the indegree for each job in the chain.
 func (c *chain) indegreeCounts() map[string]int {
 	indegreeCounts := make(map[string]int)
-	for job := range c.JobChain.Jobs {
+	for job := range c.jobChain.Jobs {
 		indegreeCounts[job] = 0
 	}
 
-	for _, nextJobs := range c.JobChain.AdjacencyList {
+	for _, nextJobs := range c.jobChain.AdjacencyList {
 		for _, nextJob := range nextJobs {
 			if _, ok := indegreeCounts[nextJob]; ok {
 				indegreeCounts[nextJob] += 1
@@ -293,8 +379,8 @@ func (c *chain) indegreeCounts() map[string]int {
 // outdegreeCounts finds the outdegree for each job in the chain.
 func (c *chain) outdegreeCounts() map[string]int {
 	outdegreeCounts := make(map[string]int)
-	for job := range c.JobChain.Jobs {
-		outdegreeCounts[job] = len(c.JobChain.AdjacencyList[job])
+	for job := range c.jobChain.Jobs {
+		outdegreeCounts[job] = len(c.jobChain.AdjacencyList[job])
 	}
 
 	return outdegreeCounts
@@ -340,7 +426,7 @@ func (c *chain) isAcyclic() bool {
 		// If there is a cycle somewhere, at least one jobs indegree
 		// count will never reach 0, and therefore it will never be
 		// enqueued and visited.
-		for _, adjJob := range c.JobChain.AdjacencyList[curJob] {
+		for _, adjJob := range c.jobChain.AdjacencyList[curJob] {
 			indegreeCounts[adjJob] -= 1
 			if indegreeCounts[adjJob] == 0 {
 				queue[adjJob] = struct{}{}
@@ -352,7 +438,7 @@ func (c *chain) isAcyclic() bool {
 		jobsVisited += 1
 	}
 
-	if jobsVisited != len(c.JobChain.Jobs) {
+	if jobsVisited != len(c.jobChain.Jobs) {
 		return false
 	}
 
@@ -363,13 +449,13 @@ func (c *chain) isAcyclic() bool {
 // not valid. An adjacency list is not valid if any of the jobs in it do not
 // exist in chain.Jobs.
 func (c *chain) adjacencyListIsValid() bool {
-	for job, adjJobs := range c.JobChain.AdjacencyList {
-		if _, ok := c.JobChain.Jobs[job]; !ok {
+	for job, adjJobs := range c.jobChain.AdjacencyList {
+		if _, ok := c.jobChain.Jobs[job]; !ok {
 			return false
 		}
 
 		for _, adjJob := range adjJobs {
-			if _, ok := c.JobChain.Jobs[adjJob]; !ok {
+			if _, ok := c.jobChain.Jobs[adjJob]; !ok {
 				return false
 			}
 		}

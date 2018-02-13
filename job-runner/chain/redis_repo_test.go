@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package chain_test
 
@@ -128,7 +128,7 @@ func TestGetSet(t *testing.T) {
 	c := chain.NewChain(initJc())
 
 	// Should not exist before Set
-	ret, err := repo.Get(c.JobChain.RequestId)
+	ret, err := repo.Get(c.RequestId())
 	if ret != nil {
 		t.Error("request id exists before SET is executed")
 	}
@@ -138,7 +138,7 @@ func TestGetSet(t *testing.T) {
 		t.Errorf("error in Set: %v", err)
 	}
 
-	gotC, err := repo.Get(c.JobChain.RequestId)
+	gotC, err := repo.Get(c.RequestId())
 	if err != nil {
 		t.Errorf("error in Get: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestRemove(t *testing.T) {
 
 	repo.Set(c)
 
-	err := repo.Remove(c.JobChain.RequestId)
+	err := repo.Remove(c.RequestId())
 	if err != nil {
 		t.Errorf("error in Remove: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestRemove(t *testing.T) {
 	}
 
 	// We expect an error if the key doesn't exist
-	err = repo.Remove(c.JobChain.RequestId)
+	err = repo.Remove(c.RequestId())
 	if err != chain.ErrNotFound {
 		t.Error("Did not return expected key not found error")
 	}
@@ -247,27 +247,28 @@ func TestGetAll(t *testing.T) {
 		default:
 			t.Fatalf("got chain with nonexistent RequestId: %s", c.RequestId)
 		}
-		if diff := deep.Equal(c.JobChain, expect); diff != nil {
+		if diff := deep.Equal(c.JobChain(), expect); diff != nil {
 			t.Error(c.RequestId, diff)
 		}
+		running := c.Running()
 		if expectRunning {
-			if len(c.Running) != 1 {
+			if len(running) != 1 {
 				test.Dump(c)
-				t.Errorf("chain.Running has %d keys, expected 1", len(c.Running))
+				t.Errorf("chain.Running has %d keys, expected 1", len(running))
 			}
-			j, ok := c.Running[job]
+			j, ok := running[job]
 			if !ok {
 				t.Errorf("%s not set in chain.Running, expected it to be set", job)
 			}
-			if j.StartTs <= 0 {
-				t.Errorf("chain.Running[%s].StartTs = %d, expected > 0", job, j.StartTs)
+			if j.StartedAt <= 0 {
+				t.Errorf("chain.Running[%s].StartTs = %d, expected > 0", job, j.StartedAt)
 			}
 		} else {
-			if len(c.Running) != 0 {
+			if len(running) != 0 {
 				test.Dump(c)
-				t.Errorf("chain.Running has %d keys, expected 0", len(c.Running))
+				t.Errorf("chain.Running has %d keys, expected 0", len(running))
 			}
-			_, ok := c.Running[job]
+			_, ok := running[job]
 			if ok {
 				t.Errorf("%s set in chain.Running, expected Running map to be empty", job)
 			}

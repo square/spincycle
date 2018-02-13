@@ -15,6 +15,7 @@ import (
 )
 
 func TestRunning(t *testing.T) {
+	now := time.Now().UnixNano()
 
 	jc1 := &proto.JobChain{
 		RequestId: "chain1",
@@ -76,35 +77,39 @@ func TestRunning(t *testing.T) {
 		{
 			RequestId: "chain1", // longer runtime because of delay ^
 			JobId:     "job1",
+			Type:      "type1",
 			State:     proto.STATE_RUNNING,
 			N:         1,
+			Args:      map[string]interface{}{},
 		},
 		{
 			RequestId: "chain2",
 			JobId:     "job2",
+			Type:      "type2",
 			State:     proto.STATE_RUNNING,
 			N:         1,
+			Args:      map[string]interface{}{},
 		},
 	}
 
-	if got[0].Runtime <= 0 {
-		t.Errorf("job1 runtime %f, expected > 0", got[0].Runtime)
+	if got[0].StartedAt < now {
+		t.Errorf("job1 started %d < %d", got[0].StartedAt, now)
 	}
-	if got[1].Runtime <= 0 {
-		t.Errorf("job2 runtime %f, expected > 0", got[1].Runtime)
+	if got[1].StartedAt <= 0 {
+		t.Errorf("job2 runtime %f, expected > 0", got[1].StartedAt)
 	}
 
-	// Runtime is nondeterministic
-	expect[0].Runtime = got[0].Runtime
-	expect[1].Runtime = got[1].Runtime
+	// StartedAt is nondeterministic
+	expect[0].StartedAt = got[0].StartedAt
+	expect[1].StartedAt = got[1].StartedAt
 
 	if diff := deep.Equal(got, expect); diff != nil {
 		test.Dump(got)
 		t.Error(diff)
 	}
 
-	// chain1 runtime should be > chain2
-	if got[0].Runtime <= got[1].Runtime {
-		t.Errorf("runtime chain1 %f <= chain2 %f", got[0].Runtime, got[1].Runtime)
+	// chain1 should before chain2
+	if got[0].StartedAt >= got[1].StartedAt {
+		t.Errorf("started chain1 %d >= chain2 %d", got[0].StartedAt, got[1].StartedAt)
 	}
 }

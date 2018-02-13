@@ -32,7 +32,7 @@ type Filter struct {
 var NoFilter Filter
 
 const (
-	ORDER_BY_RUNTIME byte = iota
+	ORDER_BY_START_TIME byte = iota
 )
 
 type manager struct {
@@ -56,10 +56,10 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 	}
 
 	switch f.OrderBy {
-	case ORDER_BY_RUNTIME:
-		sort.Sort(proto.JobStatusByRuntime(running))
+	case ORDER_BY_START_TIME:
+		sort.Sort(proto.JobStatusByStartTime(running))
 	default:
-		sort.Sort(proto.JobStatusByRuntime(running))
+		sort.Sort(proto.JobStatusByStartTime(running))
 	}
 
 	if f.Limit > 0 && len(running) > f.Limit {
