@@ -460,3 +460,167 @@ func TestValidateAdjacencyList(t *testing.T) {
 		t.Errorf("valid = %t, expected %t", valid, expectedValid)
 	}
 }
+
+func TestSequenceStartJob(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+
+	expect := jobs["job1"]
+	actual := c.SequenceStartJob(jobs["job2"])
+
+	if !reflect.DeepEqual(actual, expect) {
+		t.Errorf("sequence start job= %v, expected %v", actual, expect)
+	}
+}
+
+func TestCanRetrySequenceTrue(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+
+	job := jobs["job2"]
+
+	expect := true
+	actual := c.CanRetrySequence(job)
+
+	if actual != expect {
+		t.Errorf("can retry sequence = %v, expected %v", actual, expect)
+	}
+}
+
+func TestCanRetrySequenceFalse(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+
+	// 2 retries are configured for the sequence job2 is in
+	job := jobs["job2"]
+	// Increment sequence retry count twice to exhaust retries
+	c.IncrementSequenceRetryCount(job)
+	c.IncrementSequenceRetryCount(job)
+
+	expect := false
+	actual := c.CanRetrySequence(job)
+
+	if actual != expect {
+		t.Errorf("can retry sequence = %v, expected %v", actual, expect)
+	}
+}
+
+func TestIncrementSequenceRetryCount(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+
+	failedJob := jobs["job2"]
+	c.IncrementSequenceRetryCount(failedJob)
+
+	expect := uint(1)
+	actual := c.SequenceRetryCount(failedJob)
+
+	if actual != expect {
+		t.Errorf("sequence retry count= %v, expected %v", actual, expect)
+	}
+}
+
+func TestSequenceRetryCount(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+
+	job := jobs["job2"]
+
+	expect := uint(0)
+	actual := c.SequenceRetryCount(job)
+
+	if actual != expect {
+		t.Errorf("sequence retry count= %v, expected %v", actual, expect)
+	}
+}
+
+func TestIsDoneRetryableSequenceFalse(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_FAIL)
+
+	expectDone := false
+	expectComplete := false
+	actualDone, actualComplete := c.IsDone()
+
+	if actualDone != expectDone || actualComplete != expectComplete {
+		t.Errorf("done = %v, expected %v. complete = %v, expected %v.", actualDone, expectDone, actualComplete, expectComplete)
+	}
+}
+
+func TestIsDoneRetryableSequenceTrue(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_FAIL)
+
+	// Simulate exhausting sequence retries
+	failedJob := jobs["job2"]
+	c.IncrementSequenceRetryCount(failedJob)
+	c.IncrementSequenceRetryCount(failedJob)
+
+	expectDone := true
+	expectComplete := false
+	actualDone, actualComplete := c.IsDone()
+
+	if actualDone != expectDone || actualComplete != expectComplete {
+		t.Errorf("done = %v, expected %v. complete = %v, expected %v.", actualDone, expectDone, actualComplete, expectComplete)
+	}
+}

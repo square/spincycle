@@ -19,12 +19,12 @@ type RunnerFactory struct {
 	MakeErr         error
 }
 
-func (f *RunnerFactory) Make(job proto.Job, requestId string) (runner.Runner, error) {
+func (f *RunnerFactory) Make(job proto.Job, requestId string, prevTryNo uint, sequenceTry uint) (runner.Runner, error) {
 	return f.RunnersToReturn[job.Id], f.MakeErr
 }
 
 type Runner struct {
-	RunReturn    byte
+	RunReturn    runner.Return
 	RunErr       error
 	RunFunc      func(jobData map[string]interface{}) byte // can use this instead of RunErr and RunFunc for more involved mocks
 	AddedJobData map[string]interface{}                    // Data to add to jobData.
@@ -36,10 +36,10 @@ type Runner struct {
 	stopped bool // if Stop was called
 }
 
-func (r *Runner) Run(jobData map[string]interface{}) byte {
+func (r *Runner) Run(jobData map[string]interface{}) runner.Return {
 	// If RunFunc is defined, use that.
 	if r.RunFunc != nil {
-		return r.RunFunc(jobData)
+		return r.RunReturn
 	}
 
 	if r.RunWg != nil {
@@ -48,7 +48,7 @@ func (r *Runner) Run(jobData map[string]interface{}) byte {
 	if r.RunBlock != nil {
 		<-r.RunBlock
 		if r.stopped {
-			return proto.STATE_FAIL
+			return r.RunReturn
 		}
 	}
 	// Add job data.

@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package runner implements running a job.
 package runner
@@ -14,6 +14,11 @@ import (
 	log "github.com/Sirupsen/logrus"
 )
 
+type Return struct {
+	FinalState byte // Type of final status is.
+	Tries      uint // Number of attempted tries in this run
+}
+
 // A Runner runs and manages one job in a job chain. The job must implement the
 // job.Job interface.
 type Runner interface {
@@ -22,7 +27,7 @@ type Runner interface {
 	// to be retried. After each run attempt, a Job Log is created and sent to
 	// the RM. When the job successfully completes, or reaches the maximum number
 	// of retry attempts, Run returns the final state of the job.
-	Run(jobData map[string]interface{}) byte
+	Run(jobData map[string]interface{}) Return
 
 	// Stop stops the job if it's running. The job is responsible for stopping
 	// quickly because Stop blocks while waiting for the job to stop.
@@ -39,12 +44,15 @@ type runner struct {
 	reqId   string    // the request id the job belongs to
 	rmc     rm.Client // client used to send JLs to the RM
 	// --
-	jobId     string
-	jobName   string
-	jobType   string
-	maxTries  uint
-	retryWait time.Duration
-	stopChan  chan struct{}
+	jobId         string
+	jobName       string
+	jobType       string
+	prevTryNo     uint
+	sequenceId    string
+	sequenceRetry uint
+	maxTries      uint
+	retryWait     time.Duration
+	stopChan      chan struct{}
 	*sync.Mutex
 	logger    *log.Entry
 	startTime time.Time
@@ -52,24 +60,27 @@ type runner struct {
 
 // NewRunner takes a proto.Job struct and its corresponding job.Job interface, and
 // returns a Runner.
-func NewRunner(pJob proto.Job, realJob job.Job, reqId string, rmc rm.Client) Runner {
+func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, sequenceRetry uint, rmc rm.Client) Runner {
 	return &runner{
 		realJob: realJob,
 		reqId:   reqId,
 		rmc:     rmc,
 		// --
-		jobId:     pJob.Id,
-		jobName:   pJob.Name,
-		jobType:   pJob.Type,
-		maxTries:  1 + pJob.Retry, // + 1 because we always run once
-		retryWait: time.Duration(pJob.RetryWait) * time.Millisecond,
-		stopChan:  make(chan struct{}),
-		Mutex:     &sync.Mutex{},
-		logger:    log.WithFields(log.Fields{"requestId": reqId, "jobId": pJob.Id}),
+		jobId:         pJob.Id,
+		jobName:       pJob.Name,
+		jobType:       pJob.Type,
+		prevTryNo:     prevTryNo,
+		maxTries:      1 + pJob.Retry, // + 1 because we always run once
+		sequenceId:    pJob.SequenceId,
+		sequenceRetry: sequenceRetry,
+		retryWait:     time.Duration(pJob.RetryWait) * time.Millisecond,
+		stopChan:      make(chan struct{}),
+		Mutex:         &sync.Mutex{},
+		logger:        log.WithFields(log.Fields{"requestId": reqId, "jobId": pJob.Id}),
 	}
 }
 
-func (r *runner) Run(jobData map[string]interface{}) byte {
+func (r *runner) Run(jobData map[string]interface{}) Return {
 	// The chain.traverser that's calling us only cares about the final state
 	// of the job. If maxTries > 1, the intermediate states are only logged if
 	// the run fails.
@@ -77,8 +88,9 @@ func (r *runner) Run(jobData map[string]interface{}) byte {
 
 	r.startTime = time.Now()
 
+	tryNo := uint(1)
 TRY_LOOP:
-	for tryNo := uint(1); tryNo <= r.maxTries; tryNo++ {
+	for tryNo <= r.maxTries {
 		tryLogger := r.logger.WithFields(log.Fields{
 			"try":       tryNo,
 			"max_tries": r.maxTries,
@@ -106,18 +118,20 @@ TRY_LOOP:
 
 		// Create a JL and send it to the RM.
 		jl := proto.JobLog{
-			RequestId:  r.reqId,
-			JobId:      r.jobId,
-			Name:       r.jobName,
-			Type:       r.jobType,
-			Try:        tryNo,
-			StartedAt:  startedAt,
-			FinishedAt: finishedAt,
-			State:      jobRet.State,
-			Exit:       jobRet.Exit,
-			Error:      errMsg,
-			Stdout:     jobRet.Stdout,
-			Stderr:     jobRet.Stderr,
+			RequestId:   r.reqId,
+			JobId:       r.jobId,
+			Name:        r.jobName,
+			Type:        r.jobType,
+			Try:         r.prevTryNo + tryNo,
+			SequenceId:  r.sequenceId,
+			SequenceTry: 1 + r.sequenceRetry,
+			StartedAt:   startedAt,
+			FinishedAt:  finishedAt,
+			State:       jobRet.State,
+			Exit:        jobRet.Exit,
+			Error:       errMsg,
+			Stdout:      jobRet.Stdout,
+			Stderr:      jobRet.Stderr,
 		}
 		if err := r.rmc.CreateJL(r.reqId, jl); err != nil {
 			tryLogger.Errorf("problem sending job log (%#v) to the RM: %s", jl, err)
@@ -151,9 +165,14 @@ TRY_LOOP:
 		case <-r.stopChan:
 			break TRY_LOOP // job stopped
 		}
+
+		tryNo++
 	}
 
-	return finalState
+	return Return{
+		FinalState: finalState,
+		Tries:      tryNo,
+	}
 }
 
 func (r *runner) Stop() error {

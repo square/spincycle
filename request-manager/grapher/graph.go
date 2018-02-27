@@ -27,13 +27,15 @@ type Graph struct {
 // should be retried on error. Next defines all the out edges
 // from Node, and Prev defines all the in edges to Node.
 type Node struct {
-	Datum     job.Job                // Data stored at this Node
-	Next      map[string]*Node       // out edges ( node id -> Node )
-	Prev      map[string]*Node       // in edges ( node id -> Node )
-	Name      string                 // the name of the node
-	Args      map[string]interface{} // the args the node was created with
-	Retry     uint                   // the number of times to retry a node
-	RetryWait uint                   // the time, in seconds, to sleep between retries
+	Datum         job.Job                // Data stored at this Node
+	Next          map[string]*Node       // out edges ( node id -> Node )
+	Prev          map[string]*Node       // in edges ( node id -> Node )
+	Name          string                 // the name of the node
+	Args          map[string]interface{} // the args the node was created with
+	Retry         uint                   // the number of times to retry a node
+	RetryWait     uint                   // the time, in seconds, to sleep between retries
+	SequenceId    string                 // ID for first node in sequence
+	SequenceRetry uint                   // Number of times to retry a sequence. Only set for first node in sequence.
 }
 
 // returns true iff the graph has at least one cycle in it
@@ -89,7 +91,7 @@ func (g *Graph) IsValidGraph() bool {
 }
 
 // Prints out g in DOT graph format.
-// To use the output, please refer to the graphviz specs found at: http://www.graphviz.org/
+// Copy and paste output into http://www.webgraphviz.com/
 func (g *Graph) PrintDot() {
 	fmt.Printf("digraph {\n")
 	fmt.Printf("\trankdir=UD;\n")
@@ -98,7 +100,10 @@ func (g *Graph) PrintDot() {
 	fmt.Printf("\tfontsize=22\n")
 	for vertexName, vertex := range g.Vertices {
 		fmt.Printf("\tnode [style=filled,color=\"%s\",shape=box]\n", "#86cedf")
-		fmt.Printf("\t\"%s\" [label=\"%s :\\n ", vertexName, vertex.Datum.Id().Id)
+		fmt.Printf("\t\"%s\" [label=\"%s\\n ", vertexName, vertex.Name)
+		fmt.Printf("Vertex ID: %s\\n ", vertex.Datum.Id().Id)
+		fmt.Printf("Sequence ID: %s\\n ", vertex.SequenceId)
+		fmt.Printf("Sequence Retry: %v\\n ", vertex.SequenceRetry)
 		for k, v := range vertex.Args {
 			fmt.Printf(" %s : %s \\n ", k, v)
 		}

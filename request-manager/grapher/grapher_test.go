@@ -157,6 +157,40 @@ func TestNodeRetry(t *testing.T) {
 	}
 }
 
+func TestSequenceRetry(t *testing.T) {
+	omg := testGrapher()
+	args := map[string]interface{}{
+		"cluster": "test-cluster-001",
+		"env":     "testing",
+	}
+
+	// create the graph
+	// decommission-cluster-seq-retry has a sequence retry configured
+	g, err := omg.CreateGraph("decommission-cluster", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the sequence retries are set correctly on all nodes. Only the "sequence_decommission-cluster_start" node should have retries.
+	found := false
+	sequenceStartNodeName := "sequence_decommission-instances_start"
+	for _, node := range g.Vertices {
+		if node.Name == sequenceStartNodeName {
+			found = true
+			if node.SequenceRetry != 2 {
+				t.Errorf("%s node sequence retries = %d, expected %d", node.Name, node.SequenceRetry, 2)
+			}
+		} else {
+			if node.SequenceRetry != 0 {
+				t.Errorf("%s node sequence retries = %d, expected %d", node.Name, node.SequenceRetry, 0)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("couldn't find vertix with node name %s", sequenceStartNodeName)
+	}
+}
+
 func TestCreateDecomGraph(t *testing.T) {
 	omg := testGrapher()
 	args := map[string]interface{}{

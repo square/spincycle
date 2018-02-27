@@ -143,25 +143,35 @@ func TestCreate(t *testing.T) {
 				"sequence_three-nodes_start@1": proto.Job{
 					Id:   "sequence_three-nodes_start@1",
 					Type: "no-op",
+					SequenceId: "sequence_three-nodes_start@1",
+					SequenceRetry: 2,
 				},
 				"a@3": proto.Job{
 					Id:        "a@3",
 					Type:      "aJobType",
 					Retry:     1,
 					RetryWait: 500,
+					SequenceId: "sequence_three-nodes_start@1",
+					SequenceRetry: 0,
 				},
 				"b@4": proto.Job{
 					Id:    "b@4",
 					Type:  "bJobType",
 					Retry: 3,
+					SequenceId: "sequence_three-nodes_start@1",
+					SequenceRetry: 0,
 				},
 				"c@5": proto.Job{
 					Id:   "c@5",
 					Type: "cJobType",
+					SequenceId: "sequence_three-nodes_start@1",
+					SequenceRetry: 0,
 				},
 				"sequence_three-nodes_end@2": proto.Job{
 					Id:   "sequence_three-nodes_end@2",
 					Type: "no-op",
+					SequenceId: "sequence_three-nodes_start@1",
+					SequenceRetry: 0,
 				},
 			},
 			AdjacencyList: map[string][]string{

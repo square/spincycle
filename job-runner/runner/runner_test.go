@@ -30,7 +30,7 @@ func TestFactory(t *testing.T) {
 		Bytes: []byte{},
 	}
 
-	jr, err := rf.Make(pJob, "abc")
+	jr, err := rf.Make(pJob, "abc", 0, 0)
 	if err != mock.ErrJob {
 		t.Errorf("err = nil, expected %s", mock.ErrJob)
 	}
@@ -66,11 +66,14 @@ func TestRunFail(t *testing.T) {
 			return nil
 		},
 	}
-	jr := runner.NewRunner(pJob, mJob, "abc", rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
 
-	finalState := jr.Run(noJobData)
-	if finalState != proto.STATE_FAIL {
-		t.Errorf("final state = %d, expected %d", finalState, proto.STATE_FAIL)
+	ret := jr.Run(noJobData)
+	if ret.FinalState != proto.STATE_FAIL {
+		t.Errorf("final state = %d, expected %d", ret.FinalState, proto.STATE_FAIL)
+	}
+	if ret.Tries != 3 {
+		t.Errorf("tries= %d, expected %d", ret.Tries, 3)
 	}
 
 	if jlsSent != 3 {
@@ -105,11 +108,14 @@ func TestRunSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	jr := runner.NewRunner(pJob, mJob, "abc", rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
 
-	finalState := jr.Run(noJobData)
-	if finalState != proto.STATE_COMPLETE {
-		t.Errorf("final state = %d, expected %d", finalState, proto.STATE_COMPLETE)
+	ret := jr.Run(noJobData)
+	if ret.FinalState != proto.STATE_COMPLETE {
+		t.Errorf("final state = %d, expected %d", ret.FinalState, proto.STATE_COMPLETE)
+	}
+	if ret.Tries != 4 {
+		t.Errorf("tries= %d, expected %d", ret.Tries, 4)
 	}
 
 	if jlsSent != 4 {
@@ -132,12 +138,13 @@ func TestRunStop(t *testing.T) {
 		RetryWait: 30000, // important...the runner will sleep for 30 seconds after the job fails the first time
 	}
 	rmc := &mock.RMClient{}
-	jr := runner.NewRunner(pJob, mJob, "abc", rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
 
 	// Run the job and let it block.
 	stateChan := make(chan byte)
 	go func() {
-		stateChan <- jr.Run(noJobData)
+		ret := jr.Run(noJobData)
+		stateChan <- ret.FinalState
 	}()
 
 	// Sleep for a second to allow the runner to get to the state where it's sleeping for the
@@ -171,7 +178,7 @@ func TestRunStatus(t *testing.T) {
 		Bytes: []byte{},
 	}
 	rmc := &mock.RMClient{}
-	jr := runner.NewRunner(pJob, mJob, "abc", rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
 
 	status := jr.Status()
 	if status != expectedStatus {

@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package status_test
 
@@ -24,8 +24,10 @@ func TestRunning(t *testing.T) {
 		},
 		Jobs: map[string]proto.Job{
 			"job1": proto.Job{
-				Id:   "job1",
-				Type: "type1",
+				Id:            "job1",
+				Type:          "type1",
+				SequenceId:    "job1",
+				SequenceRetry: 0,
 			},
 		},
 	}
@@ -44,8 +46,10 @@ func TestRunning(t *testing.T) {
 		},
 		Jobs: map[string]proto.Job{
 			"job2": proto.Job{
-				Id:   "job2",
-				Type: "type2",
+				Id:            "job2",
+				Type:          "type2",
+				SequenceId:    "job2",
+				SequenceRetry: 0,
 			},
 		},
 	}

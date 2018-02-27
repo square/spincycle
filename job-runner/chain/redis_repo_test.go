@@ -82,8 +82,8 @@ func initJc() *proto.JobChain {
 			"job1": []string{"job2", "job3"},
 		},
 		Jobs: map[string]proto.Job{
-			"j1": proto.Job{
-				Id:    "j1",
+			"job1": proto.Job{
+				Id:    "job1",
 				Type:  "something",
 				State: proto.STATE_PENDING,
 				Args: map[string]interface{}{
@@ -92,6 +92,8 @@ func initJc() *proto.JobChain {
 				Data: map[string]interface{}{
 					"some": "thing",
 				},
+				SequenceId:    "job1",
+				SequenceRetry: 0,
 			},
 		},
 	}
@@ -186,9 +188,11 @@ func TestGetAll(t *testing.T) {
 		},
 		Jobs: map[string]proto.Job{
 			"job1": proto.Job{
-				Id:    "job1",
-				Type:  "type1",
-				State: proto.STATE_PENDING,
+				Id:            "job1",
+				Type:          "type1",
+				State:         proto.STATE_PENDING,
+				SequenceId:    "job1",
+				SequenceRetry: 0,
 			},
 		},
 	}
@@ -202,9 +206,11 @@ func TestGetAll(t *testing.T) {
 		},
 		Jobs: map[string]proto.Job{
 			"jobA": proto.Job{
-				Id:    "jobA",
-				Type:  "type2",
-				State: proto.STATE_RUNNING,
+				Id:            "jobA",
+				Type:          "type2",
+				State:         proto.STATE_RUNNING,
+				SequenceId:    "jobA",
+				SequenceRetry: 0,
 			},
 		},
 	}
