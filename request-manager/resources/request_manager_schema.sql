@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS `requests` (
 CREATE TABLE IF NOT EXISTS `raw_requests` (
   `request_id` BINARY(20) NOT NULL,
   `request`    BLOB NOT NULL,
-  `job_chain`  BLOB NOT NULL,
+  `job_chain`  LONGBLOB NOT NULL,
 
   PRIMARY KEY (`request_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
