@@ -18,15 +18,16 @@ type chain struct {
 	jcMux    *sync.RWMutex
 	jobChain *proto.JobChain
 
-	runningMux *sync.RWMutex
-	running    map[string]proto.JobStatus // keyed on job id
-	n          uint                       // N jobs ran
+	runningMux         *sync.RWMutex
+	running            map[string]proto.JobStatus // keyed on job id
+	n                  uint                       // N jobs ran
+	sequenceRetryCount map[string]uint            // Number of retries attempted so far
 }
 
 // NewChain takes a JobChain proto (from the RM) and turns it into a Chain that
 // the JR can use.
 func NewChain(jc *proto.JobChain) *chain {
-	// Set the state of all jobs in the chain to "Pending".
+	sequenceRetryCount := make(map[string]uint)
 	for jobName, job := range jc.Jobs {
 		job.State = proto.STATE_PENDING
 		job.Data = map[string]interface{}{}
@@ -37,9 +38,10 @@ func NewChain(jc *proto.JobChain) *chain {
 		jcMux:    &sync.RWMutex{},
 		jobChain: jc,
 
-		runningMux: &sync.RWMutex{},
-		running:    map[string]proto.JobStatus{},
-		n:          0,
+		runningMux:         &sync.RWMutex{},
+		running:            map[string]proto.JobStatus{},
+		n:                  0,
+		sequenceRetryCount: sequenceRetryCount,
 	}
 }
 
@@ -70,6 +72,12 @@ func (c *chain) FirstJob() (proto.Job, error) {
 	}
 
 	return c.jobChain.Jobs[jobIds[0]], nil
+}
+
+func (c *chain) SequenceStartJob(j proto.Job) proto.Job {
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
+	return c.jobChain.Jobs[j.SequenceId]
 }
 
 // NextJobs finds all of the jobs adjacent to the given job.
@@ -133,7 +141,10 @@ LOOP:
 			// Move on to the next job.
 			continue LOOP
 		case proto.STATE_FAIL:
-			// do nothing
+			// This failed job is part of a sequence that can be retried
+			if c.CanRetrySequence(job) {
+				return false, false
+			}
 		default:
 			// Any job that's not running, complete, or failed.
 			pendingJobs = append(pendingJobs, job)
@@ -168,6 +179,21 @@ LOOP:
 	}
 
 	return
+}
+
+func (c *chain) CanRetrySequence(j proto.Job) bool {
+	sequenceStartJob := c.SequenceStartJob(j)
+	return c.sequenceRetryCount[sequenceStartJob.Id] < sequenceStartJob.SequenceRetry
+}
+
+func (c *chain) IncrementSequenceRetryCount(j proto.Job) {
+	sequenceStartJob := c.SequenceStartJob(j)
+	c.sequenceRetryCount[sequenceStartJob.Id] += 1
+}
+
+func (c *chain) SequenceRetryCount(j proto.Job) uint {
+	sequenceStartJob := c.SequenceStartJob(j)
+	return c.sequenceRetryCount[sequenceStartJob.Id]
 }
 
 // Validate checks if a job chain is valid. It returns an error if it's not.
@@ -246,7 +272,6 @@ func (c *chain) SetJobState(jobId string, state byte) {
 	defer c.runningMux.Unlock()
 	if state == proto.STATE_RUNNING {
 		c.n += 1 // Nth job to run
-		// @todo: on sequence retry, we need to N-- for all jobs in the sequence
 
 		jobStatus := proto.JobStatus{
 			RequestId: c.jobChain.RequestId,

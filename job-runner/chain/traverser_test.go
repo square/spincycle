@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/job-runner/chain"
+	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 	testutil "github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
@@ -42,10 +43,10 @@ func TestRunComplete(t *testing.T) {
 	chainRepo := chain.NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job2": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job3": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job4": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
 		},
 	}
 	rmc := &mock.RMClient{}
@@ -81,10 +82,10 @@ func TestRunNotComplete(t *testing.T) {
 	chainRepo := chain.NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job2": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job3": &mock.Runner{RunReturn: proto.STATE_FAIL},
-			"job4": &mock.Runner{RunReturn: proto.STATE_FAIL},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}},
+			"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}},
 		},
 	}
 	rmc := &mock.RMClient{}
@@ -118,15 +119,111 @@ func TestRunNotComplete(t *testing.T) {
 	}
 }
 
+func TestRetrySequence(t *testing.T) {
+	chainRepo := chain.NewMemoryRepo()
+	// Job in middle of sequence fails
+	rf := &mock.RunnerFactory{
+		RunnersToReturn: map[string]*mock.Runner{
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}},
+			"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_PENDING}},
+		},
+	}
+	rmc := &mock.RMClient{}
+
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+
+	jc := &proto.JobChain{
+		RequestId: "abc",
+		Jobs:      jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+
+	err := traverser.Run()
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+	if c.State() != proto.STATE_FAIL {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_FAIL)
+	}
+
+	job := jobs["job3"]
+	expect := uint(2)
+	actual := c.SequenceRetryCount(job)
+	if actual != expect {
+		t.Errorf("sequence retried = %d, expected %d", actual, expect)
+
+	}
+	_, err = chainRepo.Get("abc")
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
+	}
+}
+
+func TestRetrySequenceFirstJobFailed(t *testing.T) {
+	chainRepo := chain.NewMemoryRepo()
+	// Job at start of sequence fails
+	rf := &mock.RunnerFactory{
+		RunnersToReturn: map[string]*mock.Runner{
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_PENDING}},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_PENDING}},
+			"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_PENDING}},
+		},
+	}
+	rmc := &mock.RMClient{}
+
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+
+	jc := &proto.JobChain{
+		RequestId: "abc",
+		Jobs:      jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+
+	err := traverser.Run()
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+	if c.State() != proto.STATE_FAIL {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_FAIL)
+	}
+
+	job := jobs["job3"]
+	expect := uint(2)
+	actual := c.SequenceRetryCount(job)
+	if actual != expect {
+		t.Errorf("sequence retried = %d, expected %d", actual, expect)
+
+	}
+	_, err = chainRepo.Get("abc")
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
+	}
+}
+
 // Unknown job state should not cause the traverser to panic when running.
 func TestJobUnknownState(t *testing.T) {
 	chainRepo := chain.NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job2": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job3": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job4": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
 		},
 	}
 	rmc := &mock.RMClient{}
@@ -164,10 +261,10 @@ func TestJobData(t *testing.T) {
 	chainRepo := chain.NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{RunReturn: proto.STATE_COMPLETE, AddedJobData: map[string]interface{}{"k1": "v1", "k2": "v2"}},
-			"job2": &mock.Runner{RunReturn: proto.STATE_COMPLETE, AddedJobData: map[string]interface{}{}},
-			"job3": &mock.Runner{RunReturn: proto.STATE_COMPLETE, AddedJobData: map[string]interface{}{}},
-			"job4": &mock.Runner{RunReturn: proto.STATE_COMPLETE, AddedJobData: map[string]interface{}{"k1": "v9"}},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, AddedJobData: map[string]interface{}{"k1": "v1", "k2": "v2"}},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, AddedJobData: map[string]interface{}{}},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, AddedJobData: map[string]interface{}{}},
+			"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, AddedJobData: map[string]interface{}{"k1": "v9"}},
 		},
 	}
 	rmc := &mock.RMClient{}
@@ -202,7 +299,7 @@ func TestRunJobsRunnerError(t *testing.T) {
 	chainRepo := chain.NewMemoryRepo()
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
 		},
 		// This is what causes the error, even though the job returns STATE_COMPLETE
 		MakeErr: mock.ErrRunner,
@@ -267,9 +364,9 @@ func TestStop(t *testing.T) {
 	runWg.Add(2)
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{RunReturn: proto.STATE_COMPLETE},
-			"job2": &mock.Runner{RunReturn: proto.STATE_FAIL, RunBlock: make(chan struct{}), RunWg: &runWg},
-			"job3": &mock.Runner{RunReturn: proto.STATE_FAIL, RunBlock: make(chan struct{}), RunWg: &runWg},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}, RunBlock: make(chan struct{}), RunWg: &runWg},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}, RunBlock: make(chan struct{}), RunWg: &runWg},
 		},
 	}
 	rmc := &mock.RMClient{}
@@ -333,19 +430,14 @@ func TestStatus(t *testing.T) {
 	runWg.Add(2)
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{RunReturn: proto.STATE_COMPLETE, StatusResp: "job1 running"},
-			"job2": &mock.Runner{RunReturn: proto.STATE_COMPLETE, StatusResp: "job2 running", RunBlock: make(chan struct{}), RunWg: &runWg},
-			"job3": &mock.Runner{RunReturn: proto.STATE_COMPLETE, StatusResp: "job3 running", RunBlock: make(chan struct{}), RunWg: &runWg},
-			"job4": &mock.Runner{RunReturn: proto.STATE_COMPLETE, StatusResp: "job4 running"},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: "job1 running"},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: "job2 running", RunBlock: make(chan struct{}), RunWg: &runWg},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: "job3 running", RunBlock: make(chan struct{}), RunWg: &runWg},
+			"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: "job4 running"},
 		},
 	}
 	rmc := &mock.RMClient{}
 
-	/*
-					    +- job2 -+
-				job1 -> |        |-> job4
-		                +- job3 -+
-	*/
 	jc := &proto.JobChain{
 		RequestId: "abc",
 		Jobs:      testutil.InitJobs(4),

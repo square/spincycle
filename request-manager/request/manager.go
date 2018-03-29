@@ -112,13 +112,15 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 			return req, err
 		}
 		job := proto.Job{
-			Type:      node.Datum.Id().Type,
-			Id:        node.Datum.Id().Id,
-			Name:      node.Datum.Id().Name,
-			Bytes:     bytes,
-			Args:      node.Args,
-			Retry:     node.Retry,
-			RetryWait: node.RetryWait,
+			Type:          node.Datum.Id().Type,
+			Id:            node.Datum.Id().Id,
+			Name:          node.Datum.Id().Name,
+			Bytes:         bytes,
+			Args:          node.Args,
+			Retry:         node.Retry,
+			RetryWait:     node.RetryWait,
+			SequenceId:    node.SequenceId,
+			SequenceRetry: node.SequenceRetry,
 		}
 		jc.Jobs[jobId] = job
 	}
@@ -285,6 +287,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	}
 	defer m.dbc.Close(conn) // don't leak conn
 
+	// TODO(alyssa): change query when we add support for nested sequence retries
 	q := "SELECT j1.job_id, j1.name, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
 		"j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try) WHERE j1.request_id = ? AND j2.try IS NULL"
 	rows, err := conn.QueryContext(ctx, q, requestId)

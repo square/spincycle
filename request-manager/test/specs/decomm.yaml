@@ -47,7 +47,7 @@ sequences:
       decommission-instances:
         category: sequence
         type: decommission-instance
-        each: 
+        each:
           - instances:instance # repeat for each instance in instances
         args:
           - expected: instances
@@ -110,6 +110,7 @@ sequences:
         sets: []
         deps: [check-ok]
   decommission-instance:
+    retry: 2
     args:
       required:
         - name: instance

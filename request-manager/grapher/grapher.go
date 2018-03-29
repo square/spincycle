@@ -98,12 +98,12 @@ func (o *Grapher) buildSequence(name string, seq *SequenceSpec, args map[string]
 			args[arg.Name] = arg.Default
 		}
 	}
-	return o.buildComponent("sequence_"+name, seq.Nodes, args)
+	return o.buildComponent("sequence_"+name, seq.Nodes, args, seq.Retry)
 }
 
 // buildComponent, given a set of node specs, and node args, create a graph that represents the list of node specs,
 // nodeArgs represents the arguments that will be passed into the nodes on creation
-func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nodeArgs map[string]interface{}) (*Graph, error) {
+func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nodeArgs map[string]interface{}, sequenceRetry uint) (*Graph, error) {
 
 	// Start with an empty graph. Enforce a
 	// single source and a single sink node here.
@@ -111,6 +111,10 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 	if err != nil {
 		return nil, err
 	}
+
+	// Store configured retry from sequence spec on the first node in the
+	// sequence
+	g.First.SequenceRetry = sequenceRetry
 
 	//////////////////////////////////////////////////////
 	// First, construct all subcomponents of this graph
@@ -305,6 +309,31 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 			return nil, fmt.Errorf("Impossible dependencies found amongst: %v", cs)
 		}
 		componentsRemaining = len(componentsToAdd)
+	}
+
+	///////////////////////////////////////////////////////////
+	// Third, mark all vertices in sequence except start vertex
+	// start sequence id
+
+	// A graph is built by constructing its inner most components, which are
+	// sequences, and building its way out. When constructing the inner most
+	// sequence, we want to set SequenceId for all but the first vertex in the
+	// sequence. The SequenceId for the first vertex in the sequence will be set
+	// on a subsequent pass. Lastly, the first vertex in the completed graph will
+	// have no SequenceId set, as that vertex does part of a larger sequence.
+	sequenceId := g.First.Datum.Id().Id
+	for _, vertex := range g.Vertices {
+		// TODO(alyssa): Add `ParentSequenceId` to start vertex of each sequence.
+		// It's important to do this check before setting `SequenceId`
+		// if vertex.Id == vertex.SequenceId && vertex.ParentSequenceId == "" {
+		//   vertex.ParentSequenceId = sequenceId
+		// }
+
+		// Set SequenceId if it has not been set yet. This check also ensures that
+		// it is not overwritten on subsequent visits to this vertex.
+		if vertex.SequenceId == "" {
+			vertex.SequenceId = sequenceId
+		}
 	}
 
 	// Assert g is a well formed graph

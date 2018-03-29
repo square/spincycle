@@ -4,6 +4,7 @@ package chain
 
 import (
 	"fmt"
+	"sync"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/square/spincycle/job-runner/runner"
@@ -110,6 +111,12 @@ type traverser struct {
 	// Client for communicating with the Request Manager.
 	rmc rm.Client
 
+	// job.Id -> number of tries
+	jobTries map[string]uint
+
+	// mutex to access jobTries list
+	jtMux *sync.RWMutex
+
 	// Used for logging.
 	logger *log.Entry
 }
@@ -125,6 +132,8 @@ func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rmc rm.Client) *trav
 		runJobChan:  make(chan proto.Job),
 		doneJobChan: make(chan proto.Job),
 		rmc:         rmc,
+		jobTries:    make(map[string]uint),
+		jtMux:       &sync.RWMutex{},
 		// Include the request id in all logging.
 		logger: log.WithFields(log.Fields{"requestId": chain.RequestId()}),
 	}
@@ -174,11 +183,11 @@ func (t *traverser) Run() error {
 	// to do next (check to see if the entire chain is done running, and
 	// enqueue the next jobs if there are any).
 JOB_REAPER:
-	for doneJ := range t.doneJobChan {
-		jLogger := t.logger.WithFields(log.Fields{"job_id": doneJ.Id})
+	for doneJob := range t.doneJobChan {
+		jLogger := t.logger.WithFields(log.Fields{"job_id": doneJob.Id, "sequence_id": doneJob.SequenceId, "sequence_retry_count": t.chain.SequenceRetryCount(doneJob)})
 
 		// Set the final state of the job in the chain.
-		t.chain.SetJobState(doneJ.Id, doneJ.State)
+		t.chain.SetJobState(doneJob.Id, doneJob.State)
 		t.chainRepo.Set(t.chain)
 
 		// Check to see if the entire chain is done. If it is, break out of
@@ -199,9 +208,17 @@ JOB_REAPER:
 			break
 		}
 
-		// If the job did not complete successfully, then ignore subsequent jobs.
-		// For example, if job B of A -> B -> C  fails, then C is not ran.
-		if doneJ.State != proto.STATE_COMPLETE {
+		// done jobs are either complete or failed
+		if doneJob.State != proto.STATE_COMPLETE {
+			if t.chain.CanRetrySequence(doneJob) {
+				jLogger.Info("job did not complete successfully. retrying sequence.")
+				t.retrySequence(doneJob) // re-enqueue first job of failed sequence
+				continue JOB_REAPER
+			}
+
+			// If the failed job is not part of a retryable sequence, then ignore
+			// subsequent jobs. For example, if job B of A -> B -> C  fails, then C is
+			// not ran.
 			jLogger.Warn("job did not complete successfully")
 			continue JOB_REAPER
 		}
@@ -212,7 +229,7 @@ JOB_REAPER:
 		jLogger.Infof("job completed successfully")
 
 	NEXT_JOB:
-		for _, nextJ := range t.chain.NextJobs(doneJ.Id) {
+		for _, nextJ := range t.chain.NextJobs(doneJob.Id) {
 			nextJLogger := jLogger.WithFields(log.Fields{"next_job_id": nextJ.Id})
 
 			// Check to make sure the job is ready to run. It might not be if it has
@@ -230,7 +247,7 @@ JOB_REAPER:
 			// last. Therefore, a job should never rely on jobData that was
 			// created during an unrelated sequence at any time earlier in
 			// the chain.
-			for k, v := range doneJ.Data {
+			for k, v := range doneJob.Data {
 				nextJ.Data[k] = v
 			}
 
@@ -316,7 +333,10 @@ func (t *traverser) runJobs() {
 
 			// Make a job runner. If an error is encountered, set the
 			// state of the job to FAIL and create a JL with the error.
-			runner, err := t.rf.Make(pJob, t.chain.RequestId())
+			sequenceRetry := t.chain.SequenceRetryCount(pJob)
+			t.jtMux.RLock()
+			runner, err := t.rf.Make(pJob, t.chain.RequestId(), t.jobTries[pJob.Id], sequenceRetry)
+			t.jtMux.RUnlock()
 			if err != nil {
 				pJob.State = proto.STATE_FAIL
 				t.sendJL(pJob, err) // need to send a JL to the RM so that it knows this job failed
@@ -345,10 +365,15 @@ func (t *traverser) runJobs() {
 			t.chain.SetJobState(pJob.Id, proto.STATE_RUNNING)
 
 			// Run the job. This is a blocking operation that could take a long time.
-			finalState := runner.Run(pJob.Data)
+			ret := runner.Run(pJob.Data)
+
+			t.jtMux.Lock() // -- lock
+			t.jobTries[pJob.Id] = t.jobTries[pJob.Id] + ret.Tries
+			t.jtMux.Unlock() // -- unlock
 
 			// The traverser only cares about if a job completes or fails. Therefore,
 			// we set the state of every job that isn't COMPLETE to be FAIL.
+			finalState := ret.FinalState
 			if finalState != proto.STATE_COMPLETE {
 				finalState = proto.STATE_FAIL
 			}
@@ -364,6 +389,7 @@ func (t *traverser) sendJL(pJob proto.Job, err error) {
 		JobId:      pJob.Id,
 		Name:       pJob.Name,
 		Type:       pJob.Type,
+		SequenceId: pJob.SequenceId,
 		StartedAt:  0, // zero because the job never ran
 		FinishedAt: 0,
 		State:      pJob.State,
@@ -371,9 +397,109 @@ func (t *traverser) sendJL(pJob proto.Job, err error) {
 		Error:      err.Error(),
 	}
 
+	if err != nil {
+		jl.Error = err.Error()
+	}
+
 	// Send the JL to the RM.
 	err = t.rmc.CreateJL(t.chain.RequestId(), jl)
 	if err != nil {
 		jLogger.Errorf("problem sending job log (%#v) to the RM: %s", jl, err)
 	}
+}
+
+// retrySequence retries a sequence by doing the following
+//   1. Mark the failed job and all previously completed jobs in sequence to PENDING.
+//   2. Decrement the number of jobs that were previously ran (failed job +
+//   previously completed jobs in sequence) from the chain job count.
+//   3. Increment retry count for the sequence
+//   4. Enqueue the first job in the sequence to be ran again. It'll
+//   subsequently enqueue the remaining jobs in the sequence.
+func (t *traverser) retrySequence(failedJob proto.Job) error {
+	sequenceStartJob := t.chain.SequenceStartJob(failedJob)
+
+	// sequenceJobsToRetry is a list containing the failed job and all previously
+	// completed jobs in the sequence. For example, if job C of A -> B -> C -> D
+	// fails, then A and B are the previously completed jobs and C is the failed
+	// job. So, jobs A, B, and C will be added to sequenceJobsToRetry. D will not be
+	// added because it was never ran.
+	var sequenceJobsToRetry []proto.Job
+	sequenceJobsToRetry = append(sequenceJobsToRetry, failedJob)
+	sequenceJobsCompleted := t.sequenceJobsCompleted(sequenceStartJob)
+	sequenceJobsToRetry = append(sequenceJobsCompleted, sequenceJobsCompleted...)
+
+	// Mark all jobs to retry to PENDING state
+	for _, job := range sequenceJobsToRetry {
+		t.chain.SetJobState(job.Id, proto.STATE_PENDING)
+	}
+
+	// Decrement number of jobs we will attempt to retry
+	t.chain.n -= uint(len(sequenceJobsToRetry))
+
+	// Increment retry count for this sequence
+	t.chain.IncrementSequenceRetryCount(failedJob)
+
+	// Enqueue first job in sequence
+	t.runJobChan <- sequenceStartJob
+
+	return nil
+}
+
+// sequenceJobsCompleted does a BFS to find all jobs in the sequence that have
+// completed. You can read how BFS works here:
+// https://en.wikipedia.org/wiki/Breadth-first_search.
+func (t *traverser) sequenceJobsCompleted(sequenceStartJob proto.Job) []proto.Job {
+	// toVisit is a map of job id->job to visit
+	toVisit := map[string]proto.Job{}
+	// visited is a map of job id->job visited
+	visited := map[string]proto.Job{}
+
+	// Process sequenceStartJob
+	for _, pJob := range t.chain.NextJobs(sequenceStartJob.Id) {
+		toVisit[pJob.Id] = pJob
+	}
+	visited[sequenceStartJob.Id] = sequenceStartJob
+
+PROCESS_TO_VISIT_LIST:
+	for len(toVisit) > 0 {
+
+	PROCESS_CURRENT_JOB:
+		for currentJobId, currentJob := range toVisit {
+
+		PROCESS_NEXT_JOBS:
+			for _, nextJob := range t.chain.NextJobs(currentJobId) {
+				// Don't add failed or pending jobs to toVisit list
+				// For example, if job C of A -> B -> C -> D fails, then do not add C
+				// or D to toVisit list. Because we have single sequence retries,
+				// stopping at the failed job ensures we do not add jobs not in the
+				// sequence to the toVisit list.
+				if nextJob.State != proto.STATE_COMPLETE {
+					continue PROCESS_NEXT_JOBS
+				}
+
+				// Make sure we don't visit a job multiple times. We can see a job
+				// mulitple times if it is a "fan in" node.
+				if _, seen := visited[nextJob.Id]; !seen {
+					toVisit[nextJob.Id] = nextJob
+				}
+			}
+
+			// Since we have processed all of the next jobs for this current job, we
+			// are done visiting the current job and can delete it from the toVisit
+			// list and add it to the visited list.
+			delete(toVisit, currentJobId)
+			visited[currentJobId] = currentJob
+
+			continue PROCESS_CURRENT_JOB
+		}
+
+		continue PROCESS_TO_VISIT_LIST
+	}
+
+	completedJobs := make([]proto.Job, 0, len(visited))
+	for _, j := range visited {
+		completedJobs = append(completedJobs, j)
+	}
+
+	return completedJobs
 }

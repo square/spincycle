@@ -24,18 +24,20 @@ CREATE TABLE IF NOT EXISTS `raw_requests` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `job_log` (
-  `request_id`  BINARY(20) NOT NULL,
-  `job_id`      BINARY(4) NOT NULL,
-  `name`        VARBINARY(100) NOT NULL,
-  `try`         SMALLINT NOT NULL DEFAULT 0,
-  `type`        VARBINARY(75) NOT NULL,
-  `state`       TINYINT UNSIGNED NOT NULL DEFAULT 0,
-  `started_at`  BIGINT UNSIGNED NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
-  `finished_at` BIGINT UNSIGNED NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
-  `error`       TEXT NULL DEFAULT NULL,
-  `exit`        TINYINT UNSIGNED NULL DEFAULT NULL,
-  `stdout`      LONGBLOB NULL DEFAULT NULL,
-  `stderr`      LONGBLOB NULL DEFAULT NULL,
+  `request_id`    BINARY(20) NOT NULL,
+  `job_id`        BINARY(4) NOT NULL,
+  `name`          VARBINARY(100) NOT NULL,
+  `try`           SMALLINT NOT NULL DEFAULT 0,
+  `sequence_try`  SMALLINT NOT NULL DEFAULT 0,
+  `sequence_name` VARBINARY(100) NOT NULL,
+  `type`          VARBINARY(75) NOT NULL,
+  `state`         TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  `started_at`    BIGINT UNSIGNED NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
+  `finished_at`   BIGINT UNSIGNED NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
+  `error`         TEXT NULL DEFAULT NULL,
+  `exit`          TINYINT UNSIGNED NULL DEFAULT NULL,
+  `stdout`        LONGBLOB NULL DEFAULT NULL,
+  `stderr`        LONGBLOB NULL DEFAULT NULL,
 
   PRIMARY KEY (`request_id`, `job_id`, `try`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

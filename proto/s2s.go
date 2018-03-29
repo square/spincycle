@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package proto provides all API and service-to-service (s2s) message
 // structures and constants.
@@ -11,15 +11,17 @@ import (
 // Job represents one job in a job chain. Jobs are identified by Id, which
 // must be unique within a job chain.
 type Job struct {
-	Id        string                 `json:"id"`        // unique id
-	Name      string                 `json:"name"`      // name of the job
-	Type      string                 `json:"type"`      // user-specific job type
-	Bytes     []byte                 `json:"bytes"`     // return value of Job.Serialize method
-	State     byte                   `json:"state"`     // STATE_* const
-	Args      map[string]interface{} `json:"args"`      // the jobArgs a job was created with
-	Data      map[string]interface{} `json:"data"`      // job-specific data during Job.Run
-	Retry     uint                   `json:"retry"`     // retry N times if first run fails
-	RetryWait uint                   `json:"retryWait"` // wait time (milliseconds) between retries
+	Id            string                 `json:"id"`              // unique id
+	Name          string                 `json:"name"`            // name of the job
+	Type          string                 `json:"type"`            // user-specific job type
+	Bytes         []byte                 `json:"bytes"`           // return value of Job.Serialize method
+	State         byte                   `json:"state"`           // STATE_* const
+	Args          map[string]interface{} `json:"args"`            // the jobArgs a job was created with
+	Data          map[string]interface{} `json:"data"`            // job-specific data during Job.Run
+	Retry         uint                   `json:"retry"`           // retry N times if first run fails
+	RetryWait     uint                   `json:"retryWait"`       // wait time (milliseconds) between retries
+	SequenceId    string                 `json:"sequenceStartId"` // ID for first job in sequence
+	SequenceRetry uint                   `json:"sequenceRetry"`   // retry sequence N times if first run fails. Only set for first job in sequence.
 }
 
 // JobChain represents a directed acyclic graph of jobs for one request.
@@ -65,9 +67,11 @@ type RequestArg struct {
 // JobLog represents a log entry for a finished job.
 type JobLog struct {
 	// These three fields uniquely identify an entry in the job log.
-	RequestId string `json:"requestId"`
-	JobId     string `json:"jobId"`
-	Try       uint   `json:"try"` // try number N of 1 + Job.Retry
+	RequestId   string `json:"requestId"`
+	JobId       string `json:"jobId"`
+	Try         uint   `json:"try"`         // try number that is monotonically increasing
+	SequenceTry uint   `json:"sequenceTry"` // try number N of 1 + Job's sequence retry
+	SequenceId  string `json:"sequenceId"`  // ID of first job in sequence
 
 	Name       string `json:"name"`
 	Type       string `json:"type"`

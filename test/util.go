@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package test provides helper functions for tests.
 package test
@@ -45,14 +45,28 @@ func MakeHTTPRequest(httpVerb, url string, payload []byte, respStruct interface{
 
 // InitJobs initializes some proto jobs.
 func InitJobs(count int) map[string]proto.Job {
+	return InitJobsWithSequenceRetry(count, 0)
+}
+
+// InitJobs initializes some proto jobs.
+func InitJobsWithSequenceRetry(jobCount int, sequenceRetryCount uint) map[string]proto.Job {
 	jobs := make(map[string]proto.Job)
-	for i := 1; i <= count; i++ {
+	for i := 1; i <= jobCount; i++ {
 		bytes := make([]byte, 10)
 		rand.Read(bytes)
 		job := proto.Job{
 			Id:    fmt.Sprintf("job%d", i),
 			Bytes: bytes,
 		}
+
+		// Set sequence data
+		job.SequenceId = "job1"
+		if i == 1 {
+			job.SequenceRetry = sequenceRetryCount
+		} else {
+			job.SequenceRetry = 0
+		}
+
 		jobs[job.Id] = job
 	}
 	return jobs

@@ -33,6 +33,7 @@ type SequenceSpec struct {
 	Name  string               `yaml:"name"`  // name of the sequence
 	Args  SequenceArgs         `yaml:"args"`  // arguments to the sequence
 	Nodes map[string]*NodeSpec `yaml:"nodes"` // list of nodes that are a part of the sequence
+	Retry uint                 `yaml:"retry"` // the number of times to retry the sequence if it fails
 }
 
 // SequenceArgs defines the structure expected from the config file to define
