@@ -209,6 +209,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 			// If this component was repeated multiple times,
 			// wrap it between a single dummy start and end vertices.
 			// This makes the resulting graph easier to reason about.
+			// If there are no components for the node, do nothing.
 			if len(componentsForThisNode) > 1 {
 
 				// Create the start and end nodes
@@ -228,7 +229,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				components[n] = g
-			} else {
+			} else if len(componentsForThisNode) > 0 {
 				components[n] = componentsForThisNode[0]
 			}
 

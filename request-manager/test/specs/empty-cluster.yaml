@@ -1,0 +1,27 @@
+# This sequence tests running an "each" on an empty slice, which used to cause
+# a panic in grapher.
+---
+sequences:
+  empty-cluster-test:
+    args:
+      required:
+        - name: cluster
+        - name: env
+    nodes:
+      get-instances:
+        category: job
+        type: get-cluster-instances
+        args:
+          - expected: cluster
+            given: cluster
+        sets: [instances] # instances is an empty slice
+        deps: []
+      pre-flight-checks:
+        category: sequence
+        type: check-instance-is-ok
+        each:
+          - instances:instance   # repeat for each instance in instances, which is actually empty
+        args:
+          - expected: instances
+            given: instances
+        deps: [get-instances]
