@@ -275,6 +275,26 @@ func TestCreateDecomGraph(t *testing.T) {
 	verifyStep(g, currentStep, 1, "sequence_decommission-cluster_end", t)
 }
 
+// Test creating a graph that runs an "each" on an empty slice. This used to
+// cause a panic, so all we're testing here is that it no longer does that.
+func TestCreateDecomGraphNoNodes(t *testing.T) {
+	tf := &testFactory{}
+	sequencesFile := "../test/specs/empty-cluster.yaml"
+	cfg, _ := ReadConfig(sequencesFile)
+	omg := NewGrapher(tf, cfg, id.NewGenerator(4, 100))
+
+	args := map[string]interface{}{
+		"cluster": "empty-cluster-001",
+		"env":     "testing",
+	}
+
+	// create the graph
+	_, err := omg.CreateGraph("empty-cluster-test", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // Util functions
 /////////////////////////////////////////////////////////////////////////////
@@ -310,7 +330,10 @@ func createGetClusterMembers(args map[string]interface{}) error {
 	if !ok {
 		return fmt.Errorf("job get-cluster-members expected a cluster arg")
 	}
-	if cluster != "test-cluster-001" {
+	if cluster == "empty-cluster-001" {
+		args["instances"] = []string{}
+		return nil
+	} else if cluster != "test-cluster-001" {
 		return fmt.Errorf("job get-cluster-members given '%s' but wanted 'test-cluster-001'", cluster)
 	}
 
