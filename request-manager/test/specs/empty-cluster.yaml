@@ -22,7 +22,7 @@ sequences:
         each:
           - instances:instance   # repeat for each instance in instances, which is actually empty
         deps: [get-instances]
-      pre-flight-checks-2:
+      get-instances-again:
         category: job
         type: get-cluser-instances
         args:
