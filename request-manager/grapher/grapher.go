@@ -232,6 +232,9 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 			} else if len(componentsForThisNode) > 0 {
 				components[n] = componentsForThisNode[0]
 			} else if len(componentsForThisNode) == 0 {
+				// Even if there are no iterateOvers, we still need to add
+				// the node to the graph in order to fulfill dependencies
+				// for later nodes.
 				g, err := o.newEmptyGraph("noop_"+n.Name, nodeArgs)
 				if err != nil {
 					return nil, err
