@@ -21,7 +21,11 @@ sequences:
         type: check-instance-is-ok
         each:
           - instances:instance   # repeat for each instance in instances, which is actually empty
-        args:
-          - expected: instances
-            given: instances
         deps: [get-instances]
+      pre-flight-checks-2:
+        category: job
+        type: get-cluser-instances
+        args:
+          - expected: cluster
+            given: cluster
+        deps: [pre-flight-checks]
