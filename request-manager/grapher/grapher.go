@@ -229,7 +229,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				components[n] = g
-			} else if len(componentsForThisNode) > 0 {
+			} else if len(componentsForThisNode) == 1 {
 				components[n] = componentsForThisNode[0]
 			} else if len(componentsForThisNode) == 0 {
 				// Even if there are no iterateOvers, we still need to add
