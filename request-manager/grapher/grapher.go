@@ -231,6 +231,16 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				components[n] = g
 			} else if len(componentsForThisNode) > 0 {
 				components[n] = componentsForThisNode[0]
+			} else if len(componentsForThisNode) == 0 {
+				g, err := o.newEmptyGraph("noop_"+n.Name, nodeArgs)
+				if err != nil {
+					return nil, err
+				}
+				// Assert g is a well formed graph
+				if !g.IsValidGraph() {
+					return nil, fmt.Errorf("malformed graph created")
+				}
+				components[n] = g
 			}
 
 			// After all subcomponents are built, remove the job from the jobsToBeDone array
