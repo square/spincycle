@@ -16,6 +16,7 @@ type Start struct {
 	reqName      string
 	requiredArgs []prompt.Item
 	optionalArgs []prompt.Item
+	staticArgs   []prompt.Item
 	debug        bool
 }
 
@@ -81,6 +82,7 @@ func (c *Start) Prepare() error {
 	// the optional args.
 	c.requiredArgs = []prompt.Item{}
 	c.optionalArgs = []prompt.Item{}
+	c.staticArgs = []prompt.Item{}
 	for _, a := range req.Args {
 		// Map all args to prompt items
 		i := prompt.Item{
@@ -93,13 +95,25 @@ func (c *Start) Prepare() error {
 		// Always skip given vars. Presume the user knows what they're doing.
 		// Note: skip != save. We store the arg/item, we just don't prompt for it.
 		if val, ok := given[a.Name]; ok {
-			i.Value = val
-			i.Skip = true // don't prompt
+			if !a.Static {
+				i.Value = val
+				i.Skip = true // don't prompt
+			}
 		}
 
 		// Save the arg/item
 		if a.Required {
 			c.requiredArgs = append(c.requiredArgs, i)
+		} else if a.Static {
+			// Static arg
+			i.Skip = true
+			i.IsDefault = true
+			i.Value = a.Default
+			if c.debug {
+				app.Debug("static arg %s using default value %s", a.Name, i.Value)
+			}
+
+			c.staticArgs = append(c.staticArgs, i)
 		} else {
 			// Optional arg
 
@@ -150,6 +164,7 @@ func (c *Start) Run() error {
 	if c.debug {
 		app.Debug("required args: %#v", c.requiredArgs)
 		app.Debug("optional args: %#v", c.optionalArgs)
+		app.Debug("static args: %#v", c.staticArgs)
 	}
 
 	// Print full command that user can copy-paste to re-run without prompts.
@@ -167,6 +182,9 @@ func (c *Start) Run() error {
 			fullCmd += " " + i.Name + "=" + i.Value
 			args[i.Name] = i.Value
 		}
+	}
+	for _, i := range c.staticArgs {
+		args[i.Name] = i.Value
 	}
 	if c.debug {
 		app.Debug("request args: %#v", args)
