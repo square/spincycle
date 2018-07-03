@@ -8,6 +8,9 @@ sequences:
       optional:
         - name: something
           default: 100
+      static:
+        - name: somethingelse
+          default: "hello"
     nodes:
       get-instances:
         category: job
