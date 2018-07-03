@@ -45,6 +45,7 @@ type SequenceSpec struct {
 type SequenceArgs struct {
 	Required []*ArgSpec `yaml:"required"`
 	Optional []*ArgSpec `yaml:"optional"`
+	Static   []*ArgSpec `yaml:"optional"`
 }
 
 // ArgSpec defines the structure expected from the config to define sequence args.
