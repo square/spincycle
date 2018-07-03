@@ -229,8 +229,21 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				components[n] = g
-			} else if len(componentsForThisNode) > 0 {
+			} else if len(componentsForThisNode) == 1 {
 				components[n] = componentsForThisNode[0]
+			} else if len(componentsForThisNode) == 0 {
+				// Even if there are no iterateOvers, we still need to add
+				// the node to the graph in order to fulfill dependencies
+				// for later nodes.
+				g, err := o.newEmptyGraph("noop_"+n.Name, nodeArgs)
+				if err != nil {
+					return nil, err
+				}
+				// Assert g is a well formed graph
+				if !g.IsValidGraph() {
+					return nil, fmt.Errorf("malformed graph created")
+				}
+				components[n] = g
 			}
 
 			// After all subcomponents are built, remove the job from the jobsToBeDone array
