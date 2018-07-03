@@ -98,6 +98,13 @@ func (o *Grapher) buildSequence(name string, seq *SequenceSpec, args map[string]
 			args[arg.Name] = arg.Default
 		}
 	}
+
+	// Verify all static arguments with defaults provided are included
+	for _, arg := range seq.Args.Static {
+		if _, ok := args[arg.Name]; !ok {
+			args[arg.Name] = arg.Default
+		}
+	}
 	return o.buildComponent("sequence_"+name, seq.Nodes, args, seq.Retry)
 }
 
