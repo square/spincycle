@@ -61,7 +61,6 @@ type RequestArg struct {
 	Name     string
 	Desc     string
 	Required bool
-	Static   bool
 	Default  string
 }
 
