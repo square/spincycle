@@ -412,7 +412,6 @@ func (m *manager) Specs() []proto.RequestSpec {
 				Name:     arg.Name,
 				Desc:     arg.Desc,
 				Required: true,
-				Static:   false,
 			}
 			s.Args = append(s.Args, a)
 		}
@@ -421,17 +420,6 @@ func (m *manager) Specs() []proto.RequestSpec {
 				Name:     arg.Name,
 				Desc:     arg.Desc,
 				Required: false,
-				Static:   false,
-				Default:  arg.Default,
-			}
-			s.Args = append(s.Args, a)
-		}
-		for _, arg := range req[name].Args.Static {
-			a := proto.RequestArg{
-				Name:     arg.Name,
-				Desc:     arg.Desc,
-				Required: false,
-				Static:   true,
 				Default:  arg.Default,
 			}
 			s.Args = append(s.Args, a)
