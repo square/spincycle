@@ -236,8 +236,6 @@ func handleError(err error) *echo.HTTPError {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 	}
-
-	return nil
 }
 
 // chainLocation returns the URL location of a job chain

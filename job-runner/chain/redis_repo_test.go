@@ -251,10 +251,10 @@ func TestGetAll(t *testing.T) {
 			job = "jobA"
 			expectRunning = true
 		default:
-			t.Fatalf("got chain with nonexistent RequestId: %s", c.RequestId)
+			t.Fatalf("got chain with nonexistent RequestId: %s", c.RequestId())
 		}
 		if diff := deep.Equal(c.JobChain(), expect); diff != nil {
-			t.Error(c.RequestId, diff)
+			t.Error(c.RequestId(), diff)
 		}
 		running := c.Running()
 		if expectRunning {
