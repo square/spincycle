@@ -202,15 +202,15 @@ func TestCreate(t *testing.T) {
 		t.Error("job chain RequestId not set, expected it to be set")
 	}
 	if actualJobChain.State != proto.STATE_PENDING {
-		t.Error("job chain state = %s, expected PENDING", proto.StateName[actualJobChain.State])
+		t.Errorf("job chain state = %s, expected PENDING", proto.StateName[actualJobChain.State])
 	}
 	if len(actualJobChain.Jobs) != 5 {
 		test.Dump(actualJobChain.Jobs)
-		t.Error("job chain has %d jobs, expected 5", len(actualJobChain.Jobs))
+		t.Errorf("job chain has %d jobs, expected 5", len(actualJobChain.Jobs))
 	}
 	if len(actualJobChain.AdjacencyList) != 4 {
 		test.Dump(actualJobChain.Jobs)
-		t.Error("job chain AdjacencyList len = %d, expected 4", len(actualJobChain.AdjacencyList))
+		t.Errorf("job chain AdjacencyList len = %d, expected 4", len(actualJobChain.AdjacencyList))
 	}
 }
 

@@ -65,7 +65,7 @@ func NewShellCommand(jid job.Id) *ShellCommand {
 func (j *ShellCommand) Create(jobArgs map[string]interface{}) error {
 	cmd, ok := jobArgs["cmd"]
 	if !ok {
-		return job.ErrArgNotSet{"cmd"}
+		return job.ErrArgNotSet{Arg: "cmd"}
 	}
 	j.Cmd = cmd.(string)
 

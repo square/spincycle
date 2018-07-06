@@ -333,10 +333,10 @@ func TestRunJobsRunnerError(t *testing.T) {
 
 	// Make sure the JL sent to the RM matches what we expect.
 	if recvdjl.RequestId != requestId {
-		t.Errorf("jl request id = %d, expected %d", recvdjl.RequestId, requestId)
+		t.Errorf("jl request id = %s, expected %s", recvdjl.RequestId, requestId)
 	}
 	if recvdjl.JobId != "job1" {
-		t.Errorf("jl job id = %d, expected %d", recvdjl.JobId, "job1")
+		t.Errorf("jl job id = %s, expected %s", recvdjl.JobId, "job1")
 	}
 	if recvdjl.State != proto.STATE_FAIL {
 		t.Errorf("jl state = %d, expected %d", recvdjl.State, proto.STATE_FAIL)
@@ -487,7 +487,7 @@ func TestStatus(t *testing.T) {
 
 	for i, j := range status.JobStatuses {
 		if j.StartedAt < now {
-			t.Error("StartedAt <= 0: %+v", j)
+			t.Errorf("StartedAt <= 0: %+v", j)
 		}
 		status.JobStatuses[i].StartedAt = 0
 
@@ -496,7 +496,7 @@ func TestStatus(t *testing.T) {
 		// But either way, N should be only 2 or 3 because they're are the 2nd
 		// and 3rd jobs ran.
 		if j.N != 2 && j.N != 3 {
-			t.Error("got N = %d, expected 2 or 3", j.N)
+			t.Errorf("got N = %d, expected 2 or 3", j.N)
 		}
 		status.JobStatuses[i].N = 0
 	}
