@@ -10,7 +10,7 @@ sequences:
           default: 100
       static:
         - name: somethingelse
-          default: "hello"
+          default: "test-cluster-001"
     nodes:
       get-instances:
         category: job
@@ -77,7 +77,7 @@ sequences:
         type: cleanup-job
         args:
           - expected: cluster
-            given: cluster
+            given: somethingelse
         sets: []
         deps: [second-cleanup-job]
       fourth-cleanup-job:
