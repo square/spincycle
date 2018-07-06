@@ -11,5 +11,5 @@ import (
 
 func main() {
 	err := server.Run(app.Defaults())
-	log.Fatal("Request Manager stopped: %s", err)
+	log.Fatalf("Request Manager stopped: %s", err)
 }

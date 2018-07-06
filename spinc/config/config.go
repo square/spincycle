@@ -109,7 +109,7 @@ func Help(full bool, rmc rm.Client) {
 		printRequestList(rmc)
 		fmt.Println("\n'spinc help <request>' for request help")
 	} else {
-		fmt.Println("spinc help  <request>\nspinc start <request>\n")
+		fmt.Printf("spinc help  <request>\nspinc start <request>\n\n")
 		printRequestList(rmc)
 		fmt.Println("\n'spinc help' for more")
 	}

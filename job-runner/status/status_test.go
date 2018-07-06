@@ -100,7 +100,7 @@ func TestRunning(t *testing.T) {
 		t.Errorf("job1 started %d < %d", got[0].StartedAt, now)
 	}
 	if got[1].StartedAt <= 0 {
-		t.Errorf("job2 runtime %f, expected > 0", got[1].StartedAt)
+		t.Errorf("job2 runtime %d, expected > 0", got[1].StartedAt)
 	}
 
 	// StartedAt is nondeterministic

@@ -313,7 +313,7 @@ func (c *chain) Running() map[string]proto.JobStatus {
 type chainJSON struct {
 	JobChain *proto.JobChain            `json:"jobChain"`
 	Running  map[string]proto.JobStatus `json:"running"`
-	N        uint                       `"json:"n"`
+	N        uint                       `json:"n"`
 }
 
 func (c *chain) MarshalJSON() ([]byte, error) {

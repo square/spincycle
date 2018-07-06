@@ -11,5 +11,5 @@ import (
 
 func main() {
 	err := server.Run(app.Defaults())
-	log.Fatal("Job Runner stopped: %s", err)
+	log.Fatalf("Job Runner stopped: %s", err)
 }
