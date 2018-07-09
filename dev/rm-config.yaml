@@ -9,4 +9,4 @@ db:
   dsn: "root:@tcp(127.0.0.1:3306)/spincycle_dev"
 jr_client:
   server_url: "http://127.0.0.1:9999"
-spec_file_dir: "../specs/"
+spec_file_dir: "specs/"

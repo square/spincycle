@@ -34,7 +34,7 @@ The yaml file to encode the graph types are defined with the outermost
 object being the Sequence. Sequences is a map of "sequence name" ->
 Sequence Spec.
 Sequence Specs have two fields: "args" and "nodes."
-The "args" field is made up of required and optional arguments.
+The "args" field is made up of required, optional, and static arguments.
 The "nodes" field is a map of node structures.
 
 The nodes list is a map of node name -> node spec. Each node spec is
@@ -83,6 +83,9 @@ The full example file can be foind at grapher/test/example-requests.yaml
 		    optional:
 		      - name: something
 		        default: 100
+			static:
+			  - name: somethingelse
+				default: abcd
 		  nodes:
 		    get-instances:
 		      category: job
@@ -119,6 +122,7 @@ The full example file can be foind at grapher/test/example-requests.yaml
 		    required:
 		      - name: instance
 		    optional:
+			static:
 		  nodes:
 		    check-ok:
 		      category: job

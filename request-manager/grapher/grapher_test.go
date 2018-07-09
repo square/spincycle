@@ -116,6 +116,14 @@ func TestNodeArgs(t *testing.T) {
 				t.Error(diff)
 			}
 		}
+		if node.Name == "third-cleanup-job" {
+			expectedArgs := map[string]interface{}{
+				"cluster": "test-cluster-001",
+			}
+			if diff := deep.Equal(node.Args, expectedArgs); diff != nil {
+				t.Error(diff)
+			}
+		}
 	}
 }
 
