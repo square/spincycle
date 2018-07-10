@@ -40,7 +40,19 @@ func (c *Status) Run() error {
 		return nil
 	}
 
+	running := []string{}
+	js := status.JobChainStatus.JobStatuses
+	for _, job := range js {
+		if job.State == proto.STATE_RUNNING {
+			running = append(running, job.Name)
+		}
+	}
+
 	fmt.Printf("state:      %s\n", proto.StateName[status.State])
+	fmt.Printf("running jobs: \n")
+	for _, j := range running {
+		fmt.Printf("\t%s\n", j)
+	}
 	fmt.Printf("jobs done:  %d\n", status.FinishedJobs)
 	fmt.Printf("jobs total: %d\n", status.TotalJobs)
 	fmt.Printf("created:    %s\n", status.CreatedAt)
