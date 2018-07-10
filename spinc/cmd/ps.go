@@ -43,6 +43,9 @@ func (c *Ps) Run() error {
 		return nil
 	}
 
+	specs := c.ctx.RMClient.
+
+
 	now := time.Now()
 
 	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s  %%s\n")

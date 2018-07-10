@@ -40,6 +40,8 @@ type Request struct {
 	State byte   `json:"state"` // STATE_* const
 	User  string `json:"user"`  // the user who made the request
 
+	Params map[string]interface{} `json:",omitempty"` // the jobArgs
+
 	CreatedAt time.Time `json:"createdAt"` // when the request was created
 	// These are pointers so that they can have nil values.
 	StartedAt  *time.Time `json:"startedAt"`  // when the request was sent to the job runner
