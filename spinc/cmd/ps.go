@@ -45,8 +45,8 @@ func (c *Ps) Run() error {
 
 	now := time.Now()
 
-	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s  %%s\n")
-	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s  %%s  %%s\n")
+	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s  \t%%s\n")
+	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s  \t%%s  %%s\n")
 	statusLine := fmt.Sprintf("\t JOB STATUS: %%s\n")
 	fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "JOB", "REQUEST")
 	for _, r := range status.Jobs {
@@ -79,7 +79,7 @@ func (c *Ps) Run() error {
 			if !ok {
 				val = ""
 			}
-			argString = argString + k + "=" + val
+			argString = argString + k + "=" + val + " "
 		}
 		fmt.Fprintf(c.ctx.Out, line, r.RequestId, r.N, nJobs, runtime, r.Name, requestName, argString)
 		fmt.Fprintf(c.ctx.Out, statusLine, r.Status)
