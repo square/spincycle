@@ -43,22 +43,27 @@ func (c *Ps) Run() error {
 		return nil
 	}
 
-	specs := c.ctx.RMClient.
-
-
 	now := time.Now()
 
 	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s  %%s\n")
-	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s  %%s\n")
+	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s  %%s  %%s\n")
 	fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "JOB", "REQUEST")
 	for _, r := range status.Jobs {
 		runtime := fmt.Sprintf("%.1f", now.Sub(time.Unix(0, r.StartedAt)).Seconds())
 		nJobs := 0
 		requestName := ""
+		args := map[string]interface{}{}
 		if status.Requests != nil {
 			if r, ok := status.Requests[r.RequestId]; ok {
 				nJobs = r.TotalJobs
 				requestName = r.Type
+				request, err := c.ctx.RMClient.GetRequest(r.Id)
+				if err != nil {
+					return err
+				}
+				for k, v := range request.Params {
+					args[k] = v
+				}
 			}
 		}
 		jobNameLen := len(r.Name)
@@ -66,7 +71,16 @@ func (c *Ps) Run() error {
 			// "very_long_job_name" -> "very_long_job_..."
 			r.Name = r.Name[jobNameLen-(JOB_COL_LEN-3):jobNameLen] + "..." // -3 for "..."
 		}
-		fmt.Fprintf(c.ctx.Out, line, r.RequestId, r.N, nJobs, runtime, r.Name, requestName)
+
+		argString := ""
+		for k, v := range args {
+			val, ok := v.(string)
+			if !ok {
+				val = ""
+			}
+			argString = argString + k + "=" + val
+		}
+		fmt.Fprintf(c.ctx.Out, line, r.RequestId, r.N, nJobs, runtime, r.Name, requestName, argString)
 	}
 
 	return nil
