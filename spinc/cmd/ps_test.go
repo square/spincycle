@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,12 +29,25 @@ func TestPs(t *testing.T) {
 			"b9uvdi8tk9kahl8ppvbg": proto.Request{
 				Id:        "b9uvdi8tk9kahl8ppvbg",
 				TotalJobs: 9,
+				Type:      "requestname",
 			},
 		},
+	}
+	args := make(map[string]interface{})
+	args["key"] = "value"
+	request := proto.Request{
+		Id:     "b9uvdi8tk9kahl8ppvbg",
+		Params: args,
 	}
 	rmc := &mock.RMClient{
 		SysStatRunningFunc: func() (proto.RunningStatus, error) {
 			return status, nil
+		},
+		GetRequestFunc: func(id string) (proto.Request, error) {
+			if strings.Compare(id, "b9uvdi8tk9kahl8ppvbg") == 0 {
+				return request, nil
+			}
+			return proto.Request{}, nil
 		},
 	}
 	ctx := app.Context{
@@ -46,8 +60,8 @@ func TestPs(t *testing.T) {
 		t.Errorf("got err '%s', exepcted nil", err)
 	}
 
-	expectOutput := `ID                       N  NJOBS    TIME  JOB
-b9uvdi8tk9kahl8ppvbg     1      9     3.0  jobname
+	expectOutput := `ID                       N  NJOBS    TIME  JOB  REQUEST
+b9uvdi8tk9kahl8ppvbg     1      9     3.0  jobname  requestname  key=value
 `
 	if output.String() != expectOutput {
 		t.Errorf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)
