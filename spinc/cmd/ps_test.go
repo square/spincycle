@@ -61,9 +61,9 @@ func TestPs(t *testing.T) {
 		t.Errorf("got err '%s', exepcted nil", err)
 	}
 
-	expectOutput := `ID                       N  NJOBS    TIME  JOB		REQUEST
-b9uvdi8tk9kahl8ppvbg     1      9     3.0  jobname	requestname  key=value
-	 JOB STATUS: jobstatus
+	expectOutput := `ID                       N  NJOBS    TIME  JOB  	REQUEST
+b9uvdi8tk9kahl8ppvbg     1      9     3.0  jobname  	requestname  key=value 
+	JOB STATUS: jobstatus
 `
 	if output.String() != expectOutput {
 		t.Errorf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)

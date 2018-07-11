@@ -47,7 +47,7 @@ func (c *Ps) Run() error {
 
 	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s  \t%%s\n")
 	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s  \t%%s  %%s\n")
-	statusLine := fmt.Sprintf("\t JOB STATUS: %%s\n")
+	statusLine := fmt.Sprintf("\tJOB STATUS: %%s\n")
 	fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "JOB", "REQUEST")
 	for _, r := range status.Jobs {
 		runtime := fmt.Sprintf("%.1f", now.Sub(time.Unix(0, r.StartedAt)).Seconds())
