@@ -45,7 +45,7 @@ sequences:
           - expected: instances
             given: instances
         deps: [get-instances]
-        retry: 3      # this should be ignored
+        retry: 3
         retryWait: 10 # this should be ignored
       decommission-instances:
         category: sequence
@@ -113,7 +113,7 @@ sequences:
         sets: []
         deps: [check-ok]
   decommission-instance:
-    retry: 2
+    retry: 2 # this should do nothing
     args:
       required:
         - name: instance

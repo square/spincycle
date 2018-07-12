@@ -193,6 +193,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 					if !ok {
 						return nil, fmt.Errorf("could not find sequence %s", name)
 					}
+					sequence.Retry = n.Retry
 					g, err = o.buildSequence(n.Name, sequence, nodeArgsCopy)
 					if err != nil {
 						return nil, err

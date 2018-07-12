@@ -181,11 +181,11 @@ func TestSequenceRetry(t *testing.T) {
 
 	// Verify that the sequence retries are set correctly on all nodes. Only the "sequence_decommission-cluster_start" node should have retries.
 	found := false
-	sequenceStartNodeName := "sequence_decommission-instances_start"
+	sequenceStartNodeName := "sequence_pre-flight-checks_start"
 	for _, node := range g.Vertices {
 		if node.Name == sequenceStartNodeName {
 			found = true
-			if node.SequenceRetry != 2 {
+			if node.SequenceRetry != 3 {
 				t.Errorf("%s node sequence retries = %d, expected %d", node.Name, node.SequenceRetry, 2)
 			}
 		} else {

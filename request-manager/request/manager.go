@@ -397,7 +397,9 @@ func (m *manager) Specs() []proto.RequestSpec {
 	req := gr.Sequences()
 	sortedReqNames := make([]string, 0, len(req))
 	for name := range req {
-		sortedReqNames = append(sortedReqNames, name)
+		if req[name].Request {
+			sortedReqNames = append(sortedReqNames, name)
+		}
 	}
 	sort.Strings(sortedReqNames)
 
