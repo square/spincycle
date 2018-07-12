@@ -45,25 +45,32 @@ func (c *Ps) Run() error {
 
 	now := time.Now()
 
-	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s  \t%%s\n")
-	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s  \t%%s  %%s\n")
-	statusLine := fmt.Sprintf("\tJOB STATUS: %%s\n")
-	fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "JOB", "REQUEST")
+	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s  %%s  \t%%s\n")
+	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s  %%s  \t%%s  %%s\n")
+	if c.ctx.Options.Verbose {
+		fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "REQUEST")
+	} else {
+		fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "")
+	}
 	for _, r := range status.Jobs {
 		runtime := fmt.Sprintf("%.1f", now.Sub(time.Unix(0, r.StartedAt)).Seconds())
 		nJobs := 0
 		requestName := ""
+		owner := ""
 		args := map[string]interface{}{}
 		if status.Requests != nil {
 			if r, ok := status.Requests[r.RequestId]; ok {
 				nJobs = r.TotalJobs
-				requestName = r.Type
-				request, err := c.ctx.RMClient.GetRequest(r.Id)
-				if err != nil {
-					return err
-				}
-				for k, v := range request.Params {
-					args[k] = v
+				owner = r.User
+				if c.ctx.Options.Verbose {
+					requestName = r.Type
+					request, err := c.ctx.RMClient.GetRequest(r.Id)
+					if err != nil {
+						return err
+					}
+					for k, v := range request.Params {
+						args[k] = v
+					}
 				}
 			}
 		}
@@ -81,8 +88,7 @@ func (c *Ps) Run() error {
 			}
 			argString = argString + k + "=" + val + " "
 		}
-		fmt.Fprintf(c.ctx.Out, line, r.RequestId, r.N, nJobs, runtime, r.Name, requestName, argString)
-		fmt.Fprintf(c.ctx.Out, statusLine, r.Status)
+		fmt.Fprintf(c.ctx.Out, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name, requestName, argString)
 	}
 
 	return nil
