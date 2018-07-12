@@ -40,19 +40,17 @@ func (c *Status) Run() error {
 		return nil
 	}
 
-	running := []string{}
-	statuses := []string{}
+	running := map[string]string{}
 	js := status.JobChainStatus.JobStatuses
 	for _, job := range js {
 		if job.State == proto.STATE_RUNNING {
-			running = append(running, job.Name)
-			statuses = append(statuses, job.Status)
+			running[job.Name] = job.Status
 		}
 	}
 
 	fmt.Printf("state:      %s\n", proto.StateName[status.State])
 	fmt.Printf("running jobs: \n")
-	for _, j := range running {
+	for j, _ := range running {
 		fmt.Printf("\t%s\n", j)
 	}
 	fmt.Printf("jobs done:  %d\n", status.FinishedJobs)
@@ -66,8 +64,8 @@ func (c *Status) Run() error {
 
 	if c.ctx.Options.Verbose {
 		fmt.Printf("live status:\n")
-		for i, jobstatus := range statuses {
-			fmt.Printf("            %s: %s\n", running[i], jobstatus)
+		for j, s := range running {
+			fmt.Printf("            %s: %s\n", j, s)
 		}
 	}
 
