@@ -35,11 +35,10 @@ type JobChain struct {
 
 // Request represents something that a user asks Spin Cycle to do.
 type Request struct {
-	Id    string `json:"id"`    // unique identifier for the request
-	Type  string `json:"type"`  // the type of request
-	State byte   `json:"state"` // STATE_* const
-	User  string `json:"user"`  // the user who made the request
-
+	Id     string                 `json:"id"`         // unique identifier for the request
+	Type   string                 `json:"type"`       // the type of request
+	State  byte                   `json:"state"`      // STATE_* const
+	User   string                 `json:"user"`       // the user who made the request
 	Params map[string]interface{} `json:",omitempty"` // the jobArgs
 
 	CreatedAt time.Time `json:"createdAt"` // when the request was created

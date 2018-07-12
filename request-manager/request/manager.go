@@ -528,7 +528,7 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 	var jc proto.JobChain
 	var params proto.CreateRequestParams
 	var rawJc []byte     // raw job chains are stored as blobs in the db.
-	var rawParams []byte // raw job chains are stored as blobs in the db.
+	var rawParams []byte // raw params are stored as blobs in the db.
 	q := "SELECT job_chain, request FROM raw_requests WHERE request_id = ?"
 	if err := conn.QueryRowContext(ctx, q, requestId).Scan(&rawJc, &rawParams); err != nil {
 		switch err {
