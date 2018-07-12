@@ -62,7 +62,7 @@ func TestPs(t *testing.T) {
 	}
 
 	expectOutput := `ID                       N  NJOBS    TIME  JOB  	REQUEST
-b9uvdi8tk9kahl8ppvbg     1      9     3.0  jobname  	requestname  key=value 
+b9uvdi8tk9kahl8ppvbg     1      9     3.0  jobname  	requestname  key=value
 	JOB STATUS: jobstatus
 `
 	if output.String() != expectOutput {
