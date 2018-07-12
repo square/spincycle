@@ -346,4 +346,6 @@ func handleError(err error) *echo.HTTPError {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 	}
+
+	return nil
 }
