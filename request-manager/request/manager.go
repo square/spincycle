@@ -528,12 +528,14 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 	defer m.dbc.Close(conn) // don't leak conn
 
 	var jc proto.JobChain
-	var rawJc []byte // raw job chains are stored as blobs in the db.
-	q := "SELECT job_chain FROM raw_requests WHERE request_id = ?"
-	if err := conn.QueryRowContext(ctx, q, requestId).Scan(&rawJc); err != nil {
+	var params proto.CreateRequestParams
+	var rawJc []byte     // raw job chains are stored as blobs in the db.
+	var rawParams []byte // raw params are stored as blobs in the db.
+	q := "SELECT job_chain, request FROM raw_requests WHERE request_id = ?"
+	if err := conn.QueryRowContext(ctx, q, requestId).Scan(&rawJc, &rawParams); err != nil {
 		switch err {
 		case sql.ErrNoRows:
-			return req, db.NewErrNotFound("job chain")
+			return req, db.NewErrNotFound("raw_request")
 		default:
 			return req, err
 		}
@@ -542,8 +544,12 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 	if err := json.Unmarshal(rawJc, &jc); err != nil {
 		return req, fmt.Errorf("cannot unmarshal job chain: %s", err)
 	}
+	if err := json.Unmarshal(rawParams, &params); err != nil {
+		return req, fmt.Errorf("cannot unmarshal params: %s", err)
+	}
 
 	req.JobChain = &jc
+	req.Params = params.Args
 	return req, nil
 }
 
