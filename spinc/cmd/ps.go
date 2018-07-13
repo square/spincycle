@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"text/tabwriter"
 	"time"
 
 	"github.com/square/spincycle/spinc/app"
@@ -45,13 +46,17 @@ func (c *Ps) Run() error {
 
 	now := time.Now()
 
-	hdr := fmt.Sprintf("%%-20s  %%4s  %%5s  %%6s  %%s  %%s  \t%%s\n")
-	line := fmt.Sprintf("%%-20s  %%4d  %%5d  %%6s  %%s  %%s  \t%%s  %%s\n")
+	w := new(tabwriter.Writer)
+	w.Init(c.ctx.Out, 0, 8, 0, '\t', 0)
+	hdr := fmt.Sprintf("%%-20s\t%%4s\t%%5s\t%%6s\t%%s\t%%s\t%%s\n")
+	line := fmt.Sprintf("%%-20s\t%%4d\t%%5d\t%%6s\t%%s\t%%s\t%%s  %%s\n")
+
 	if c.ctx.Options.Verbose {
-		fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "REQUEST")
+		fmt.Fprintf(w, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "REQUEST")
 	} else {
-		fmt.Fprintf(c.ctx.Out, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "")
+		fmt.Fprintf(w, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "")
 	}
+
 	for _, r := range status.Jobs {
 		runtime := fmt.Sprintf("%.1f", now.Sub(time.Unix(0, r.StartedAt)).Seconds())
 		nJobs := 0
@@ -88,8 +93,11 @@ func (c *Ps) Run() error {
 			}
 			argString = argString + k + "=" + val + " "
 		}
-		fmt.Fprintf(c.ctx.Out, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name, requestName, argString)
+		fmt.Fprintf(w, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name, requestName, argString)
 	}
+
+	fmt.Fprintln(w)
+	w.Flush()
 
 	return nil
 }
