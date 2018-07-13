@@ -2,6 +2,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -66,11 +67,12 @@ func TestPs(t *testing.T) {
 		t.Errorf("got err '%s', exepcted nil", err)
 	}
 
-	expectOutput := `ID                       N  NJOBS    TIME  OWNER  JOB  	
-b9uvdi8tk9kahl8ppvbg     1      9     3.0  owner  jobname  	  
+	expectOutput := `ID                  	   N	NJOBS	  TIME	OWNER	JOB	
+b9uvdi8tk9kahl8ppvbg	   1	    9	   3.0	owner	jobname
 `
+
 	if output.String() != expectOutput {
-		t.Errorf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)
+		fmt.Printf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)
 	}
 }
 
@@ -127,10 +129,10 @@ func TestPsVerbose(t *testing.T) {
 		t.Errorf("got err '%s', exepcted nil", err)
 	}
 
-	expectOutput := `ID                       N  NJOBS    TIME  OWNER  JOB  	REQUEST
-b9uvdi8tk9kahl8ppvbg     1      9     3.0  owner  jobname  	requestname  key=value 
+	expectOutput := `ID                  	   N	NJOBS	  TIME	OWNER	JOB	REQUEST
+b9uvdi8tk9kahl8ppvbg	   1	    9	   3.0	owner	jobname	requestname  key=value
 `
 	if output.String() != expectOutput {
-		t.Errorf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)
+		fmt.Printf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)
 	}
 }
