@@ -98,8 +98,8 @@ func Help(full bool, rmc rm.Client) {
 			"  --help     Print help\n"+
 			"  --ping     Ping addr\n"+
 			"  --timeout  API timeout, milliseconds (default: %d)\n"+
-			"  --version  Print version\n\n"+
-			"  -v         verbose ps or status\n\n"+
+			"  --version  Print version\n"+
+			"  -v         Verbose ps or status\n\n"+
 			"Commands:\n"+
 			"  help    <request>  Print request help\n"+
 			"  start   <request>  Start new request\n"+
