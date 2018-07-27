@@ -11,6 +11,8 @@ import (
 	"github.com/square/spincycle/request-manager/id"
 )
 
+const DEFAULT = "default"
+
 // The Grapher struct contains the sequence specs required to construct graphs.
 // The user must handle the creation of the Sequence Specs.
 //
@@ -108,6 +110,50 @@ func (o *Grapher) buildSequence(name string, seq *SequenceSpec, args map[string]
 	return o.buildComponent("sequence_"+name, seq.Nodes, args, seq.Retry)
 }
 
+func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string]interface{}) (*Graph, error) {
+	// Node is a conditional, check the value of the "if" jobArg
+	if n.If == "" {
+		return nil, fmt.Errorf("No 'if' jobArg specified for conditional")
+	}
+	val, ok := nodeArgs[n.If]
+	if !ok {
+		return nil, fmt.Errorf("could not find the conditional jobArg %s", n.If)
+	}
+	valstring, ok := val.(string)
+	if !ok {
+		return nil, fmt.Errorf("did not provide string type sequence name for conditional")
+	}
+	seqName, ok := n.Eq[valstring]
+	if !ok {
+		// check if default sequence specified
+		seqName, ok = n.Eq[DEFAULT]
+		if !ok {
+			return nil, fmt.Errorf("the value of the conditional jobArg %s did not match any of the options", n.If)
+		}
+	}
+	// Build the correct sequence
+	sequence, ok := o.AllSequences[seqName]
+	if !ok {
+		return nil, fmt.Errorf("could not find sequence %s", name)
+	}
+	sequence.Retry = n.Retry
+	s, err := o.buildSequence(seqName, sequence, nodeArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the start and end nodes
+	g, err := o.newEmptyGraph("conditional_"+n.Name, nodeArgs)
+	if err != nil {
+		return nil, err
+	}
+
+	// Insert all components between the start and end vertices.
+	g.insertComponentBetween(s, g.First, g.Last)
+
+	return g, nil
+}
+
 // buildComponent, given a set of node specs, and node args, create a graph that represents the list of node specs,
 // nodeArgs represents the arguments that will be passed into the nodes on creation
 func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nodeArgs map[string]interface{}, sequenceRetry uint) (*Graph, error) {
@@ -181,13 +227,13 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 
 				// Build next graph component and assert that it's valid
 				var g *Graph
-				if !n.isSequence() {
-					// Node is a job, create a graph that contains only the node
-					g, err = o.buildSingleVertexGraph(n, nodeArgsCopy)
+				if n.isConditional() {
+					// Node is a conditional
+					g, err = o.buildConditional(name, n, nodeArgsCopy)
 					if err != nil {
 						return nil, err
 					}
-				} else {
+				} else if n.isSequence() {
 					// Node is a sequence, recursively construct its components
 					sequence, ok := o.AllSequences[n.NodeType]
 					if !ok {
@@ -195,6 +241,12 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 					}
 					sequence.Retry = n.Retry
 					g, err = o.buildSequence(n.Name, sequence, nodeArgsCopy)
+					if err != nil {
+						return nil, err
+					}
+				} else {
+					// Node is a job, create a graph that contains only the node
+					g, err = o.buildSingleVertexGraph(n, nodeArgsCopy)
 					if err != nil {
 						return nil, err
 					}

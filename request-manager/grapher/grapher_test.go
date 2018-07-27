@@ -41,8 +41,12 @@ func (tj testJob) Create(args map[string]interface{}) error {
 		return createGetClusterMembers(args)
 	case "prep-job-1":
 		return createPrepJob1(args)
+	case "prep-job-2":
+		return createPrepJob2(args)
 	case "cleanup-job":
 		return createCleanupJob(args)
+	case "cleanup-job-2":
+		return createCleanupJob2(args)
 	case "check-ok-1":
 		return createCheckOK1(args)
 	case "check-ok-2":
@@ -53,6 +57,10 @@ func (tj testJob) Create(args map[string]interface{}) error {
 		return createDecom2(args)
 	case "decom-step-3":
 		return createDecom3(args)
+	case "destroy-step-1":
+		return createDestroy1(args)
+	case "destroy-step-2":
+		return createDestroy2(args)
 	case "no-op", "noop":
 		return createEndNode(args)
 	}
@@ -72,6 +80,13 @@ func (tj testJob) Run(map[string]interface{}) (job.Return, error) {
 func testGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm.yaml"
+	cfg, _ := ReadConfig(sequencesFile)
+	return NewGrapher(tf, cfg, id.NewGenerator(4, 100))
+}
+
+func testConditionalGrapher() *Grapher {
+	tf := &testFactory{}
+	sequencesFile := "../test/specs/destroy-conditional.yaml"
 	cfg, _ := ReadConfig(sequencesFile)
 	return NewGrapher(tf, cfg, id.NewGenerator(4, 100))
 }
@@ -303,6 +318,246 @@ func TestCreateDecomGraphNoNodes(t *testing.T) {
 	}
 }
 
+func TestCreateDestroyConditionalGraph(t *testing.T) {
+	omg := testConditionalGrapher()
+	args := map[string]interface{}{
+		"container": "test-container-001",
+		"env":       "testing",
+	}
+
+	// create the graph
+	g, err := omg.CreateGraph("destroy-conditional", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// validate the adjacency list
+	startNode := g.First.Datum.Id().Id
+
+	verifyStep(g, g.Edges[startNode], 1, "prep-1", t)
+
+	currentStep := getNextStep(g.Edges, g.Edges[startNode])
+	verifyStep(g, currentStep, 1, "conditional_destroy-container_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-lxc_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "destroy-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "destroy-2", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-lxc_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "conditional_destroy-container_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "cleanup-job", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-conditional_end", t)
+}
+
+func TestCreateDoubleConditionalGraph(t *testing.T) {
+	omg := testConditionalGrapher()
+	args := map[string]interface{}{
+		"container": "test-container-001",
+		"env":       "testing",
+	}
+
+	// create the graph
+	g, err := omg.CreateGraph("double-conditional", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// validate the adjacency list
+	startNode := g.First.Datum.Id().Id
+
+	verifyStep(g, g.Edges[startNode], 1, "prep-1", t)
+
+	currentStep := getNextStep(g.Edges, g.Edges[startNode])
+	verifyStep(g, currentStep, 1, "conditional_archive-container_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_archive_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "archive-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "archive-2", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_archive_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "conditional_archive-container_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "conditional_destroy-container_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-lxc_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "destroy-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "destroy-2", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-lxc_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "conditional_destroy-container_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "cleanup-job", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_double-conditional_end", t)
+}
+
+func TestCreateNestedConditionalGraph(t *testing.T) {
+	omg := testConditionalGrapher()
+	args := map[string]interface{}{
+		"container": "test-container-001",
+		"env":       "testing",
+	}
+
+	// create the graph
+	g, err := omg.CreateGraph("conditional-in-conditional", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// validate the adjacency list
+	startNode := g.First.Datum.Id().Id
+
+	verifyStep(g, g.Edges[startNode], 1, "prep-outer", t)
+
+	currentStep := getNextStep(g.Edges, g.Edges[startNode])
+	verifyStep(g, currentStep, 1, "conditional_handle-container_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-conditional_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "prep-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "conditional_destroy-container_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-lxc_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "destroy-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "destroy-2", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-lxc_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "conditional_destroy-container_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "cleanup-job", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-conditional_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "conditional_handle-container_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "cleanup-job-outer", t)
+}
+
+func TestCreateDefaultConditionalGraph(t *testing.T) {
+	omg := testConditionalGrapher()
+	args := map[string]interface{}{
+		"container": "test-container-001",
+		"env":       "testing",
+	}
+
+	// create the graph
+	g, err := omg.CreateGraph("conditional-default", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// validate the adjacency list
+	startNode := g.First.Datum.Id().Id
+
+	verifyStep(g, g.Edges[startNode], 1, "prep-1", t)
+
+	currentStep := getNextStep(g.Edges, g.Edges[startNode])
+	verifyStep(g, currentStep, 1, "conditional_destroy-container_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-docker_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "destroy-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_destroy-docker_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "conditional_destroy-container_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "cleanup-job", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_conditional-default_end", t)
+}
+
+func TestFailCreateNoDefaultConditionalGraph(t *testing.T) {
+	omg := testConditionalGrapher()
+	args := map[string]interface{}{
+		"container": "test-container-001",
+		"env":       "testing",
+	}
+
+	// create the graph
+	_, err := omg.CreateGraph("no-default-fail", args)
+	if err == nil {
+		ret := fmt.Errorf("Expected error creating graph but didn't receive one.")
+		t.Fatal(ret)
+	}
+	if err.Error() != "the value of the conditional jobArg containerType did not match any of the options" {
+		ret := fmt.Errorf("Unexpected error string returned.")
+		t.Fatal(ret)
+	}
+}
+
+func TestFailCreateBadIfConditionalGraph(t *testing.T) {
+	omg := testConditionalGrapher()
+	args := map[string]interface{}{
+		"container": "test-container-001",
+		"env":       "testing",
+	}
+
+	// create the graph
+	_, err := omg.CreateGraph("bad-if-fail", args)
+	if err == nil {
+		ret := fmt.Errorf("Expected error creating graph but didn't receive one.")
+		t.Fatal(ret)
+	}
+	if err.Error() != "could not find the conditional jobArg subnet" {
+		ret := fmt.Errorf("Unexpected error string returned.")
+		t.Fatal(ret)
+	}
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // Util functions
 /////////////////////////////////////////////////////////////////////////////
@@ -377,6 +632,24 @@ func createPrepJob1(args map[string]interface{}) error {
 	return nil
 }
 
+func createPrepJob2(args map[string]interface{}) error {
+	container, ok := args["container"]
+	if !ok {
+		return fmt.Errorf("job prep-job-2 expected a cluster arg")
+	}
+	if container != "test-container-001" {
+		return fmt.Errorf("job prep-job-2 given '%s' but wanted 'test-container-001'", container)
+	}
+	env, ok := args["env"]
+	if !ok {
+		return fmt.Errorf("job prep-job-2 expected a env arg")
+	}
+	if env != "testing" {
+		return fmt.Errorf("job prep-job-2 given '%s' but wanted 'testing'", env)
+	}
+	return nil
+}
+
 func createCleanupJob(args map[string]interface{}) error {
 	cluster, ok := args["cluster"]
 	if !ok {
@@ -384,6 +657,18 @@ func createCleanupJob(args map[string]interface{}) error {
 	}
 	if cluster != "test-cluster-001" {
 		return fmt.Errorf("job cleanup-job given '%s' but wanted 'test-cluster-001'", cluster)
+	}
+
+	return nil
+}
+
+func createCleanupJob2(args map[string]interface{}) error {
+	container, ok := args["container"]
+	if !ok {
+		return fmt.Errorf("job cleanup-job expected a cluster arg")
+	}
+	if container != "test-container-001" {
+		return fmt.Errorf("job cleanup-job-2 given '%s' but wanted 'test-container-001'", container)
 	}
 
 	return nil
@@ -450,6 +735,29 @@ func createDecom3(args map[string]interface{}) error {
 	}
 	if container != "node1" && container != "node2" && container != "node3" && container != "node4" {
 		return fmt.Errorf("job check-decom-3 given '%s' but wanted one of ['node1','node2','node3','node4']", container)
+	}
+	return nil
+}
+
+func createDestroy1(args map[string]interface{}) error {
+	container, ok := args["container"]
+	if !ok {
+		return fmt.Errorf("job check-destroy-1 expected a container arg")
+	}
+	if container != "test-container-001" {
+		return fmt.Errorf("job check-destroy-1 given '%s' but wanted test-container-001", container)
+	}
+	args["physicalhost"] = "physicalhost1"
+	return nil
+}
+
+func createDestroy2(args map[string]interface{}) error {
+	physicalhost, ok := args["dstAddr"]
+	if !ok {
+		return fmt.Errorf("job check-destroy-2 expected a container arg")
+	}
+	if physicalhost != "physicalhost1" {
+		return fmt.Errorf("job check-destroy-2 given '%s' but wanted physicalhost1", physicalhost)
 	}
 	return nil
 }
