@@ -10,15 +10,17 @@ import (
 
 // NodeSpec defines the structure expected from the yaml file to define each nodes.
 type NodeSpec struct {
-	Name         string     `yaml:"name"`      // unique name assigned to this node
-	Category     string     `yaml:"category"`  // "job" or "sequence"
-	NodeType     string     `yaml:"type"`      // the type of job or sequence to create
-	Each         []string   `yaml:"each"`      // arguments to repeat over
-	Args         []*NodeArg `yaml:"args"`      // expected arguments
-	Sets         []string   `yaml:"sets"`      // expected job args to be set
-	Dependencies []string   `yaml:"deps"`      // nodes with out-edges leading to this node
-	Retry        uint       `yaml:"retry"`     // the number of times to retry a "job" that fails
-	RetryWait    uint       `yaml:"retryWait"` // the time, in seconds, to sleep between "job" retries
+	Name         string            `yaml:"name"`      // unique name assigned to this node
+	Category     string            `yaml:"category"`  // "job" or "sequence"
+	NodeType     string            `yaml:"type"`      // the type of job or sequence to create
+	Each         []string          `yaml:"each"`      // arguments to repeat over
+	Args         []*NodeArg        `yaml:"args"`      // expected arguments
+	Sets         []string          `yaml:"sets"`      // expected job args to be set
+	Dependencies []string          `yaml:"deps"`      // nodes with out-edges leading to this node
+	Retry        uint              `yaml:"retry"`     // the number of times to retry a "job" that fails
+	RetryWait    uint              `yaml:"retryWait"` // the time, in seconds, to sleep between "job" retries
+	If           string            `yaml:"if"`        // the name of the jobArg to check for a conditional value
+	Eq           map[string]string `yaml:"eq"`        // conditional values mapping to appropriate sequence names
 }
 
 // NodeArg defines the structure expected from the yaml file to define a job's args.
@@ -88,4 +90,9 @@ func ReadConfig(configFile string) (*Config, error) {
 // isSequence will return true if j is a Sequence, and false otherwise.
 func (j *NodeSpec) isSequence() bool {
 	return j.Category == "sequence"
+}
+
+// isSequence will return true if j is a Sequence, and false otherwise.
+func (j *NodeSpec) isConditional() bool {
+	return j.Category == "conditional"
 }

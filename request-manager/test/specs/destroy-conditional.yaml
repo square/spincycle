@@ -1,0 +1,307 @@
+---
+sequences:
+  destroy-conditional:
+    args:
+      required:
+        - name: container
+        - name: env
+      static:
+        - name: containerType
+          default: "lxc"
+    nodes:
+      prep-1:
+        category: job
+        type: prep-job-2
+        args:
+          - expected: container
+            given: container
+          - expected: env
+            given: env
+        sets: []
+        deps: []
+      destroy-container:
+        category: conditional
+        args:
+          - expected: container
+            given: container
+          - expected: containerType
+            given: containerType
+        if: containerType
+        eq:
+          lxc: destroy-lxc
+          docker: destroy-docker
+        deps: [prep-1]
+      cleanup-job:
+        category: job
+        type: cleanup-job-2
+        args:
+          - expected: container
+            given: container
+        sets: []
+        deps: [destroy-container]
+  destroy-lxc:
+    args:
+      required:
+        - name: container
+    nodes:
+      destroy-1:
+        category: job
+        type: destroy-step-1
+        args:
+          - expected: container
+            given: container
+        sets: [physicalhost]
+        deps: []
+      destroy-2:
+        category: job
+        type: destroy-step-2
+        args:
+          - expected: dstAddr
+            given: physicalhost
+        sets: []
+        deps: [destroy-1]
+  destroy-docker:
+    args:
+      required:
+        - name: container
+    nodes:
+      destroy-1:
+        category: job
+        type: destroy-step-1
+        args:
+          - expected: container
+            given: container
+        sets: [physicalhost]
+        deps: []
+  double-conditional:
+    args:
+      required:
+        - name: container
+        - name: env
+      static:
+        - name: containerType
+          default: "lxc"
+    nodes:
+      prep-1:
+        category: job
+        type: prep-job-2
+        args:
+          - expected: container
+            given: container
+          - expected: env
+            given: env
+        sets: []
+        deps: []
+      archive-container:
+        category: conditional
+        args:
+          - expected: container
+            given: container
+          - expected: env
+            given: env
+        if: env
+        eq:
+          testing: archive
+          staging: noop
+        deps: [prep-1]
+      destroy-container:
+        category: conditional
+        args:
+          - expected: container
+            given: container
+          - expected: containerType
+            given: containerType
+        if: containerType
+        eq:
+          lxc: destroy-lxc
+          docker: destroy-docker
+        deps: [archive-container]
+      cleanup-job:
+        category: job
+        type: cleanup-job-2
+        args:
+          - expected: container
+            given: container
+        sets: []
+        deps: [destroy-container]
+  archive:
+    args:
+      required:
+        - name: container
+    nodes:
+      archive-1:
+        category: job
+        type: destroy-step-1
+        args:
+          - expected: container
+            given: container
+        sets: [physicalhost]
+        deps: []
+      archive-2:
+        category: job
+        type: destroy-step-2
+        args:
+          - expected: dstAddr
+            given: physicalhost
+        sets: []
+        deps: [archive-1]
+  conditional-in-conditional:
+    args:
+      required:
+        - name: container
+        - name: env
+      static:
+        - name: containerType
+          default: "lxc"
+    nodes:
+      prep-outer:
+        category: job
+        type: prep-job-2
+        args:
+          - expected: container
+            given: container
+          - expected: env
+            given: env
+        sets: []
+        deps: []
+      handle-container:
+        category: conditional
+        args:
+          - expected: container
+            given: container
+          - expected: env
+            given: env
+          - expected: containerType
+            given: containerType
+        if: env
+        eq:
+          staging: archive-container
+          testing: destroy-conditional
+        deps: [prep-outer]
+      cleanup-job-outer:
+        category: job
+        type: cleanup-job-2
+        args:
+          - expected: container
+            given: container
+        sets: []
+        deps: [handle-container]
+  conditional-default:
+    args:
+      required:
+        - name: container
+        - name: env
+      static:
+        - name: containerType
+          default: "docker"
+    nodes:
+      prep-1:
+        category: job
+        type: prep-job-2
+        args:
+          - expected: container
+            given: container
+          - expected: env
+            given: env
+        sets: []
+        deps: []
+      destroy-container:
+        category: conditional
+        args:
+          - expected: container
+            given: container
+          - expected: containerType
+            given: containerType
+        if: containerType
+        eq:
+          lxc: destroy-lxc
+          default: destroy-docker
+        deps: [prep-1]
+      cleanup-job:
+        category: job
+        type: cleanup-job-2
+        args:
+          - expected: container
+            given: container
+        sets: []
+        deps: [destroy-container]
+  no-default-fail:
+    args:
+      required:
+        - name: container
+        - name: env
+      static:
+        - name: containerType
+          default: "docker"
+    nodes:
+      prep-1:
+        category: job
+        type: prep-job-2
+        args:
+          - expected: container
+            given: container
+          - expected: env
+            given: env
+        sets: []
+        deps: []
+      destroy-container:
+        category: conditional
+        args:
+          - expected: container
+            given: container
+          - expected: containerType
+            given: containerType
+        if: containerType
+        eq:
+          lxc: destroy-lxc
+        deps: [prep-1]
+      cleanup-job:
+        category: job
+        type: cleanup-job-2
+        args:
+          - expected: container
+            given: container
+        sets: []
+        deps: [destroy-container]
+  bad-if-fail:
+    args:
+      required:
+        - name: container
+        - name: env
+      static:
+        - name: containerType
+          default: "docker"
+    nodes:
+      prep-1:
+        category: job
+        type: prep-job-2
+        args:
+          - expected: container
+            given: container
+          - expected: env
+            given: env
+        sets: []
+        deps: []
+      destroy-container:
+        category: conditional
+        args:
+          - expected: container
+            given: container
+          - expected: containerType
+            given: containerType
+        if: subnet
+        eq:
+          what: destroy-lxc
+        deps: [prep-1]
+      cleanup-job:
+        category: job
+        type: cleanup-job-2
+        args:
+          - expected: container
+            given: container
+        sets: []
+        deps: [destroy-container]
+
+
+
+
