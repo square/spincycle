@@ -35,7 +35,7 @@ type API struct {
 	echo *echo.Echo
 }
 
-// NewAPI cretes a new API struct. It initializes an echo web server within the
+// NewAPI creates a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
 // @todo: create a struct of managers and pass that in here instead?
 func NewAPI(appCtx app.Context, rm request.Manager, jls joblog.Store, stat status.Manager) *API {
@@ -127,7 +127,7 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // ============================== CONTROLLERS ============================== //
 
 // POST <API_ROOT>/requests
-// Create a new request, but don't start it.
+// Create a new request and start it.
 func (api *API) createRequestHandler(c echo.Context) error {
 	// Convert the payload into a proto.CreateRequestParams.
 	var reqParams proto.CreateRequestParams
@@ -151,6 +151,7 @@ func (api *API) createRequestHandler(c echo.Context) error {
 		return handleError(err)
 	}
 
+	// Start the request.
 	if err := api.rm.Start(req.Id); err != nil {
 		return handleError(err)
 	}
@@ -313,13 +314,13 @@ func (api *API) createJLHandler(c echo.Context) error {
 }
 
 // GET <API_ROOT>/request-list
-// Get a list of all requets.
+// Get a list of all requests.
 func (api *API) requestListHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, api.rm.Specs())
 }
 
 // GET <API_ROOT>/status/running
-// Report all requests that are running
+// Report all requests that are running.
 func (api *API) statusRunningHandler(c echo.Context) error {
 	running, err := api.stat.Running(status.NoFilter)
 	if err != nil {

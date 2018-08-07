@@ -11,7 +11,7 @@ import (
 // NodeSpec defines the structure expected from the yaml file to define each nodes.
 type NodeSpec struct {
 	Name         string            `yaml:"name"`      // unique name assigned to this node
-	Category     string            `yaml:"category"`  // "job" or "sequence"
+	Category     string            `yaml:"category"`  // "job", "sequence", or "conditional"
 	NodeType     string            `yaml:"type"`      // the type of job or sequence to create
 	Each         []string          `yaml:"each"`      // arguments to repeat over
 	Args         []*NodeArg        `yaml:"args"`      // expected arguments
@@ -40,7 +40,7 @@ type SequenceSpec struct {
 }
 
 // SequenceArgs defines the structure expected from the config file to define
-// a sequence's arguments. A sequence can have required arguemnts; an arguments
+// a sequence's arguments. A sequence can have required arguments; any arguments
 // on this list that are missing will result in an error from Grapher.
 // A sequence can also have optional arguemnts; arguments on this list that are
 // missing will not result in an error. Additionally optional arguments can
