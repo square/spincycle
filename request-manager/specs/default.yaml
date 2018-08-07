@@ -1,4 +1,4 @@
-# TODO: provide this noop jobe in spincycle/job/internal
+# TODO: provide this noop job in spincycle/job/internal
 noop-node:
   category: job
   type: noop

@@ -165,7 +165,7 @@ func (g *Graph) connectedToFirstNodeDFS(n *Node) bool {
 
 // InsertComponentBetween will take a Graph as input, and insert it between the given prev and next nodes.
 // Preconditions:
-//      component and  g are connected and acyclic
+//      component and g are connected and acyclic
 //      prev and next both are present in g
 //      next "comes after" prev in the graph, when traversing from the source node
 func (g *Graph) insertComponentBetween(component *Graph, prev *Node, next *Node) error {

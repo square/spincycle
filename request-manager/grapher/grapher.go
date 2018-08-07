@@ -25,7 +25,7 @@ type Grapher struct {
 	idgen id.Generator // Generates UIDs for the nodes created by the Grapher.
 }
 
-// NewGrapher returns a new Grapher struct. The caller of NewGrapher mut provide
+// NewGrapher returns a new Grapher struct. The caller of NewGrapher must provide
 // a Job Factory for Grapher to create the jobs that will be stored at each node.
 // An id generator must also be provided (used for generating ids for nodes).
 //
@@ -123,6 +123,7 @@ func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string
 	if !ok {
 		return nil, fmt.Errorf("did not provide string type sequence name for conditional")
 	}
+	// Based on value of "if" jobArg, get which sequence to execute
 	seqName, ok := n.Eq[valstring]
 	if !ok {
 		// check if default sequence specified
@@ -186,7 +187,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 
 		for n, _ := range nodesToBeDone {
 
-			// First check that all arguments required for the job are present.
+			// First check that all arguments required for the node are present.
 			// If not all arguments are present, then find another node to construct
 			if !o.allArgsPresent(n, nodeArgs) {
 				continue
@@ -255,7 +256,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 					return nil, fmt.Errorf("malformed graph created")
 				}
 
-				// Add the new job to the map of completed components
+				// Add the new node to the map of completed components
 				componentsForThisNode = append(componentsForThisNode, g)
 
 				// If the node (or sequence) was determined to set any args
@@ -306,12 +307,12 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				components[n] = g
 			}
 
-			// After all subcomponents are built, remove the job from the jobsToBeDone array
+			// After all subcomponents are built, remove the node from the nodesToBeDone array
 			delete(nodesToBeDone, n)
 		}
 
-		// If the number of jobs remaining has not changed, then we are unable to create
-		// any new jobs because of missing arguments
+		// If the number of nodes remaining has not changed, then we are unable to create
+		// any new nodes because of missing arguments
 		if nodesCount == len(nodesToBeDone) {
 			missingArgsNodes := []string{}
 			for n, _ := range nodesToBeDone {
@@ -394,7 +395,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 	// sequence, we want to set SequenceId for all but the first vertex in the
 	// sequence. The SequenceId for the first vertex in the sequence will be set
 	// on a subsequent pass. Lastly, the first vertex in the completed graph will
-	// have no SequenceId set, as that vertex does part of a larger sequence.
+	// have no SequenceId set, as that vertex is part of a larger sequence.
 	sequenceId := g.First.Datum.Id().Id
 	for _, vertex := range g.Vertices {
 		// TODO(alyssa): Add `ParentSequenceId` to start vertex of each sequence.

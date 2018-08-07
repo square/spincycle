@@ -18,7 +18,7 @@ type Traverser interface {
 	// Run traverses a job chain and runs all of the jobs in it. It starts by
 	// running the first job in the chain, and then, if the job completed,
 	// successfully, running its adjacent jobs. This process continues until there
-	// or no more jobs to run, or until the Stop method is called on the traverser.
+	// are no more jobs to run, or until the Stop method is called on the traverser.
 	//
 	// It returns an error if it fails to start.
 	Run() error
@@ -39,7 +39,7 @@ type Traverser interface {
 	Status() (proto.JobChainStatus, error)
 }
 
-// A TraverserFactory makes new Traverser.
+// A TraverserFactory makes a new Traverser.
 type TraverserFactory interface {
 	Make(proto.JobChain) (Traverser, error)
 }
@@ -148,7 +148,7 @@ func (t *traverser) Run() error {
 	defer func() {
 		// Set final state of chain in repo. This will be very short-lived because
 		// next we'll finalize the request in the RM. Although short-lived, we set
-		// it case there's problems finalizing with RM.
+		// it in case there's problems finalizing with RM.
 		t.chain.SetState(finalState)
 		t.chainRepo.Set(t.chain)
 
