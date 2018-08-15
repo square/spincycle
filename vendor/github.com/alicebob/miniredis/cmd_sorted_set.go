@@ -55,11 +55,8 @@ func (m *Miniredis) cmdZadd(c *server.Peer, cmd string, args []string) {
 		nx    = false
 		xx    = false
 		ch    = false
-		incr  = false
 		elems = map[string]float64{}
 	)
-
-outer:
 	for len(args) > 0 {
 		switch strings.ToUpper(args[0]) {
 		case "NX":
@@ -74,29 +71,21 @@ outer:
 			ch = true
 			args = args[1:]
 			continue
-		case "INCR":
-			incr = true
-			args = args[1:]
-			continue
 		default:
-			break outer
+			if len(args) < 2 {
+				setDirty(c)
+				c.WriteError(msgSyntaxError)
+				return
+			}
+			score, err := strconv.ParseFloat(args[0], 64)
+			if err != nil {
+				setDirty(c)
+				c.WriteError(msgInvalidFloat)
+				return
+			}
+			elems[args[1]] = score
+			args = args[2:]
 		}
-	}
-
-	if len(args) == 0 || len(args)%2 != 0 {
-		setDirty(c)
-		c.WriteError(msgSyntaxError)
-		return
-	}
-	for len(args) > 0 {
-		score, err := strconv.ParseFloat(args[0], 64)
-		if err != nil {
-			setDirty(c)
-			c.WriteError(msgInvalidFloat)
-			return
-		}
-		elems[args[1]] = score
-		args = args[2:]
 	}
 
 	if xx && nx {
@@ -105,33 +94,11 @@ outer:
 		return
 	}
 
-	if incr && len(elems) > 1 {
-		setDirty(c)
-		c.WriteError(msgSingleElementPair)
-		return
-	}
-
 	withTx(m, c, func(c *server.Peer, ctx *connCtx) {
 		db := m.db(ctx.selectedDB)
 
 		if db.exists(key) && db.t(key) != "zset" {
 			c.WriteError(ErrWrongType.Error())
-			return
-		}
-
-		if incr {
-			for member, delta := range elems {
-				if nx && db.ssetExists(key, member) {
-					c.WriteNull()
-					return
-				}
-				if xx && !db.ssetExists(key, member) {
-					c.WriteNull()
-					return
-				}
-				newScore := db.ssetIncrby(key, member, delta)
-				c.WriteBulk(formatFloat(newScore))
-			}
 			return
 		}
 
@@ -299,8 +266,7 @@ func (m *Miniredis) cmdZinterstore(c *server.Peer, cmd string, args []string) {
 	weights := []float64{}
 	aggregate := "sum"
 	for len(args) > 0 {
-		switch strings.ToLower(args[0]) {
-		case "weights":
+		if strings.ToLower(args[0]) == "weights" {
 			if len(args) < numKeys+1 {
 				setDirty(c)
 				c.WriteError(msgSyntaxError)
@@ -317,7 +283,9 @@ func (m *Miniredis) cmdZinterstore(c *server.Peer, cmd string, args []string) {
 			}
 			withWeights = true
 			args = args[numKeys+1:]
-		case "aggregate":
+			continue
+		}
+		if strings.ToLower(args[0]) == "aggregate" {
 			if len(args) < 2 {
 				setDirty(c)
 				c.WriteError(msgSyntaxError)
@@ -325,18 +293,18 @@ func (m *Miniredis) cmdZinterstore(c *server.Peer, cmd string, args []string) {
 			}
 			aggregate = strings.ToLower(args[1])
 			switch aggregate {
-			case "sum", "min", "max":
 			default:
 				setDirty(c)
 				c.WriteError(msgSyntaxError)
 				return
+			case "sum", "min", "max":
 			}
 			args = args[2:]
-		default:
-			setDirty(c)
-			c.WriteError(msgSyntaxError)
-			return
+			continue
 		}
+		setDirty(c)
+		c.WriteError(msgSyntaxError)
+		return
 	}
 
 	withTx(m, c, func(c *server.Peer, ctx *connCtx) {
@@ -1142,8 +1110,7 @@ func (m *Miniredis) cmdZunionstore(c *server.Peer, cmd string, args []string) {
 	weights := []float64{}
 	aggregate := "sum"
 	for len(args) > 0 {
-		switch strings.ToLower(args[0]) {
-		case "weights":
+		if strings.ToLower(args[0]) == "weights" {
 			if len(args) < numKeys+1 {
 				setDirty(c)
 				c.WriteError(msgSyntaxError)
@@ -1160,7 +1127,9 @@ func (m *Miniredis) cmdZunionstore(c *server.Peer, cmd string, args []string) {
 			}
 			withWeights = true
 			args = args[numKeys+1:]
-		case "aggregate":
+			continue
+		}
+		if strings.ToLower(args[0]) == "aggregate" {
 			if len(args) < 2 {
 				setDirty(c)
 				c.WriteError(msgSyntaxError)
@@ -1175,24 +1144,16 @@ func (m *Miniredis) cmdZunionstore(c *server.Peer, cmd string, args []string) {
 			case "sum", "min", "max":
 			}
 			args = args[2:]
-		default:
-			setDirty(c)
-			c.WriteError(msgSyntaxError)
-			return
+			continue
 		}
+		setDirty(c)
+		c.WriteError(msgSyntaxError)
+		return
 	}
 
 	withTx(m, c, func(c *server.Peer, ctx *connCtx) {
 		db := m.db(ctx.selectedDB)
-		deleteDest := true
-		for _, key := range keys {
-			if destination == key {
-				deleteDest = false
-			}
-		}
-		if deleteDest {
-			db.del(destination, true)
-		}
+		db.del(destination, true)
 
 		sset := sortedSet{}
 		for i, key := range keys {

@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/alicebob/miniredis"
-	"github.com/garyburd/redigo/redis"
 	"github.com/go-test/deep"
+	"github.com/gomodule/redigo/redis"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/test"
