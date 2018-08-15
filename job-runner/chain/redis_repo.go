@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
+	"github.com/gomodule/redigo/redis"
 )
 
 // RedisRepoConfig contains all info necessary to build a RedisRepo.
