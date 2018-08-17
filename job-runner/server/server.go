@@ -5,6 +5,9 @@ package server
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/orcaman/concurrent-map"
 
@@ -17,41 +20,40 @@ import (
 	"github.com/square/spincycle/jobs"
 )
 
-// Run runs the Job Runner API in the foreground. It returns when the API stops.
-func Run(appCtx app.Context) error {
-	if err := loadConfig(&appCtx); err != nil {
-		return err
-	}
-	api, err := makeAPI(appCtx)
-	if err != nil {
-		return err
-	}
-	return api.Run()
-}
-
 type Server struct {
-	appCtx app.Context
-	api    *api.API
+	appCtx       app.Context
+	api          *api.API
+	sigChan      chan os.Signal
+	shutdownChan chan struct{}
 }
 
 func NewServer(appCtx app.Context) *Server {
 	return &Server{
-		appCtx: appCtx,
+		appCtx:       appCtx,
+		shutdownChan: make(chan struct{}),
 	}
+}
+
+// Run runs the Job Runner API in the foreground. It returns when the API stops.
+func (s *Server) Run() error {
+	if err := s.Boot(); err != nil {
+		return err
+	}
+	s.StartSignalHandler()
+	return s.api.Run()
 }
 
 func (s *Server) Boot() error {
 	if s.api != nil {
 		return nil
 	}
-	if err := loadConfig(&s.appCtx); err != nil {
+	if err := s.loadConfig(); err != nil {
 		return err
 	}
-	api, err := makeAPI(s.appCtx)
+	err := s.makeAPI()
 	if err != nil {
 		return err
 	}
-	s.api = api
 	return nil
 }
 
@@ -59,40 +61,57 @@ func (s *Server) API() *api.API {
 	return s.api
 }
 
+// Catch TERM and INT signals to gracefully shut down the Job Runner
+func (s *Server) StartSignalHandler() {
+	s.sigChan = make(chan os.Signal, 1)
+	signal.Notify(s.sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-s.sigChan
+		if sig == nil {
+			// channel was closed
+			return
+		}
+
+		// API + traversers watch shutdownChan
+		close(s.shutdownChan)
+	}()
+}
+
 // --------------------------------------------------------------------------
 
-func loadConfig(appCtx *app.Context) error {
+func (s *Server) loadConfig() error {
 	var err error
 	var cfg config.JobRunner
-	if appCtx.Hooks.LoadConfig != nil {
-		cfg, err = appCtx.Hooks.LoadConfig(*appCtx)
+	if s.appCtx.Hooks.LoadConfig != nil {
+		cfg, err = s.appCtx.Hooks.LoadConfig(s.appCtx)
 	} else {
-		cfg, err = appCtx.Hooks.LoadConfig(*appCtx)
+		cfg, err = s.appCtx.Hooks.LoadConfig(s.appCtx)
 	}
 	if err != nil {
 		return fmt.Errorf("error loading config at %s", err)
 	}
-	appCtx.Config = cfg
+	s.appCtx.Config = cfg
 	return nil
 }
 
-func makeAPI(appCtx app.Context) (*api.API, error) {
+func (s *Server) makeAPI() error {
 	var err error
 
 	// //////////////////////////////////////////////////////////////////////
 	// Request Manager Client
 	// //////////////////////////////////////////////////////////////////////
-	rmc, err := appCtx.Factories.MakeRequestManagerClient(appCtx)
+	rmc, err := s.appCtx.Factories.MakeRequestManagerClient(s.appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("error loading config at %s", err)
+		return fmt.Errorf("error loading config at %s", err)
 	}
 
 	// //////////////////////////////////////////////////////////////////////
 	// Chain repo
 	// //////////////////////////////////////////////////////////////////////
-	chainRepo, err := appCtx.Factories.MakeChainRepo(appCtx)
+	chainRepo, err := s.appCtx.Factories.MakeChainRepo(s.appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("error loading config at %s", err)
+		return fmt.Errorf("error loading config at %s", err)
 	}
 
 	// //////////////////////////////////////////////////////////////////////
@@ -100,8 +119,9 @@ func makeAPI(appCtx app.Context) (*api.API, error) {
 	// //////////////////////////////////////////////////////////////////////
 	stat := status.NewManager(chainRepo)
 	rf := runner.NewFactory(jobs.Factory, rmc)
-	trFactory := chain.NewTraverserFactory(chainRepo, rf, rmc)
+	trFactory := chain.NewTraverserFactory(chainRepo, rf, rmc, s.shutdownChan)
 	trRepo := cmap.New()
 
-	return api.NewAPI(appCtx, trFactory, trRepo, stat), nil
+	s.api = api.NewAPI(s.appCtx, trFactory, trRepo, stat, s.shutdownChan)
+	return nil
 }

@@ -30,6 +30,9 @@ var (
 	ErrDuplicateTraverser = errors.New("traverser already exists")
 	ErrTraverserNotFound  = errors.New("traverser not found")
 	ErrInvalidTraverser   = errors.New("traverser found, but type is invalid")
+
+	// Error when Job Runner is shutting down and not starting new job chains
+	ErrNoNewJobChains = errors.New("Job Runner is shutting down - no new job chains are being started")
 )
 
 // api provides controllers for endpoints it registers with a router.
@@ -38,18 +41,20 @@ type API struct {
 	traverserFactory chain.TraverserFactory
 	traverserRepo    cmap.ConcurrentMap
 	stat             status.Manager
+	shutdownChan     chan struct{}
 	// --
 	echo *echo.Echo
 }
 
 // NewAPI cretes a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
-func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager) *API {
+func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager, shutdownChan chan struct{}) *API {
 	api := &API{
 		appCtx:           appCtx,
 		traverserFactory: traverserFactory,
 		traverserRepo:    traverserRepo,
 		stat:             stat,
+		shutdownChan:     shutdownChan,
 		// --
 		echo: echo.New(),
 	}
@@ -63,6 +68,8 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 	api.echo.PUT(API_ROOT+"job-chains/:requestId/stop", api.stopJobChainHandler)
 	// Get the status of a job chain.
 	api.echo.GET(API_ROOT+"job-chains/:requestId/status", api.statusJobChainHandler)
+	// TODO felixp: add job-chains/resume route + handler for getting SJCs
+	// from the RM and resuming running them
 
 	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler)
 
@@ -127,6 +134,11 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // chain repo. If it doesn't pass, return the validation error. Then start
 // running the job chain.
 func (api *API) newJobChainHandler(c echo.Context) error {
+	// If Job Runner is shutting down, don't start running any new job chains.
+	if api.shuttingDown() {
+		return handleError(ErrNoNewJobChains)
+	}
+
 	// Convert the payload into a proto.JobChain.
 	var jc proto.JobChain
 	if err := c.Bind(&jc); err != nil {
@@ -232,6 +244,8 @@ func handleError(err error) *echo.HTTPError {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())
 		case ErrDuplicateTraverser:
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		case ErrNoNewJobChains: // TODO felixp: is this the right status code?
+			return echo.NewHTTPError(http.StatusServiceUnavailable, err.Error())
 		default:
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
@@ -245,4 +259,14 @@ func chainLocation(requestId string, hostname func() (string, error)) string {
 	h, _ := hostname()
 	url, _ := url.Parse(h + API_ROOT + "job-chains/" + requestId)
 	return url.EscapedPath()
+}
+
+// Indicates whether the Job Runner is in the process of shutting down
+func (api *API) shuttingDown() bool {
+	select {
+	case <-api.shutdownChan:
+		return true
+	default:
+		return false
+	}
 }

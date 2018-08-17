@@ -45,16 +45,18 @@ type TraverserFactory interface {
 }
 
 type traverserFactory struct {
-	chainRepo Repo
-	rf        runner.Factory
-	rmc       rm.Client
+	chainRepo    Repo
+	rf           runner.Factory
+	rmc          rm.Client
+	shutdownChan chan struct{}
 }
 
-func NewTraverserFactory(cr Repo, rf runner.Factory, rmc rm.Client) TraverserFactory {
+func NewTraverserFactory(cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) TraverserFactory {
 	return &traverserFactory{
-		chainRepo: cr,
-		rf:        rf,
-		rmc:       rmc,
+		chainRepo:    cr,
+		rf:           rf,
+		rmc:          rmc,
+		shutdownChan: shutdownChan,
 	}
 }
 
@@ -81,7 +83,7 @@ func (f *traverserFactory) Make(jobChain proto.JobChain) (Traverser, error) {
 	// for the chain: running, cleaning up, removing from repo when done, etc.
 	// And traverser and chain have the same lifespan: traverser is done when
 	// chain is done.
-	tr := NewTraverser(chain, f.chainRepo, f.rf, f.rmc)
+	tr := NewTraverser(chain, f.chainRepo, f.rf, f.rmc, f.shutdownChan)
 	return tr, nil
 }
 
@@ -101,6 +103,9 @@ type traverser struct {
 
 	// Used to stop a running traverser.
 	stopChan chan struct{}
+
+	// Used to notify traverser to suspend the running job chain.
+	shutdownChan chan struct{}
 
 	// Queue for processing jobs that need to run.
 	runJobChan chan proto.Job
@@ -122,18 +127,19 @@ type traverser struct {
 }
 
 // NewTraverser creates a new traverser for a job chain.
-func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rmc rm.Client) *traverser {
+func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) *traverser {
 	return &traverser{
-		chain:       chain,
-		chainRepo:   cr,
-		rf:          rf,
-		runnerRepo:  runner.NewRepo(),
-		stopChan:    make(chan struct{}),
-		runJobChan:  make(chan proto.Job),
-		doneJobChan: make(chan proto.Job),
-		rmc:         rmc,
-		jobTries:    make(map[string]uint),
-		jtMux:       &sync.RWMutex{},
+		chain:        chain,
+		chainRepo:    cr,
+		rf:           rf,
+		runnerRepo:   runner.NewRepo(),
+		stopChan:     make(chan struct{}),
+		shutdownChan: shutdownChan,
+		runJobChan:   make(chan proto.Job),
+		doneJobChan:  make(chan proto.Job),
+		rmc:          rmc,
+		jobTries:     make(map[string]uint),
+		jtMux:        &sync.RWMutex{},
 		// Include the request id in all logging.
 		logger: log.WithFields(log.Fields{"requestId": chain.RequestId()}),
 	}
@@ -145,7 +151,7 @@ func (t *traverser) Run() error {
 	defer t.logger.Infof("chain traverser done")
 
 	var finalState byte
-	defer func() {
+	defer func() { // TODO felixp: make sure NOT to send this when jc is being suspended (careful since its defered so will auto run at end of Run())
 		// Set final state of chain in repo. This will be very short-lived because
 		// next we'll finalize the request in the RM. Although short-lived, we set
 		// it in case there's problems finalizing with RM.
@@ -159,6 +165,12 @@ func (t *traverser) Run() error {
 			t.chainRepo.Remove(t.chain.RequestId())
 		}
 	}()
+
+	// TODO felixp: start a goroutine that waits for shutdownChan to close and
+	// when is does, stops all running jobs, saves everything needed for SJC,
+	// and makes a call to the RM suspend endpoint with the SJC
+	// ^parts of this will be similar to traverser.Stop() - it's possible
+	//  we will just call Stop() as part of this
 
 	firstJob, err := t.chain.FirstJob()
 	if err != nil {
@@ -358,6 +370,7 @@ func (t *traverser) runJobs() {
 				err = fmt.Errorf("not starting job because traverser has already been stopped")
 				t.sendJL(pJob, err) // need to send a JL to the RM so that it knows this job failed
 				return
+			// TODO felixp: add check to shutdownChan here (i guess)
 			default:
 			}
 
