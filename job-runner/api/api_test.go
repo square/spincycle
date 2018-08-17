@@ -23,11 +23,13 @@ import (
 var (
 	server        *httptest.Server
 	traverserRepo cmap.ConcurrentMap
+	shutdownChan  chan struct{}
 )
 
 func setup(traverserFactory *mock.TraverserFactory) {
 	traverserRepo = cmap.New()
-	api := api.NewAPI(app.Defaults(), traverserFactory, traverserRepo, &mock.JRStatus{})
+	shutdownChan = make(chan struct{})
+	api := api.NewAPI(app.Defaults(), traverserFactory, traverserRepo, &mock.JRStatus{}, shutdownChan)
 	server = httptest.NewServer(api)
 }
 
@@ -106,6 +108,38 @@ func TestNewJobChainMultipleTraverser(t *testing.T) {
 	}
 
 	if statusCode != http.StatusBadRequest {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusBadRequest)
+	}
+}
+
+// Test new job chain endpoint when Job Runner is shutting down.
+func TestNewJobChainShutdown(t *testing.T) {
+	setup(&mock.TraverserFactory{})
+	defer cleanup()
+
+	jobChain := proto.JobChain{
+		RequestId: "abc",
+		Jobs:      testutil.InitJobs(3),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+		},
+	}
+	payload, err := json.Marshal(jobChain)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Close shutdownChan as if Job Runner is shutting down -
+	// should cause "no new job chains are being started" error
+	close(shutdownChan)
+
+	statusCode, _, err := testutil.MakeHTTPRequest("POST", baseURL()+"job-chains", payload, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if statusCode != http.StatusServiceUnavailable {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusBadRequest)
 	}
 }

@@ -21,7 +21,8 @@ func TestRunErrorNoFirstJob(t *testing.T) {
 	chainRepo := chain.NewMemoryRepo()
 	rf := &mock.RunnerFactory{}
 	rmc := &mock.RMClient{}
-	f := chain.NewTraverserFactory(chainRepo, rf, rmc)
+	shutdownChan := make(chan struct{})
+	f := chain.NewTraverserFactory(chainRepo, rf, rmc, shutdownChan)
 
 	jc := proto.JobChain{
 		RequestId:     "abc",
@@ -50,6 +51,7 @@ func TestRunComplete(t *testing.T) {
 		},
 	}
 	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
 
 	jc := &proto.JobChain{
 		RequestId: requestId,
@@ -61,7 +63,7 @@ func TestRunComplete(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc)
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	err := traverser.Run()
 	if err != nil {
@@ -89,6 +91,7 @@ func TestRunNotComplete(t *testing.T) {
 		},
 	}
 	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
 
 	jc := &proto.JobChain{
 		RequestId: "abc",
@@ -100,7 +103,7 @@ func TestRunNotComplete(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc)
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	err := traverser.Run()
 	if err != nil {
@@ -131,6 +134,7 @@ func TestRetrySequence(t *testing.T) {
 		},
 	}
 	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
 
 	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
 
@@ -144,7 +148,7 @@ func TestRetrySequence(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc)
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	err := traverser.Run()
 	if err != nil {
@@ -179,6 +183,7 @@ func TestRetrySequenceFirstJobFailed(t *testing.T) {
 		},
 	}
 	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
 
 	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
 
@@ -192,7 +197,7 @@ func TestRetrySequenceFirstJobFailed(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc)
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	err := traverser.Run()
 	if err != nil {
@@ -227,6 +232,7 @@ func TestJobUnknownState(t *testing.T) {
 		},
 	}
 	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
 
 	jc := &proto.JobChain{
 		RequestId: "abc",
@@ -241,7 +247,7 @@ func TestJobUnknownState(t *testing.T) {
 	for _, j := range jc.Jobs {
 		j.State = proto.STATE_UNKNOWN
 	}
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	if err := traverser.Run(); err != nil {
 		t.Errorf("err = %s, expected nil", err)
@@ -268,6 +274,7 @@ func TestJobData(t *testing.T) {
 		},
 	}
 	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
 
 	jc := &proto.JobChain{
 		RequestId: "abc",
@@ -279,7 +286,7 @@ func TestJobData(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc)
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	expectedJobData := map[string]interface{}{"k1": "v9", "k2": "v2"}
 
@@ -314,13 +321,14 @@ func TestRunJobsRunnerError(t *testing.T) {
 			return mock.ErrRMClient
 		},
 	}
+	shutdownChan := make(chan struct{})
 
 	jc := &proto.JobChain{
 		RequestId: requestId,
 		Jobs:      testutil.InitJobs(1),
 	}
 	c := chain.NewChain(jc)
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	err := traverser.Run()
 	if err != nil {
@@ -370,6 +378,7 @@ func TestStop(t *testing.T) {
 		},
 	}
 	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
 
 	jc := &proto.JobChain{
 		RequestId: "abc",
@@ -381,7 +390,7 @@ func TestStop(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc)
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -437,6 +446,7 @@ func TestStatus(t *testing.T) {
 		},
 	}
 	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
 
 	jc := &proto.JobChain{
 		RequestId: "abc",
@@ -448,7 +458,7 @@ func TestStatus(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc)
-	traverser := chain.NewTraverser(c, chainRepo, rf, rmc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
