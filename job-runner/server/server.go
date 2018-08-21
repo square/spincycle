@@ -50,8 +50,7 @@ func (s *Server) Boot() error {
 	if err := s.loadConfig(); err != nil {
 		return err
 	}
-	err := s.makeAPI()
-	if err != nil {
+	if err := s.makeAPI(); err != nil {
 		return err
 	}
 	return nil

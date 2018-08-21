@@ -373,8 +373,8 @@ func TestStop(t *testing.T) {
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
 			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
-			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}, RunBlock: make(chan struct{}), RunWg: &runWg},
-			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}, RunBlock: make(chan struct{}), RunWg: &runWg},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_STOPPED}, RunBlock: make(chan struct{}), RunWg: &runWg},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_STOPPED}, RunBlock: make(chan struct{}), RunWg: &runWg},
 		},
 	}
 	rmc := &mock.RMClient{}
@@ -412,13 +412,13 @@ func TestStop(t *testing.T) {
 	<-doneChan
 
 	if c.State() != proto.STATE_FAIL {
-		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_COMPLETE)
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_FAIL)
 	}
-	if c.JobState("job2") != proto.STATE_FAIL {
-		t.Errorf("job2 state = %d, expected %d", c.JobState("job2"), proto.STATE_FAIL)
+	if c.JobState("job2") != proto.STATE_STOPPED {
+		t.Errorf("job2 state = %d, expected %d", c.JobState("job2"), proto.STATE_STOPPED)
 	}
-	if c.JobState("job3") != proto.STATE_FAIL {
-		t.Errorf("job3 state = %d, expected %d", c.JobState("job3"), proto.STATE_FAIL)
+	if c.JobState("job3") != proto.STATE_STOPPED {
+		t.Errorf("job3 state = %d, expected %d", c.JobState("job3"), proto.STATE_STOPPED)
 	}
 	if c.JobState("job4") != proto.STATE_PENDING {
 		t.Errorf("job4 state = %d, expected %d", c.JobState("job4"), proto.STATE_PENDING)
@@ -427,6 +427,350 @@ func TestStop(t *testing.T) {
 	_, err = chainRepo.Get("abc")
 	if err != chain.ErrNotFound {
 		t.Error("chain still in repo, expected it to be removed")
+	}
+}
+
+// Stop the traverser and all running jobs. Tests what happens if running
+// jobs complete successfully even after Stop is called (this occurs with
+// fast-running jobs).
+func TestStopJobCompletes(t *testing.T) {
+	chainRepo := chain.NewMemoryRepo()
+	var runWg sync.WaitGroup
+	runWg.Add(1)
+	rf := &mock.RunnerFactory{
+		RunnersToReturn: map[string]*mock.Runner{
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, RunBlock: make(chan struct{}), RunWg: &runWg},
+		},
+	}
+	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
+
+	jc := &proto.JobChain{
+		RequestId: "abc",
+		Jobs:      testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
+
+	// Start the traverser.
+	doneChan := make(chan struct{})
+	go func() {
+		traverser.Run()
+		close(doneChan)
+	}()
+
+	// Wait until job 2 is running (until it calls wg.Done()). It will run
+	// until Stop is called (which will close its RunBlock channels).
+	runWg.Wait()
+
+	err := traverser.Stop()
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+
+	// Wait for the traverser to finish.
+	<-doneChan
+
+	if c.State() != proto.STATE_FAIL {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_FAIL)
+	}
+	if c.JobState("job2") != proto.STATE_COMPLETE { // job2 completed after Stop()
+		t.Errorf("job2 state = %d, expected %d", c.JobState("job2"), proto.STATE_COMPLETE)
+	}
+	if c.JobState("job3") != proto.STATE_STOPPED { // job3 was stopped before being run
+		t.Errorf("job3 state = %d, expected %d", c.JobState("job3"), proto.STATE_STOPPED)
+	}
+	if c.JobState("job4") != proto.STATE_PENDING { // job4 was never run
+		t.Errorf("job4 state = %d, expected %d", c.JobState("job4"), proto.STATE_PENDING)
+	}
+
+	_, err = chainRepo.Get("abc")
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
+	}
+}
+
+func TestSuspend(t *testing.T) {
+	// Job Chain:
+	//       2 -> 4
+	//     /
+	// -> 1
+	//     \
+	//       3 -> 5
+	// Chain is suspended while 2 and 3 are running:
+	// 2 completes successfully, 3 stops
+
+	chainRepo := chain.NewMemoryRepo()
+	var runWg sync.WaitGroup
+	runWg.Add(2)
+	requestId := "suspendtest"
+	rf := &mock.RunnerFactory{
+		RunnersToReturn: map[string]*mock.Runner{
+			"job1": &mock.Runner{
+				RunReturn: runner.Return{
+					FinalState: proto.STATE_COMPLETE,
+					Tries:      1,
+				},
+				AddedJobData: map[string]interface{}{"data1": "v1"},
+			}, // job 1 completes before chain is suspended
+			"job2": &mock.Runner{
+				RunReturn: runner.Return{
+					FinalState: proto.STATE_COMPLETE,
+					Tries:      1,
+				},
+				AddedJobData: map[string]interface{}{"data2": "v2"},
+				RunBlock:     make(chan struct{}),
+				RunWg:        &runWg,
+				IgnoreStop:   true, // completes successfully after Stop is called
+			}, // job 2 completes after chain is suspended
+			"job3": &mock.Runner{
+				RunReturn: runner.Return{
+					FinalState: proto.STATE_STOPPED,
+					Tries:      2,
+				},
+				RunBlock: make(chan struct{}),
+				RunWg:    &runWg,
+			}, // job 3 is stopped while running
+		},
+	}
+	var receivedSJC proto.SuspendedJobChain
+	receivedSJCChan := make(chan struct{})
+	rmc := &mock.RMClient{
+		SuspendRequestFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
+			receivedSJC = sjc
+			close(receivedSJCChan)
+			return nil
+		},
+	}
+	shutdownChan := make(chan struct{})
+
+	jc := &proto.JobChain{
+		RequestId: requestId,
+		Jobs:      testutil.InitJobsWithSequenceRetry(5, 1),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+			"job3": {"job5"},
+		},
+	}
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
+
+	// Start the traverser.
+	doneChan := make(chan struct{})
+	go func() {
+		traverser.Run()
+		close(doneChan)
+	}()
+
+	// Wait until jobs 2 and 3 are running (until they call wg.Done()). They will
+	// run until Stop is called (which will close their RunBlock channels).
+	runWg.Wait()
+
+	// Suspend the traverser
+	close(shutdownChan)
+
+	// SJC should be sent and traverser.Run should return within 10 seconds.
+	waitChan := time.After(10 * time.Second)
+	select {
+	case <-waitChan:
+		t.Errorf("SJC not sent within 10 seconds of shutdown signal")
+	case <-receivedSJCChan:
+		select {
+		case <-waitChan:
+			t.Errorf("traverser.Run didn't return within 10 seconds of shutdown signal")
+		case <-doneChan:
+		}
+	}
+
+	if c.State() != proto.STATE_SUSPENDED { // chain should be suspended
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_SUSPENDED)
+	}
+	if c.JobState("job1") != proto.STATE_COMPLETE { // job1 finished before suspend
+		t.Errorf("job1 state = %d, expected %d", c.JobState("job1"), proto.STATE_COMPLETE)
+	}
+	if c.JobState("job2") != proto.STATE_COMPLETE { // job2 finished after suspend
+		t.Errorf("job2 state = %d, expected %d", c.JobState("job2"), proto.STATE_COMPLETE)
+	}
+	if c.JobState("job3") != proto.STATE_STOPPED { // job3 stopped by suspend
+		t.Errorf("job3 state = %d, expected %d", c.JobState("job3"), proto.STATE_STOPPED)
+	}
+	// if c.JobState("job4") != proto.STATE_STOPPED { // job4 stopped before running
+	// 	t.Errorf("job4 state = %d, expected %d", c.JobState("job4"), proto.STATE_STOPPED)
+	// }
+	if c.JobState("job4") != proto.STATE_PENDING { // job4 never started
+		t.Errorf("job4 state = %d, expected %d", c.JobState("job4"), proto.STATE_PENDING)
+	}
+	if c.JobState("job5") != proto.STATE_PENDING { // job5 never started
+		t.Errorf("job5 state = %d, expected %d", c.JobState("job5"), proto.STATE_PENDING)
+	}
+
+	_, err := chainRepo.Get(requestId)
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
+	}
+
+	// Make sure the SJC sent to the RM matches what we expect.
+	if receivedSJC.RequestId != requestId {
+		t.Errorf("sjc request id = %s, expected %s", receivedSJC.RequestId, requestId)
+	}
+
+	expectedJobTries := map[string]uint{
+		"job1": 1,
+		"job2": 1,
+		"job3": 2,
+		// job4 was stopped before running, so no tries expected
+	}
+	if diff := deep.Equal(receivedSJC.JobTries, expectedJobTries); diff != nil {
+		t.Error(diff)
+	}
+
+	expectedStoppedJobTries := map[string]uint{
+		"job3": 2, // job3 didn't complete successfully after being stopped
+		// job4 was stopped before it started running, so no tries expected
+	}
+	if diff := deep.Equal(receivedSJC.StoppedJobTries, expectedStoppedJobTries); diff != nil {
+		t.Error(diff)
+	}
+
+	expectedSequenceRetries := map[string]uint{}
+	if diff := deep.Equal(receivedSJC.SequenceRetries, expectedSequenceRetries); diff != nil {
+		t.Error(diff)
+	}
+
+	// job3 should still have its job data
+	expectedJob3Data := map[string]interface{}{"data1": "v1"}
+	if diff := deep.Equal(jc.Jobs["job3"].Data, expectedJob3Data); diff != nil {
+		t.Error(diff)
+	}
+	// job4 should have job data copied from job 2
+	expectedJob4Data := map[string]interface{}{"data1": "v1", "data2": "v2"}
+	if diff := deep.Equal(jc.Jobs["job4"].Data, expectedJob4Data); diff != nil {
+		t.Error(diff)
+	}
+	// job5 should not have any job data (job3 didn't complete)
+	expectedJob5Data := map[string]interface{}{}
+	if diff := deep.Equal(jc.Jobs["job5"].Data, expectedJob5Data); diff != nil {
+		t.Error(diff)
+	}
+}
+
+func TestSuspendChainCompletes(t *testing.T) {
+	// Job Chain:
+	//       2
+	//     /
+	// -> 1
+	//     \
+	//       3
+	// Chain is suspended while 2 and 3 are running:
+	// both complete successfully, so chain completes
+
+	chainRepo := chain.NewMemoryRepo()
+	var runWg sync.WaitGroup
+	runWg.Add(2)
+	requestId := "suspendtest"
+	rf := &mock.RunnerFactory{
+		RunnersToReturn: map[string]*mock.Runner{
+			"job1": &mock.Runner{
+				RunReturn: runner.Return{
+					FinalState: proto.STATE_COMPLETE,
+					Tries:      1,
+				},
+			}, // job 1 completes before chain is suspended
+			"job2": &mock.Runner{
+				RunReturn: runner.Return{
+					FinalState: proto.STATE_COMPLETE,
+					Tries:      1,
+				},
+				RunBlock:   make(chan struct{}),
+				RunWg:      &runWg,
+				IgnoreStop: true, // completes successfully after Stop is called
+			},
+			"job3": &mock.Runner{
+				RunReturn: runner.Return{
+					FinalState: proto.STATE_COMPLETE,
+					Tries:      1,
+				},
+				RunBlock:   make(chan struct{}),
+				RunWg:      &runWg,
+				IgnoreStop: true, // completes successfully after Stop is called
+			},
+		},
+	}
+	var receivedState byte
+	rmc := &mock.RMClient{
+		SuspendRequestFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
+			t.Error("unexpected SJC sent to RM - expected chain to complete")
+			return nil
+		},
+		FinishRequestFunc: func(reqId string, state byte) error {
+			receivedState = state
+			return nil
+		},
+	}
+	shutdownChan := make(chan struct{})
+
+	jc := &proto.JobChain{
+		RequestId: requestId,
+		Jobs:      testutil.InitJobsWithSequenceRetry(3, 1),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {},
+			"job3": {},
+		},
+	}
+	c := chain.NewChain(jc)
+	traverser := chain.NewTraverser(c, chainRepo, rf, rmc, shutdownChan)
+
+	// Start the traverser.
+	doneChan := make(chan struct{})
+	go func() {
+		traverser.Run()
+		close(doneChan)
+	}()
+
+	// Wait until jobs 2 and 3 are running (until they call wg.Done()). They will
+	// run until Stop is called (which will close their RunBlock channels).
+	runWg.Wait()
+
+	// Suspend the traverser
+	close(shutdownChan)
+
+	// Chain should complete within 10 seconds; NO SJC should be sent
+	waitChan := time.After(10 * time.Second)
+	select {
+	case <-waitChan:
+		t.Errorf("SJC not sent within 10 seconds of shutdown signal")
+	case <-doneChan:
+	}
+
+	if c.State() != proto.STATE_COMPLETE { // chain should be complete
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_SUSPENDED)
+	}
+	if c.JobState("job1") != proto.STATE_COMPLETE {
+		t.Errorf("job1 state = %d, expected %d", c.JobState("job1"), proto.STATE_COMPLETE)
+	}
+	if c.JobState("job2") != proto.STATE_COMPLETE {
+		t.Errorf("job2 state = %d, expected %d", c.JobState("job2"), proto.STATE_COMPLETE)
+	}
+	if c.JobState("job3") != proto.STATE_COMPLETE {
+		t.Errorf("job3 state = %d, expected %d", c.JobState("job3"), proto.STATE_STOPPED)
+	}
+
+	_, err := chainRepo.Get(requestId)
+	if err != chain.ErrNotFound {
+		t.Error("chain still in repo, expected it to be removed")
+	}
+
+	// Make sure final state was sent to RM
+	if receivedState != proto.STATE_COMPLETE {
+		t.Errorf("expected final state %d to be send to RM, got %d", proto.STATE_COMPLETE, receivedState)
 	}
 }
 

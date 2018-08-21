@@ -115,7 +115,7 @@ func (c *chain) JobIsReady(jobId string) bool {
 // complete.
 //
 // A chain is done running if there are no more jobs in it that can run. This
-// can happen if all of the jobs in the chain or complete, or if some or all
+// can happen if all of the jobs in the chain are complete, or if some or all
 // of the jobs in the chain failed.
 //
 // A chain is complete if every job in it completed successfully.
@@ -127,16 +127,23 @@ func (c *chain) IsDone() (done bool, complete bool) {
 	complete = true
 	pendingJobs := proto.Jobs{}
 
+	// If any jobs still running (even if others are failed/stopped), not done.
+	for _, job := range c.jobChain.Jobs {
+		if job.State == proto.STATE_RUNNING {
+			return false, false
+		}
+	}
+
 	// Loop through every job in the chain and act on its state. Keep
 	// track of the jobs that aren't running or in a finished state so
 	// that we can later check to see if they are capable of running.
 LOOP:
 	for _, job := range c.jobChain.Jobs {
 		switch job.State {
-		case proto.STATE_RUNNING:
-			// If any jobs are running, the chain can't be done
-			// or complete, so return false for both now.
-			return false, false
+		// case proto.STATE_RUNNING:
+		// 	// If any jobs are running, the chain can't be done
+		// 	// or complete, so return false for both now.
+		// 	return false, false
 		case proto.STATE_COMPLETE:
 			// Move on to the next job.
 			continue LOOP
@@ -145,6 +152,9 @@ LOOP:
 			if c.CanRetrySequence(job) {
 				return false, false
 			}
+		case proto.STATE_STOPPED:
+			return true, false
+			// Like STATE_FAIL, but ignore sequence retries.
 		default:
 			// Any job that's not running, complete, or failed.
 			pendingJobs = append(pendingJobs, job)
@@ -194,6 +204,10 @@ func (c *chain) IncrementSequenceRetryCount(j proto.Job) {
 func (c *chain) SequenceRetryCount(j proto.Job) uint {
 	sequenceStartJob := c.SequenceStartJob(j)
 	return c.sequenceRetryCount[sequenceStartJob.Id]
+}
+
+func (c *chain) SequenceRetryCounts() map[string]uint {
+	return c.sequenceRetryCount
 }
 
 // Validate checks if a job chain is valid. It returns an error if it's not.

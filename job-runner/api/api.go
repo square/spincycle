@@ -46,7 +46,7 @@ type API struct {
 	echo *echo.Echo
 }
 
-// NewAPI cretes a new API struct. It initializes an echo web server within the
+// NewAPI creates a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
 func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager, shutdownChan chan struct{}) *API {
 	api := &API{
@@ -68,8 +68,7 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 	api.echo.PUT(API_ROOT+"job-chains/:requestId/stop", api.stopJobChainHandler)
 	// Get the status of a job chain.
 	api.echo.GET(API_ROOT+"job-chains/:requestId/status", api.statusJobChainHandler)
-	// TODO felixp: add job-chains/resume route + handler for getting SJCs
-	// from the RM and resuming running them
+	// TODO felixp: add job-chains/resume route + handler for resuming SJCs
 
 	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler)
 
@@ -244,7 +243,7 @@ func handleError(err error) *echo.HTTPError {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())
 		case ErrDuplicateTraverser:
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-		case ErrNoNewJobChains: // TODO felixp: is this the right status code?
+		case ErrNoNewJobChains:
 			return echo.NewHTTPError(http.StatusServiceUnavailable, err.Error())
 		default:
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
