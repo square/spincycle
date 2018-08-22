@@ -17,15 +17,17 @@ var (
 	// IMPORTANT: if you change the structs below, you will also need
 	// to update the corresponding sql that inserts them into the
 	// database (in the request-manager/test/data directory).
-	SavedRequests map[string]proto.Request  // requestId => request
-	SavedJLs      map[string][]proto.JobLog // requestId => []jl
-	SavedJCs      map[string]proto.JobChain // requestId => jc
+	SavedRequests map[string]proto.Request           // requestId => request
+	SavedJLs      map[string][]proto.JobLog          // requestId => []jl
+	SavedJCs      map[string]proto.JobChain          // requestId => jc
+	SavedSJCs     map[string]proto.SuspendedJobChain // requestId => sjc
 )
 
 func init() {
 	SavedRequests = make(map[string]proto.Request)
 	SavedJLs = make(map[string][]proto.JobLog)
 	SavedJCs = make(map[string]proto.JobChain)
+	SavedSJCs = make(map[string]proto.SuspendedJobChain)
 
 	// //////////////////////////////////////////////////////////////////////////
 	// Pending request
@@ -113,6 +115,54 @@ func init() {
 			State: proto.STATE_RUNNING,
 		},
 		FinishedJobs: 4,
+	}
+
+	// //////////////////////////////////////////////////////////////////////////
+	// Suspended request
+	// //////////////////////////////////////////////////////////////////////////
+	reqId = "729ghskd329dhj3sbjnr"
+	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:00:00Z")
+	startTime, _ := time.Parse(time.RFC3339, "2017-09-13T03:01:00Z")
+	SavedRequests[reqId] = proto.Request{
+		Id:        reqId,
+		Type:      "do-another-thing",
+		CreatedAt: curTime,
+		StartedAt: &startTime,
+		State:     proto.STATE_SUSPENDED,
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_PENDING,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_PENDING, // jc in request is never updated
+		},
+	}
+	SavedSJCs[reqId] = proto.SuspendedJobChain{
+		RequestId:       reqId,
+		JobTries:        map[string]uint{"hw48": 5},
+		StoppedJobTries: map[string]uint{"hw48": 2},
+		SequenceRetries: map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
 	}
 
 	// //////////////////////////////////////////////////////////////////////////

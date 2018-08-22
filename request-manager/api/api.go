@@ -58,6 +58,7 @@ func NewAPI(appCtx app.Context) *API {
 	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)        // start
 	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)      // finish
 	api.echo.PUT(API_ROOT+"requests/:reqId/stop", api.stopRequestHandler)          // stop
+	api.echo.PUT(API_ROOT+"requests/:reqId/suspend", api.suspendRequestHandler)    // suspend
 	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)      // status
 	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler) // job chain
 
@@ -233,6 +234,25 @@ func (api *API) stopRequestHandler(c echo.Context) error {
 	}
 
 	if err := api.rm.Stop(reqId); err != nil {
+		return handleError(err)
+	}
+
+	return nil
+}
+
+// PUT <API_ROOT>/requests/{reqId}/suspend
+// Suspend a request and save its suspended job chain. The Job Runner hits this
+// endpoint when suspending a job chain on shutdown.
+func (api *API) suspendRequestHandler(c echo.Context) error {
+	reqId := c.Param("reqId")
+
+	// Convert the payload into a proto.FinishRequestParams.
+	var sjc proto.SuspendedJobChain
+	if err := c.Bind(&sjc); err != nil {
+		return err
+	}
+
+	if err := api.rm.Suspend(reqId, sjc); err != nil {
 		return handleError(err)
 	}
 

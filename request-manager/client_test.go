@@ -269,6 +269,70 @@ func TestStopRequest(t *testing.T) {
 	}
 }
 
+func TestSuspendRequestError(t *testing.T) {
+	reqId := "abcd1234"
+	sjc := proto.SuspendedJobChain{
+		RequestId:       reqId,
+		JobChain:        &proto.JobChain{},
+		JobTries:        make(map[string]uint),
+		StoppedJobTries: make(map[string]uint),
+		SequenceRetries: make(map[string]uint),
+	}
+
+	setup(t, nil, http.StatusBadRequest, "")
+	defer cleanup()
+	c := rm.NewClient(&http.Client{}, ts.URL)
+
+	err := c.SuspendRequest(reqId, sjc)
+	if err == nil {
+		t.Errorf("expected an error but did not get one")
+	}
+	ts.Close()
+}
+
+func TestSuspendRequest(t *testing.T) {
+	reqId := "abcd1234"
+	sjc := proto.SuspendedJobChain{
+		RequestId: reqId,
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"job1": proto.Job{
+					Id:   "job1",
+					Data: map[string]interface{}{"data1": "val1"},
+				},
+			},
+		},
+		JobTries:        map[string]uint{"job1": 1},
+		StoppedJobTries: map[string]uint{"job1": 1},
+		SequenceRetries: map[string]uint{"job1": 1},
+	}
+	var payload proto.SuspendedJobChain
+
+	setup(t, &payload, http.StatusOK, "")
+	defer cleanup()
+	c := rm.NewClient(&http.Client{}, ts.URL)
+
+	err := c.SuspendRequest(reqId, sjc)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+
+	expectedPayload := sjc
+	if diff := deep.Equal(payload, expectedPayload); diff != nil {
+		t.Error(diff)
+	}
+
+	expectedPath := "/api/v1/requests/" + reqId + "/suspend"
+	if path != expectedPath {
+		t.Errorf("url path = %s, expected %s", path, expectedPath)
+	}
+
+	if method != "PUT" {
+		t.Errorf("request method = %s, expected PUT", method)
+	}
+}
+
 func TestRequestStatusError(t *testing.T) {
 	reqId := "abcd1234"
 

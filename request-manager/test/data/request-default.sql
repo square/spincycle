@@ -18,3 +18,8 @@ INSERT INTO job_log (request_id, job_id, try, type, state) VALUES ("454ae2f98a05
 
 -- a completed request
 INSERT INTO requests (request_id, type, created_at, state) VALUES ("93ec156e204ety45sgf0", 'something-else', '2017-09-13 02:00:00', 3);
+
+-- a suspended request + job chain + suspended job chain
+INSERT INTO requests (request_id, type, created_at, state, started_at) VALUES ("729ghskd329dhj3sbjnr", 'do-another-thing', '2017-09-13 03:00:00', 7, '2017-09-13 03:01:00');
+INSERT INTO raw_requests (request_id, request, job_chain) VALUES ("729ghskd329dhj3sbjnr", '{"some":"param"}', '{"requestId":"729ghskd329dhj3sbjnr","jobs":{"hw48":{"id":"hw48","type":"test","bytes":null,"state":1,"args":null,"data":null,"retry":5,"retryWait":0,"sequenceStartId":"hw48","sequenceRetry":1}},"adjacencyList":null,"state":1}');
+INSERT INTO suspended_job_chains (request_id, suspended_job_chain) VALUES ("729ghskd329dhj3sbjnr", '{"requestId":"729ghskd329dhj3sbjnr","jobChain":{"requestId":"729ghskd329dhj3sbjnr","jobs":{"hw48":{"id":"hw48","type":"test","bytes":null,"state":6,"args":null,"data":null,"retry":5,"retryWait":0,"sequenceStartId":"hw48","sequenceRetry":1}},"adjacencyList":null,"state":7},"jobTries":{"hw48":5},"stoppedJobTries":{"hw48":2},"sequenceRetries":{"hw48":1}}');

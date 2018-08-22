@@ -41,3 +41,12 @@ CREATE TABLE IF NOT EXISTS `job_log` (
 
   PRIMARY KEY (`request_id`, `job_id`, `try`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `suspended_job_chains` (
+  `request_id`          BINARY(20) NOT NULL,
+  `suspended_job_chain` LONGBLOB NOT NULL,
+  `rm_host`             VARCHAR(64) NULL DEFAULT NULL,
+  `ts`                  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`request_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -3,6 +3,9 @@
 package request_test
 
 import (
+	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"testing"
@@ -370,6 +373,107 @@ func TestStop(t *testing.T) {
 
 	if recvdId != reqId {
 		t.Errorf("request id = %s, expected %s", recvdId, reqId)
+	}
+}
+
+func TestSuspend(t *testing.T) {
+	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
+	defer teardown(t, dbName)
+
+	reqId := "454ae2f98a05cv16sdwt" // request is running
+	jobTries := map[string]uint{"job1": 2, "job2": 2}
+	stoppedJobTries := map[string]uint{"job2": 1}
+	sequenceRetries := map[string]uint{"job1": 1}
+	sjc := proto.SuspendedJobChain{
+		RequestId:       reqId,
+		JobChain:        testdb.SavedRequests[reqId].JobChain,
+		JobTries:        jobTries,
+		StoppedJobTries: stoppedJobTries,
+		SequenceRetries: sequenceRetries,
+	}
+
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	err := m.Suspend(reqId, sjc)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	// Get the request from the db and make sure its state was updated.
+	req, err := m.Get(reqId)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+	if req.State != proto.STATE_SUSPENDED {
+		t.Errorf("request state = %d, expected %d", req.State, proto.STATE_SUSPENDED)
+	}
+
+	// Make sure SJC was saved in db.
+	ctx := context.TODO()
+	conn, err := dbc.Open(ctx)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+	defer dbc.Close(conn) // don't leak conn
+
+	var actualSJC proto.SuspendedJobChain
+	var rawSJC []byte
+	q := "SELECT suspended_job_chain FROM suspended_job_chains WHERE request_id = ?"
+	if err := conn.QueryRowContext(ctx, q, reqId).Scan(&rawSJC); err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			t.Error("suspended job chain not saved in db")
+		default:
+			t.Errorf("err = %s, expected nil", err)
+		}
+	}
+
+	// Unmarshal sjc and check.
+	if err := json.Unmarshal(rawSJC, &actualSJC); err != nil {
+		t.Errorf("cannot unmarshal suspended job chain: %s", err)
+	}
+	if actualSJC.RequestId != sjc.RequestId {
+		t.Errorf("saved sjc has request id = %s, expected %s", actualSJC.RequestId, sjc.RequestId)
+	}
+	if diff := deep.Equal(actualSJC.JobTries, sjc.JobTries); diff != nil {
+		t.Error(diff)
+	}
+	if diff := deep.Equal(actualSJC.StoppedJobTries, sjc.StoppedJobTries); diff != nil {
+		t.Error(diff)
+	}
+	if diff := deep.Equal(actualSJC.SequenceRetries, sjc.SequenceRetries); diff != nil {
+		t.Error(diff)
+	}
+	if diff := deep.Equal(actualSJC.JobChain.Jobs, sjc.JobChain.Jobs); diff != nil {
+		t.Error(diff)
+	}
+	if diff := deep.Equal(actualSJC.JobChain.AdjacencyList, sjc.JobChain.AdjacencyList); diff != nil {
+		t.Error(diff)
+	}
+}
+
+// Try suspending a request that isn't running - should fail.
+func TestSuspendNotRunning(t *testing.T) {
+	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
+	defer teardown(t, dbName)
+
+	reqId := "93ec156e204ety45sgf0" // request is complete
+	jobTries := map[string]uint{"job1": 2, "job2": 2}
+	stoppedJobTries := map[string]uint{"job2": 1}
+	sequenceRetries := map[string]uint{"job1": 1}
+	sjc := proto.SuspendedJobChain{
+		RequestId:       reqId,
+		JobChain:        &proto.JobChain{},
+		JobTries:        jobTries,
+		StoppedJobTries: stoppedJobTries,
+		SequenceRetries: sequenceRetries,
+	}
+
+	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	err := m.Suspend(reqId, sjc)
+	if err == nil {
+		t.Error("expected error on suspend because request isn't running but did not receive one")
+	} else if err != db.ErrNotUpdated {
+		t.Errorf("error = %s, expected %s", err, db.ErrNotUpdated)
 	}
 }
 

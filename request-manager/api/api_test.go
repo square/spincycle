@@ -276,6 +276,58 @@ func TestStopRequestHandlerSuccess(t *testing.T) {
 	}
 }
 
+func TestSuspendRequestHandlerSuccess(t *testing.T) {
+	reqId := "729ghskd329dhj3sbjnr"
+	payload := []byte("{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobChain\":{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobs\":{\"hw48\":{\"id\":\"hw48\",\"type\":\"test\",\"bytes\":null,\"state\":6,\"args\":null,\"data\":null,\"retry\":5,\"retryWait\":0,\"sequenceStartId\":\"hw48\",\"sequenceRetry\":1}},\"adjacencyList\":null,\"state\":7},\"jobTries\":{\"hw48\":5},\"stoppedJobTries\":{\"hw48\":2},\"sequenceRetries\":{\"hw48\":1}}")
+
+	// Create a mock request manager that will record the finish params it receives.
+	var rmSJC proto.SuspendedJobChain
+	rm := &mock.RequestManager{
+		SuspendFunc: func(r string, sjc proto.SuspendedJobChain) error {
+			rmSJC = sjc
+			return nil
+		},
+	}
+	setup(rm, &mock.JLStore{})
+	defer cleanup()
+
+	// Make the HTTP request.
+	statusCode, _, err := testutil.MakeHTTPRequest("PUT", baseURL()+"requests/"+reqId+"/suspend", payload, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the status code is what we expect.
+	if statusCode != http.StatusOK {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
+	}
+
+	// Check that the finish params sent to the request manager are what we expect.
+	expectedSJC := proto.SuspendedJobChain{
+		RequestId:       reqId,
+		JobTries:        map[string]uint{"hw48": 5},
+		StoppedJobTries: map[string]uint{"hw48": 2},
+		SequenceRetries: map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
+	}
+	if diff := deep.Equal(rmSJC, expectedSJC); diff != nil {
+		t.Error(diff)
+	}
+}
+
 func TestStatusRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
 	reqStatus := proto.RequestStatus{

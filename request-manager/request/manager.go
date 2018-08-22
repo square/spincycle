@@ -36,6 +36,10 @@ type Manager interface {
 	// Stop stops a request (sends a stop signal to the JR).
 	Stop(requestId string) error
 
+	// Suspend suspends a request by updating its state and saving the related
+	// Suspended Job Chain.
+	Suspend(requestId string, sjc proto.SuspendedJobChain) error
+
 	// Status returns the status of a request and all of the jobs in it.
 	// The live status output of any jobs that are currently running will be
 	// included as well.
@@ -232,6 +236,55 @@ func (m *manager) Stop(requestId string) error {
 	}
 
 	return nil
+}
+
+func (m *manager) Suspend(requestId string, sjc proto.SuspendedJobChain) error {
+	sjc.RequestId = requestId
+
+	req, err := m.get(requestId)
+	if err != nil {
+		return err
+	}
+
+	req.State = proto.STATE_SUSPENDED
+
+	// This will only update the request if the current state is RUNNING.
+	err = m.updateRequest(req, proto.STATE_RUNNING)
+	if err != nil {
+		return err
+	}
+
+	// Marshal the Suspended Job Chain.
+	rawSJC, err := json.Marshal(sjc)
+	if err != nil {
+		return fmt.Errorf("cannot marshal Suspended Job Chain: %s", err)
+	}
+
+	// Connect to database
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
+	if err != nil {
+		return err
+	}
+	defer m.dbc.Close(conn) // don't leak conn
+
+	// Begin a transaction to insert the sjc into the suspended_job_chain table.
+	txn, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer txn.Rollback()
+
+	q := "INSERT INTO suspended_job_chains (request_id, suspended_job_chain) VALUES (?, ?)"
+	_, err = txn.ExecContext(ctx, q,
+		requestId,
+		rawSJC,
+	)
+	if err != nil {
+		return err
+	}
+
+	return txn.Commit()
 }
 
 func (m *manager) Finish(requestId string, finishParams proto.FinishRequestParams) error {
