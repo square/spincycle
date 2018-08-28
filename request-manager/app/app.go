@@ -37,9 +37,13 @@ type Context struct {
 
 	// Core service singletons, not user-configurable
 	RM     request.Manager
+	RR     request.Resumer
 	Status status.Manager
 	Auth   auth.Manager
 	JLS    joblog.Store
+
+	// Closed to initiate RM shutdown
+	ShutdownChan chan struct{}
 
 	// 3rd-party extensions, all optional
 	Hooks     Hooks
@@ -95,6 +99,7 @@ type Plugins struct {
 // package) which loads the configs and creates the core service singleton.
 func Defaults() Context {
 	return Context{
+		ShutdownChan: make(chan struct{}),
 		Factories: Factories{
 			MakeGrapher:         MakeGrapher,
 			MakeJobRunnerClient: MakeJobRunnerClient,

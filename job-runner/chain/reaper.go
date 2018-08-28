@@ -424,8 +424,10 @@ func (r *SuspendedChainReaper) Finalize() {
 		nil,
 	)
 	if err != nil {
-		r.logger.Errorf("problem sending suspended job chain to the Request Manager: %s", err)
-		return
+		// If we couldn't suspend the request, mark it as failed instead.
+		r.logger.Errorf("problem sending suspended job chain to the Request Manager (%s). Treating chain as failed.", err)
+		r.chain.SetState(proto.STATE_FAIL)
+		r.sendFinalState()
 	}
 	r.chainRepo.Remove(r.chain.RequestId())
 }

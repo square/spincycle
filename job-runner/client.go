@@ -16,9 +16,11 @@ import (
 // A Client is an HTTP client used for interacting with the JR API.
 type Client interface {
 	// NewJobChain takes a job chain, and sends it to the JR to be run immediately.
-	NewJobChain(proto.JobChain) error
-	// ResumeJobChain takes a suspended job chain and sends it to the JR to be resumed.
-	ResumeJobChain(proto.SuspendedJobChain) error
+	// It returns the JR host that is running the chain.
+	NewJobChain(proto.JobChain) (string, error)
+	// ResumeJobChain takes a suspended job chain and sends it to the JR to be
+	// resumed. It returns the JR host that is running the chain.
+	ResumeJobChain(proto.SuspendedJobChain) (string, error)
 	// StopRequest stops the job chain that corresponds to a given request Id.
 	StopRequest(string) error
 	// RequestStatus gets the status of the job chain that corresponds to a given request Id.
@@ -41,52 +43,64 @@ func NewClient(c *http.Client, baseUrl string) Client {
 	}
 }
 
-func (c *client) NewJobChain(jobChain proto.JobChain) error {
+func (c *client) NewJobChain(jobChain proto.JobChain) (string, error) {
 	// POST /api/v1/job-chains
 	url := c.baseUrl + "/api/v1/job-chains"
 
 	// Create the payload.
 	payload, err := json.Marshal(jobChain)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Make the request.
 	resp, body, err := c.post(url, payload)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("jr.Client.NewJobChain - unsuccessful status code: %d (response body: %s)",
+		return "", fmt.Errorf("jr.Client.NewJobChain - unsuccessful status code: %d (response body: %s)",
 			resp.StatusCode, string(body))
 	}
 
-	return nil
+	// Retrieve the JR host that's running the job chain.
+	location, err := resp.Location()
+	if err != nil {
+		return "", err
+	}
+
+	return location.Hostname(), nil
 }
 
-func (c *client) ResumeJobChain(sjc proto.SuspendedJobChain) error {
+func (c *client) ResumeJobChain(sjc proto.SuspendedJobChain) (string, error) {
 	// POST /api/v1/job-chains/resume
 	url := c.baseUrl + "/api/v1/job-chains/resume"
 
 	// Create the payload.
 	payload, err := json.Marshal(sjc)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Make the request.
 	resp, body, err := c.post(url, payload)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("jr.Client.ResumeJobChain - unsuccessful status code: %d (response body: %s)",
+		return "", fmt.Errorf("jr.Client.ResumeJobChain - unsuccessful status code: %d (response body: %s)",
 			resp.StatusCode, string(body))
 	}
 
-	return nil
+	// Retrieve the JR host that's running the job chain.
+	location, err := resp.Location()
+	if err != nil {
+		return "", err
+	}
+
+	return location.Hostname(), nil
 }
 
 func (c *client) StopRequest(requestId string) error {

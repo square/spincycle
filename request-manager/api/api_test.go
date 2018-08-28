@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package api_test
 
@@ -30,11 +30,13 @@ var mockAuth = mock.AuthPlugin{
 	},
 }
 
-func setup(rm *mock.RequestManager, jls *mock.JLStore) {
+func setup(rm *mock.RequestManager, rr *mock.RequestResumer, jls *mock.JLStore, shutdownChan chan struct{}) {
 	appCtx := app.Defaults()
 	appCtx.RM = rm
 	appCtx.JLS = jls
+	appCtx.RR = rr
 	appCtx.Status = &mock.RMStatus{}
+	appCtx.ShutdownChan = shutdownChan
 	appCtx.Hooks.SetUsername = func(*http.Request) (string, error) {
 		return "admin", nil
 	}
@@ -61,7 +63,7 @@ func baseURL() string {
 
 func TestNewRequestHandlerInvalidPayload(t *testing.T) {
 	payload := `"bad":"json"}` // Bad payload.
-	setup(&mock.RequestManager{}, &mock.JLStore{})
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -87,7 +89,7 @@ func TestNewRequestHandlerRMError(t *testing.T) {
 			return proto.Request{}, mock.ErrRequestManager
 		},
 	}
-	setup(rm, &mock.JLStore{})
+	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -131,7 +133,7 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 		},
 	}
 
-	setup(rm, &mock.JLStore{})
+	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -187,7 +189,7 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 			return req, nil
 		},
 	}
-	setup(rm, &mock.JLStore{})
+	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -210,7 +212,7 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 
 func TestStartRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	setup(&mock.RequestManager{}, &mock.JLStore{})
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -236,7 +238,7 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	setup(rm, &mock.JLStore{})
+	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -261,7 +263,7 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 
 func TestStopRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	setup(&mock.RequestManager{}, &mock.JLStore{})
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -278,17 +280,17 @@ func TestStopRequestHandlerSuccess(t *testing.T) {
 
 func TestSuspendRequestHandlerSuccess(t *testing.T) {
 	reqId := "729ghskd329dhj3sbjnr"
-	payload := []byte("{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobChain\":{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobs\":{\"hw48\":{\"id\":\"hw48\",\"type\":\"test\",\"bytes\":null,\"state\":6,\"args\":null,\"data\":null,\"retry\":5,\"retryWait\":0,\"sequenceStartId\":\"hw48\",\"sequenceRetry\":1}},\"adjacencyList\":null,\"state\":7},\"jobTries\":{\"hw48\":5},\"stoppedJobTries\":{\"hw48\":2},\"sequenceRetries\":{\"hw48\":1}}")
+	payload := []byte("{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobChain\":{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobs\":{\"hw48\":{\"id\":\"hw48\",\"type\":\"test\",\"bytes\":null,\"state\":6,\"args\":null,\"data\":null,\"retry\":5,\"retryWait\":0,\"sequenceStartId\":\"hw48\",\"sequenceRetry\":1}},\"adjacencyList\":null,\"state\":7},\"totalJobTries\":{\"hw48\":5},\"latestRunJobTries\":{\"hw48\":2},\"sequenceTries\":{\"hw48\":1}}")
 
 	// Create a mock request manager that will record the finish params it receives.
-	var rmSJC proto.SuspendedJobChain
-	rm := &mock.RequestManager{
+	var rrSJC proto.SuspendedJobChain
+	rr := &mock.RequestResumer{
 		SuspendFunc: func(r string, sjc proto.SuspendedJobChain) error {
-			rmSJC = sjc
+			rrSJC = sjc
 			return nil
 		},
 	}
-	setup(rm, &mock.JLStore{})
+	setup(&mock.RequestManager{}, rr, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -304,10 +306,10 @@ func TestSuspendRequestHandlerSuccess(t *testing.T) {
 
 	// Check that the finish params sent to the request manager are what we expect.
 	expectedSJC := proto.SuspendedJobChain{
-		RequestId:       reqId,
-		JobTries:        map[string]uint{"hw48": 5},
-		StoppedJobTries: map[string]uint{"hw48": 2},
-		SequenceRetries: map[string]uint{"hw48": 1},
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
 		JobChain: &proto.JobChain{
 			RequestId: reqId,
 			Jobs: map[string]proto.Job{
@@ -323,7 +325,79 @@ func TestSuspendRequestHandlerSuccess(t *testing.T) {
 			State: proto.STATE_SUSPENDED,
 		},
 	}
-	if diff := deep.Equal(rmSJC, expectedSJC); diff != nil {
+	if diff := deep.Equal(rrSJC, expectedSJC); diff != nil {
+		t.Error(diff)
+	}
+}
+
+func TestSuspendRequestHandlerInvalidPayload(t *testing.T) {
+	payload := `"bad":"json"}` // Bad payload.
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
+	defer cleanup()
+
+	// Make the HTTP request.
+	statusCode, _, err := testutil.MakeHTTPRequest("PUT", baseURL()+"requests/4/suspend", []byte(payload), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the status code is what we expect.
+	if statusCode != http.StatusBadRequest {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusBadRequest)
+	}
+}
+
+func TestSuspendRequestHandlerRMError(t *testing.T) {
+	// reqId := "4"
+	// payload := `{"requestId":"4","jobChain":{"requestId":"4","jobs":{"hw48":{"id":"hw48","type":"test","state":6,"retry":5,"sequenceStartId":"hw48","sequenceRetry":1}},"state":7},"jobTries":{"hw48":5},"stoppedJobTries":{"hw48":2},"sequenceRetries":{"hw48":1}}`
+	reqId := "729ghskd329dhj3sbjnr"
+	payload := []byte("{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobChain\":{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobs\":{\"hw48\":{\"id\":\"hw48\",\"type\":\"test\",\"bytes\":null,\"state\":6,\"args\":null,\"data\":null,\"retry\":5,\"retryWait\":0,\"sequenceStartId\":\"hw48\",\"sequenceRetry\":1}},\"adjacencyList\":null,\"state\":7},\"totalJobTries\":{\"hw48\":5},\"latestRunJobTries\":{\"hw48\":2},\"sequenceTries\":{\"hw48\":1}}")
+
+	// Create a mock request manager that will return an error and record the
+	// sjc it receives.
+	var rrSJC proto.SuspendedJobChain
+	rr := &mock.RequestResumer{
+		SuspendFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
+			rrSJC = sjc
+			return mock.ErrRequestResumer
+		},
+	}
+	setup(&mock.RequestManager{}, rr, &mock.JLStore{}, make(chan struct{}))
+	defer cleanup()
+
+	// Make the HTTP request.
+	statusCode, _, err := testutil.MakeHTTPRequest("PUT", baseURL()+"requests/"+reqId+"/suspend", []byte(payload), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the status code is what we expect.
+	if statusCode != http.StatusInternalServerError {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusInternalServerError)
+	}
+
+	// Check the request params sent to the request manager.
+	expectedSJC := proto.SuspendedJobChain{
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
+	}
+	if diff := deep.Equal(rrSJC, expectedSJC); diff != nil {
 		t.Error(diff)
 	}
 }
@@ -347,7 +421,7 @@ func TestStatusRequestHandlerSuccess(t *testing.T) {
 			return reqStatus, nil
 		},
 	}
-	setup(rm, &mock.JLStore{})
+	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -380,7 +454,7 @@ func TestGetJobChainRequestHandlerSuccess(t *testing.T) {
 			return jc, nil
 		},
 	}
-	setup(rm, &mock.JLStore{})
+	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -414,7 +488,7 @@ func TestGetJLHandlerSuccess(t *testing.T) {
 			return jl, nil
 		},
 	}
-	setup(&mock.RequestManager{}, jls)
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, jls, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -432,6 +506,42 @@ func TestGetJLHandlerSuccess(t *testing.T) {
 
 	// Check that the job chain is what we expect.
 	if diff := deep.Equal(actualjl, jl); diff != nil {
+		t.Error(diff)
+	}
+}
+
+func TestGetFullJLHandlerSuccess(t *testing.T) {
+	reqId := "abcd1234"
+	jlList := []proto.JobLog{
+		proto.JobLog{
+			RequestId: reqId,
+			State:     proto.STATE_COMPLETE,
+		},
+	}
+	// Create a mock joblog store that will return a list of JLs.
+	jls := &mock.JLStore{
+		GetFullFunc: func(r string) ([]proto.JobLog, error) {
+			return jlList, nil
+		},
+	}
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, jls, make(chan struct{}))
+	defer cleanup()
+
+	// Make the HTTP request.
+	var actualjlList []proto.JobLog
+	statusCode, _, err := testutil.MakeHTTPRequest("GET",
+		baseURL()+"requests/"+reqId+"/log", []byte{}, &actualjlList)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the status code is what we expect.
+	if statusCode != http.StatusOK {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
+	}
+
+	// Check that the job chain is what we expect.
+	if diff := deep.Equal(actualjlList, jlList); diff != nil {
 		t.Error(diff)
 	}
 }
@@ -460,7 +570,7 @@ func TestCreateJLHandlerSuccess(t *testing.T) {
 		},
 	}
 
-	setup(rm, jls)
+	setup(rm, &mock.RequestResumer{}, jls, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -514,7 +624,7 @@ func TestCreateJLHandlerJobFailed(t *testing.T) {
 		},
 	}
 
-	setup(rm, jls)
+	setup(rm, &mock.RequestResumer{}, jls, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.

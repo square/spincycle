@@ -49,6 +49,10 @@ type Request struct {
 	JobChain     *JobChain `json:",omitempty"`   // the job chain
 	TotalJobs    int       `json:"totalJobs"`    // the number of jobs in the request's job chain
 	FinishedJobs int       `json:"finishedJobs"` // the number of finished jobs in the request
+
+	// The Job Runner running this request. This is a pointer so it can have a nil
+	// value when the request isn't running.
+	JobRunnerHost *string `json:"jrHost,omitempty"`
 }
 
 // SuspendedJobChain (SJC) represents the data required to reconstruct and resume a

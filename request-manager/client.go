@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 // Package rm provides an HTTP client for interacting with the Request Manager (RM) API.
 package rm
@@ -127,12 +127,9 @@ func (c *client) StopRequest(requestId string) error {
 
 func (c *client) SuspendRequest(requestId string, sjc proto.SuspendedJobChain) error {
 	// PUT /api/v1/requests/${requestId}/suspend
+	url := c.baseUrl + "/api/v1/requests/" + requestId + "/suspend"
 
-	// Don't actually make the request for now (coming soon to a PR near you!):
-	// url := c.baseUrl + "/api/v1/requests/" + requestId + "/suspend"
-	// return c.makeRequest("PUT", url, sjc, http.StatusOK, nil)
-
-	return nil
+	return c.makeRequest("PUT", url, sjc, http.StatusOK, nil)
 }
 
 func (c *client) RequestStatus(requestId string) (proto.RequestStatus, error) {

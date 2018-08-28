@@ -7,9 +7,11 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 
@@ -29,9 +31,11 @@ const (
 // API provides controllers for endpoints it registers with a router.
 // It satisfies the http.HandlerFunc interface.
 type API struct {
-	appCtx app.Context
-	rm     request.Manager
-	jls    joblog.Store
+	appCtx       app.Context
+	rm           request.Manager
+	rr           request.Resumer
+	jls          joblog.Store
+	shutdownChan chan struct{}
 	// --
 	echo *echo.Echo
 }
@@ -41,9 +45,11 @@ type API struct {
 // @todo: create a struct of managers and pass that in here instead?
 func NewAPI(appCtx app.Context) *API {
 	api := &API{
-		appCtx: appCtx,
-		rm:     appCtx.RM,
-		jls:    appCtx.JLS,
+		appCtx:       appCtx,
+		rm:           appCtx.RM,
+		jls:          appCtx.JLS,
+		rr:           appCtx.RR,
+		shutdownChan: appCtx.ShutdownChan,
 		// --
 		echo: echo.New(),
 	}
@@ -110,16 +116,54 @@ func NewAPI(appCtx app.Context) *API {
 
 // Run makes the API listen on the configured address.
 func (api *API) Run() error {
+	// Shut down the API when the Request Manager shuts down.
+	doneChan := make(chan struct{})
+	doneShuttingDown := make(chan struct{})
+	go func() {
+		select {
+		case <-api.shutdownChan:
+			api.shutdown()
+			close(doneShuttingDown)
+		case <-doneChan:
+			return
+		}
+	}()
+
+	var err error
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
-		return api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
+		err = api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
 	} else {
-		return api.echo.Start(api.appCtx.Config.Server.ListenAddress)
+		err = api.echo.Start(api.appCtx.Config.Server.ListenAddress)
 	}
+
+	// If API is being shut down, wait to make sure it's done.
+	select {
+	case <-api.shutdownChan:
+		<-doneShuttingDown
+	default:
+		close(doneChan) // stop the shutdown goroutine
+	}
+	return err
 }
 
 // ServeHTTP makes the API implement the http.HandlerFunc interface.
 func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.echo.ServeHTTP(w, r)
+}
+
+func (api *API) shutdown() {
+	// Shut down server.
+	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
+		err := api.echo.TLSServer.Shutdown(context.TODO())
+		if err != nil {
+			log.Warnf("error when shutting down API: %s", err)
+		}
+	} else {
+		err := api.echo.Server.Shutdown(context.TODO())
+		if err != nil {
+			log.Warnf("error when shutting down API: %s", err)
+		}
+	}
 }
 
 // POST <API_ROOT>/requests
@@ -159,6 +203,10 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// ----------------------------------------------------------------------
 	// Run (non-blocking)
 
+	// TODO(felixp): if creating the request succeeded but starting it failed,
+	// mark the request as Failed. There's currently no way for a
+	// user to Start a request that's already been created, so otherwise
+	// the request will be Pending forever.
 	if err := api.rm.Start(req.Id); err != nil {
 		return handleError(err)
 	}
@@ -252,7 +300,7 @@ func (api *API) suspendRequestHandler(c echo.Context) error {
 		return err
 	}
 
-	if err := api.rm.Suspend(reqId, sjc); err != nil {
+	if err := api.rr.Suspend(reqId, sjc); err != nil {
 		return handleError(err)
 	}
 

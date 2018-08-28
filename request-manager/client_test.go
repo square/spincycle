@@ -272,11 +272,11 @@ func TestStopRequest(t *testing.T) {
 func TestSuspendRequestError(t *testing.T) {
 	reqId := "abcd1234"
 	sjc := proto.SuspendedJobChain{
-		RequestId:       reqId,
-		JobChain:        &proto.JobChain{},
-		JobTries:        make(map[string]uint),
-		StoppedJobTries: make(map[string]uint),
-		SequenceRetries: make(map[string]uint),
+		RequestId:         reqId,
+		JobChain:          &proto.JobChain{},
+		TotalJobTries:     make(map[string]uint),
+		LatestRunJobTries: make(map[string]uint),
+		SequenceTries:     make(map[string]uint),
 	}
 
 	setup(t, nil, http.StatusBadRequest, "")
@@ -303,9 +303,9 @@ func TestSuspendRequest(t *testing.T) {
 				},
 			},
 		},
-		JobTries:        map[string]uint{"job1": 1},
-		StoppedJobTries: map[string]uint{"job1": 1},
-		SequenceRetries: map[string]uint{"job1": 1},
+		TotalJobTries:     map[string]uint{"job1": 1},
+		LatestRunJobTries: map[string]uint{"job1": 1},
+		SequenceTries:     map[string]uint{"job1": 1},
 	}
 	var payload proto.SuspendedJobChain
 
