@@ -97,8 +97,6 @@ sequences:
         args:
           - expected: container
             given: container
-          - expected: env
-            given: env
         if: env
         eq:
           testing: archive

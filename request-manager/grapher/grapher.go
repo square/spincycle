@@ -226,6 +226,11 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 					}
 				}
 
+				// Add the "if" to the node args if it's present
+				if ifArg, ok := nodeArgs[n.If]; ok {
+					nodeArgsCopy[n.If] = ifArg
+				}
+
 				// Build next graph component and assert that it's valid
 				var g *Graph
 				if n.isConditional() {
