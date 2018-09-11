@@ -9,7 +9,7 @@ import (
 )
 
 // Repo is a small wrapper around a concurrent map that provides the ability to
-// store and retreive Runners in a thread-safe way.
+// store and retrieve Runners in a thread-safe way.
 type Repo interface {
 	Set(jobId string, runner Runner)
 	Remove(jobId string)

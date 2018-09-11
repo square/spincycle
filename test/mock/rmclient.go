@@ -18,6 +18,7 @@ type RMClient struct {
 	StartRequestFunc   func(string) error
 	FinishRequestFunc  func(string, byte) error
 	StopRequestFunc    func(string) error
+	SuspendRequestFunc func(string, proto.SuspendedJobChain) error
 	RequestStatusFunc  func(string) (proto.RequestStatus, error)
 	GetJobChainFunc    func(string) (proto.JobChain, error)
 	GetJLFunc          func(string) ([]proto.JobLog, error)
@@ -56,6 +57,13 @@ func (c *RMClient) FinishRequest(requestId string, state byte) error {
 func (c *RMClient) StopRequest(requestId string) error {
 	if c.StopRequestFunc != nil {
 		return c.StopRequestFunc(requestId)
+	}
+	return nil
+}
+
+func (c *RMClient) SuspendRequest(requestId string, sjc proto.SuspendedJobChain) error {
+	if c.SuspendRequestFunc != nil {
+		return c.SuspendRequestFunc(requestId, sjc)
 	}
 	return nil
 }

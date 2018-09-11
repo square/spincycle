@@ -115,7 +115,7 @@ func (c *chain) JobIsReady(jobId string) bool {
 // complete.
 //
 // A chain is done running if there are no more jobs in it that can run. This
-// can happen if all of the jobs in the chain or complete, or if some or all
+// can happen if all of the jobs in the chain are complete, or if some or all
 // of the jobs in the chain failed.
 //
 // A chain is complete if every job in it completed successfully.
@@ -145,6 +145,8 @@ LOOP:
 			if c.CanRetrySequence(job) {
 				return false, false
 			}
+		case proto.STATE_STOPPED:
+			// Like STATE_FAIL, but ignore sequence retries.
 		default:
 			// Any job that's not running, complete, or failed.
 			pendingJobs = append(pendingJobs, job)
@@ -194,6 +196,10 @@ func (c *chain) IncrementSequenceRetryCount(j proto.Job) {
 func (c *chain) SequenceRetryCount(j proto.Job) uint {
 	sequenceStartJob := c.SequenceStartJob(j)
 	return c.sequenceRetryCount[sequenceStartJob.Id]
+}
+
+func (c *chain) SequenceRetryCounts() map[string]uint {
+	return c.sequenceRetryCount
 }
 
 // Validate checks if a job chain is valid. It returns an error if it's not.

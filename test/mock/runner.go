@@ -30,7 +30,7 @@ type Runner struct {
 	AddedJobData map[string]interface{}                    // Data to add to jobData.
 	RunWg        *sync.WaitGroup                           // WaitGroup that gets released from when a runner starts running.
 	RunBlock     chan struct{}                             // Channel that runner.Run() will block on, if defined.
-	StopErr      error
+	IgnoreStop   bool                                      // false: return immediately after Stop, true: keep running after Stop
 	StatusResp   string
 
 	stopped bool // if Stop was called
@@ -47,7 +47,7 @@ func (r *Runner) Run(jobData map[string]interface{}) runner.Return {
 	}
 	if r.RunBlock != nil {
 		<-r.RunBlock
-		if r.stopped {
+		if r.stopped && !r.IgnoreStop {
 			return r.RunReturn
 		}
 	}

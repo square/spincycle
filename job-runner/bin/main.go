@@ -10,6 +10,7 @@ import (
 )
 
 func main() {
-	err := server.Run(app.Defaults())
+	s := server.NewServer(app.Defaults())
+	err := s.Run()
 	log.Fatalf("Job Runner stopped: %s", err)
 }

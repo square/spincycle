@@ -5,6 +5,7 @@ package chain
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/square/spincycle/job-runner/runner"
@@ -45,16 +46,18 @@ type TraverserFactory interface {
 }
 
 type traverserFactory struct {
-	chainRepo Repo
-	rf        runner.Factory
-	rmc       rm.Client
+	chainRepo    Repo
+	rf           runner.Factory
+	rmc          rm.Client
+	shutdownChan chan struct{}
 }
 
-func NewTraverserFactory(cr Repo, rf runner.Factory, rmc rm.Client) TraverserFactory {
+func NewTraverserFactory(cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) TraverserFactory {
 	return &traverserFactory{
-		chainRepo: cr,
-		rf:        rf,
-		rmc:       rmc,
+		chainRepo:    cr,
+		rf:           rf,
+		rmc:          rmc,
+		shutdownChan: shutdownChan,
 	}
 }
 
@@ -81,7 +84,7 @@ func (f *traverserFactory) Make(jobChain proto.JobChain) (Traverser, error) {
 	// for the chain: running, cleaning up, removing from repo when done, etc.
 	// And traverser and chain have the same lifespan: traverser is done when
 	// chain is done.
-	tr := NewTraverser(chain, f.chainRepo, f.rf, f.rmc)
+	tr := NewTraverser(chain, f.chainRepo, f.rf, f.rmc, f.shutdownChan)
 	return tr, nil
 }
 
@@ -102,11 +105,17 @@ type traverser struct {
 	// Used to stop a running traverser.
 	stopChan chan struct{}
 
+	// Used to notify traverser to suspend the running job chain.
+	shutdownChan chan struct{}
+
 	// Queue for processing jobs that need to run.
 	runJobChan chan proto.Job
 
 	// Queue for processing jobs that are done running.
 	doneJobChan chan proto.Job
+
+	// Indicator for whether the job chain is done running.
+	doneChan chan struct{}
 
 	// Client for communicating with the Request Manager.
 	rmc rm.Client
@@ -117,23 +126,33 @@ type traverser struct {
 	// mutex to access jobTries list
 	jtMux *sync.RWMutex
 
+	// job.Id -> number of tries a job had before it was stopped
+	stoppedJobTries map[string]uint
+
+	// mutex to access stoppedJobTries list
+	sjtMux *sync.RWMutex
+
 	// Used for logging.
 	logger *log.Entry
 }
 
 // NewTraverser creates a new traverser for a job chain.
-func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rmc rm.Client) *traverser {
+func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) *traverser {
 	return &traverser{
-		chain:       chain,
-		chainRepo:   cr,
-		rf:          rf,
-		runnerRepo:  runner.NewRepo(),
-		stopChan:    make(chan struct{}),
-		runJobChan:  make(chan proto.Job),
-		doneJobChan: make(chan proto.Job),
-		rmc:         rmc,
-		jobTries:    make(map[string]uint),
-		jtMux:       &sync.RWMutex{},
+		chain:           chain,
+		chainRepo:       cr,
+		rf:              rf,
+		runnerRepo:      runner.NewRepo(),
+		stopChan:        make(chan struct{}),
+		shutdownChan:    shutdownChan,
+		runJobChan:      make(chan proto.Job),
+		doneJobChan:     make(chan proto.Job),
+		doneChan:        make(chan struct{}),
+		rmc:             rmc,
+		jobTries:        make(map[string]uint),
+		stoppedJobTries: make(map[string]uint),
+		jtMux:           &sync.RWMutex{},
+		sjtMux:          &sync.RWMutex{},
 		// Include the request id in all logging.
 		logger: log.WithFields(log.Fields{"requestId": chain.RequestId()}),
 	}
@@ -146,18 +165,31 @@ func (t *traverser) Run() error {
 
 	var finalState byte
 	defer func() {
-		// Set final state of chain in repo. This will be very short-lived because
-		// next we'll finalize the request in the RM. Although short-lived, we set
-		// it in case there's problems finalizing with RM.
-		t.chain.SetState(finalState)
-		t.chainRepo.Set(t.chain)
+		// Only tell RM the request was finished if job chain wasn't suspended or
+		// if it was suspended but completed successfully anyways.
+		if !t.suspended() || finalState == proto.STATE_COMPLETE {
+			// Set final state of chain in repo. This will be very short-lived
+			// because next we'll finalize the request in the RM. Although
+			// short-lived, we set it in case there's problems finalizing with RM.
+			t.chain.SetState(finalState)
+			t.chainRepo.Set(t.chain)
 
-		// Mark the request as finished in the Request Manager.
-		if err := t.rmc.FinishRequest(t.chain.RequestId(), finalState); err != nil {
-			t.logger.Errorf("problem reporting status of the finished chain: %s", err)
-		} else {
-			t.chainRepo.Remove(t.chain.RequestId())
+			// Mark the request as finished in the Request Manager.
+			if err := t.rmc.FinishRequest(t.chain.RequestId(), finalState); err != nil {
+				t.logger.Errorf("problem reporting status of the finished chain: %s", err)
+			} else {
+				t.chainRepo.Remove(t.chain.RequestId())
+			}
 		}
+
+		// Job chain is done running - doneChan is watched by suspend().
+		close(t.doneChan)
+	}()
+
+	// Watch for shutdown signal and suspend job chain when received.
+	go func() {
+		<-t.shutdownChan
+		t.suspend()
 	}()
 
 	firstJob, err := t.chain.FirstJob()
@@ -208,17 +240,18 @@ JOB_REAPER:
 			break
 		}
 
-		// done jobs are either complete or failed
+		// Don't start next jobs if this job failed in some way.
 		if doneJob.State != proto.STATE_COMPLETE {
-			if t.chain.CanRetrySequence(doneJob) {
+			// Retry sequence as long as job wasn't stopped.
+			if doneJob.State != proto.STATE_STOPPED && t.chain.CanRetrySequence(doneJob) {
 				jLogger.Info("job did not complete successfully. retrying sequence.")
 				t.retrySequence(doneJob) // re-enqueue first job of failed sequence
 				continue JOB_REAPER
 			}
 
-			// If the failed job is not part of a retryable sequence, then ignore
-			// subsequent jobs. For example, if job B of A -> B -> C  fails, then C is
-			// not ran.
+			// If the failed job was stopped or is not part of a retryable
+			// sequence, then ignore subsequent jobs. For example, if job B of
+			// A -> B -> C  fails, then C is not run.
 			jLogger.Warn("job did not complete successfully")
 			continue JOB_REAPER
 		}
@@ -348,15 +381,25 @@ func (t *traverser) runJobs() {
 			t.runnerRepo.Set(pJob.Id, runner)
 			defer t.runnerRepo.Remove(pJob.Id)
 
-			// Bail out if Stop was called. It is important that this check happens AFTER
-			// the runner is added to the repo, because if Stop gets called between the
-			// time that a job runner is created and it is added to the repo, there will
-			// be nothing to stop that job from running.
+			// Bail out if Stop was called or traverser suspended. It is important
+			// that this check happens AFTER the runner is added to the repo,
+			// because if Stop gets called between the time that a job runner is
+			// created and it is added to the repo, there will be nothing to stop
+			// that job from running.
 			select {
 			case <-t.stopChan:
 				pJob.State = proto.STATE_STOPPED
+
+				t.jtMux.Lock() // -- lock
+				t.jobTries[pJob.Id] = t.jobTries[pJob.Id] + 1
+				t.jtMux.Unlock() // -- unlock
+
 				err = fmt.Errorf("not starting job because traverser has already been stopped")
 				t.sendJL(pJob, err) // need to send a JL to the RM so that it knows this job failed
+				return
+			case <-t.shutdownChan:
+				// don't send job log / update job tries - will be retried on resume
+				pJob.State = proto.STATE_STOPPED
 				return
 			default:
 			}
@@ -371,13 +414,13 @@ func (t *traverser) runJobs() {
 			t.jobTries[pJob.Id] = t.jobTries[pJob.Id] + ret.Tries
 			t.jtMux.Unlock() // -- unlock
 
-			// The traverser only cares about if a job completes or fails. Therefore,
-			// we set the state of every job that isn't COMPLETE to be FAIL.
-			finalState := ret.FinalState
-			if finalState != proto.STATE_COMPLETE {
-				finalState = proto.STATE_FAIL
+			if ret.FinalState == proto.STATE_STOPPED {
+				t.sjtMux.Lock() // -- lock
+				t.stoppedJobTries[pJob.Id] = ret.Tries
+				t.sjtMux.Unlock() // -- unlock
 			}
-			pJob.State = finalState
+
+			pJob.State = ret.FinalState
 		}(runnableJob)
 	}
 }
@@ -389,6 +432,7 @@ func (t *traverser) sendJL(pJob proto.Job, err error) {
 		JobId:      pJob.Id,
 		Name:       pJob.Name,
 		Type:       pJob.Type,
+		Try:        t.jobTries[pJob.Id],
 		SequenceId: pJob.SequenceId,
 		StartedAt:  0, // zero because the job never ran
 		FinishedAt: 0,
@@ -502,4 +546,69 @@ PROCESS_TO_VISIT_LIST:
 	}
 
 	return completedJobs
+}
+
+// Stops the traverser and sends a Suspended Job Chain (SJC) to the Request Manager.
+// The SJC contains all the necessary info to recreate the traverser and resume
+// running the job chain.
+// suspend is called when the Job Runner is shutting down.
+func (t *traverser) suspend() {
+	t.logger.Info("suspending job chain")
+	defer t.logger.Info("job chain suspended")
+
+	// Stop all active runners.
+	activeRunners, err := t.runnerRepo.Items()
+	if err != nil {
+		// Log error but continue trying to suspend the job chain - JR is being
+		// shut down. (even on error, activeRunners won't be set to nil)
+		t.logger.Errorf("problem retrieving job runners from repo: %s", err)
+	}
+	for jobId, runner := range activeRunners {
+		err := runner.Stop() // this should return quickly
+		if err != nil {
+			t.logger.Errorf("problem stopping job runner (job id = %s): %s", jobId, err) // log error but continue
+		}
+	}
+
+	// Wait for chain to finish running - timeout after 10 seconds.
+	waitChan := time.After(10 * time.Second)
+	select {
+	case <-waitChan:
+	case <-t.doneChan:
+	}
+
+	if t.chain.State() != proto.STATE_COMPLETE {
+		// Only send SJC if chain didn't complete successfully.
+		// If chain completed successfully, Run() will have told the RM.
+
+		// Save chain state (in case there's an issue sending the SJC to the RM).
+		t.chain.SetState(proto.STATE_SUSPENDED)
+		t.chainRepo.Set(t.chain)
+
+		// Create a SuspendedJobChain and send it to the RM.
+		jobChain := t.chain.JobChain()
+		requestId := jobChain.RequestId
+		sequenceRetries := t.chain.SequenceRetryCounts()
+		sjc := proto.SuspendedJobChain{
+			RequestId:       requestId,
+			JobChain:        jobChain,
+			JobTries:        t.jobTries,
+			StoppedJobTries: t.stoppedJobTries,
+			SequenceRetries: sequenceRetries,
+		}
+		if err := t.rmc.SuspendRequest(requestId, sjc); err != nil {
+			t.logger.Errorf("problem sending suspended job chain to RM: %s", err)
+		} else {
+			t.chainRepo.Remove(t.chain.RequestId())
+		}
+	}
+}
+
+func (t *traverser) suspended() bool {
+	select {
+	case <-t.shutdownChan:
+		return true
+	default:
+		return false
+	}
 }

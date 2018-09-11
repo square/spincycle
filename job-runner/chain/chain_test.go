@@ -247,6 +247,30 @@ func TestIsDoneComplete(t *testing.T) {
 	}
 }
 
+// When the chain is done but not complete because a job's been stopped.
+func TestIsDoneJobStopped(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_STOPPED)
+	c.SetJobState("job3", proto.STATE_COMPLETE)
+	c.SetJobState("job4", proto.STATE_PENDING)
+
+	expectedDone := true
+	expectedComplete := false
+	done, complete := c.IsDone()
+
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
+	}
+}
+
 func TestSetJobState(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(1),
