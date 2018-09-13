@@ -39,7 +39,7 @@ func (s *Server) Run() error {
 	if err := s.Boot(); err != nil {
 		return err
 	}
-	s.StartSignalHandler()
+	go s.waitForShutdown()
 	return s.api.Run()
 }
 
@@ -60,24 +60,22 @@ func (s *Server) API() *api.API {
 	return s.api
 }
 
+// --------------------------------------------------------------------------
+
 // Catch TERM and INT signals to gracefully shut down the Job Runner
-func (s *Server) StartSignalHandler() {
+func (s *Server) waitForShutdown() {
 	s.sigChan = make(chan os.Signal, 1)
 	signal.Notify(s.sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	go func() {
-		sig := <-s.sigChan
-		if sig == nil {
-			// channel was closed
-			return
-		}
+	sig := <-s.sigChan
+	if sig == nil {
+		// channel was closed
+		return
+	}
 
-		// API + traversers watch shutdownChan
-		close(s.shutdownChan)
-	}()
+	// API + traversers watch shutdownChan
+	close(s.shutdownChan)
 }
-
-// --------------------------------------------------------------------------
 
 func (s *Server) loadConfig() error {
 	var err error

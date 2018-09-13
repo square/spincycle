@@ -11,7 +11,7 @@ import (
 // A Factory takes a proto.Job, creates a corresponding job.Job interface for
 // it, and passes both to NewRunner to make a Runner.
 type Factory interface {
-	Make(job proto.Job, requestId string, prevTryNo uint, sequenceRetry uint) (Runner, error)
+	Make(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (Runner, error)
 }
 type factory struct {
 	jf  job.Factory
@@ -26,7 +26,12 @@ func NewFactory(jf job.Factory, rmc rm.Client) Factory {
 	}
 }
 
-func (f *factory) Make(pJob proto.Job, requestId string, prevTryNo uint, sequenceRetry uint) (Runner, error) {
+// Make a runner for a new job.
+func (f *factory) Make(pJob proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (Runner, error) {
+	// Remove a number of retries from the job. Useful when resuming a
+	// previously stopped job.
+	pJob.Retry -= triesToSkip
+
 	// Instantiate a "blank" job of the given type.
 	realJob, err := f.jf.Make(job.NewId(pJob.Type, pJob.Name, pJob.Id))
 	if err != nil {

@@ -87,6 +87,85 @@ func TestLastJobOne(t *testing.T) {
 	}
 }
 
+func TestRunnableJobs(t *testing.T) {
+	// Job chain:
+	//       2 - 5
+	//      / \
+	// -> 1    4
+	//     \  /
+	//      3
+	// Job 3 and 5 should be ready to run
+
+	jobs := map[string]proto.Job{
+		"job1": proto.Job{
+			Id:            "job1",
+			State:         proto.STATE_COMPLETE,
+			SequenceId:    "job1",
+			SequenceRetry: 1,
+		},
+		"job2": proto.Job{
+			Id:         "job2",
+			State:      proto.STATE_COMPLETE,
+			SequenceId: "job1",
+		},
+		"job3": proto.Job{ // can be run
+			Id:         "job3",
+			State:      proto.STATE_STOPPED,
+			SequenceId: "job1",
+			Retry:      1,
+		},
+		"job4": proto.Job{
+			Id:         "job4",
+			State:      proto.STATE_PENDING,
+			SequenceId: "job1",
+		},
+		"job5": proto.Job{ // can be run
+			Id:         "job5",
+			State:      proto.STATE_PENDING,
+			SequenceId: "job1",
+		},
+	}
+	jc := &proto.JobChain{
+		RequestId: "resume",
+		Jobs:      jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4", "job5"},
+			"job3": {"job4"},
+		},
+	}
+	sjc := &proto.SuspendedJobChain{
+		RequestId: "resume",
+		JobChain:  jc,
+		TotalJobTries: map[string]uint{
+			"job1": 2, // sequence retried once
+			"job2": 2,
+			"job3": 3,
+			"job4": 1,
+		},
+		LastRunJobTries: map[string]uint{
+			"job1": 1,
+			"job2": 1,
+			"job3": 2, // job3 should have 1 try left
+			"job4": 1,
+		},
+		SequenceTries: map[string]uint{
+			"job1": 1,
+		},
+		NumJobsRun: 2, // job1 and job2
+	}
+	c := ResumeChain(sjc)
+
+	expectedJobs := proto.Jobs{jc.Jobs["job3"], jc.Jobs["job5"]}
+	sort.Sort(expectedJobs)
+	runnableJobs := c.RunnableJobs()
+	sort.Sort(runnableJobs)
+
+	if !reflect.DeepEqual(runnableJobs, expectedJobs) {
+		t.Errorf("runnableJobs = %v, want %v", runnableJobs, expectedJobs)
+	}
+}
+
 func TestNextJobs(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
@@ -143,33 +222,54 @@ func TestPreviousJobs(t *testing.T) {
 
 func TestJobIsReady(t *testing.T) {
 	jc := &proto.JobChain{
-		Jobs: testutil.InitJobs(4),
+		Jobs: testutil.InitJobs(6),
 		AdjacencyList: map[string][]string{
-			"job1": {"job2", "job3"},
-			"job2": {"job4"},
+			"job1": {"job2", "job3", "job5"},
+			"job2": {"job4", "job6"},
 			"job3": {"job4"},
 		},
 	}
 	c := NewChain(jc)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_PENDING)
+	c.SetJobState("job6", proto.STATE_STOPPED)
+	c.AddLatestJobTries("job6", 1) // tried once before stop
 
+	// Job 1 has already been run
 	expectedReady := false
-	ready := c.JobIsReady("job4")
+	ready := c.JobIsReady("job1")
 
 	if ready != expectedReady {
 		t.Errorf("ready = %t, want %t", ready, expectedReady)
 	}
 
+	// Job 4 can't run until job 3 is complete
+	expectedReady = false
+	ready = c.JobIsReady("job4")
+
+	if ready != expectedReady {
+		t.Errorf("ready = %t, want %t", ready, expectedReady)
+	}
+
+	// Job 5 can run (because Job 1 is done)
 	expectedReady = true
 	ready = c.JobIsReady("job5")
 
 	if ready != expectedReady {
 		t.Errorf("ready = %t, want %t", ready, expectedReady)
 	}
+
+	// Job 6 can run (stopped but can be retried)
+	expectedReady = true
+	ready = c.JobIsReady("job6")
+
+	if ready != expectedReady {
+		t.Errorf("ready = %t, want %t", ready, expectedReady)
+	}
 }
 
-// When the chain is not done or complete.
+// The chain is not done or complete - a job is running.
 func TestIsDoneJobRunning(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
@@ -179,11 +279,62 @@ func TestIsDoneJobRunning(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
+	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_RUNNING)
 
 	expectedDone := false
 	expectedComplete := false
-	done, complete := c.IsDone()
+	done, complete := c.IsDoneRunning()
+
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
+	}
+}
+
+// The chain is not done or complete - more jobs can be run.
+func TestIsDoneJobCanBeRun(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+	c.IncrementSequenceTries("job1")
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_COMPLETE)
+	c.SetJobState("job3", proto.STATE_PENDING)
+	// ^ Job 4 can still be run
+
+	expectedDone := false
+	expectedComplete := false
+	done, complete := c.IsDoneRunning()
+
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
+	}
+}
+
+// The chain is not done or complete - more jobs can be run.
+func TestIsDoneJobRetry(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+	c.IncrementSequenceTries("job1")
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_COMPLETE)
+	c.SetJobState("job3", proto.STATE_FAIL)
+	// ^ Job 4 can still be run
+
+	expectedDone := false
+	expectedComplete := false
+	done, complete := c.IsDoneRunning()
 
 	if done != expectedDone || complete != expectedComplete {
 		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
@@ -200,6 +351,7 @@ func TestIsDoneNotComplete(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
+	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_FAIL)
 	c.SetJobState("job3", proto.STATE_COMPLETE)
@@ -207,7 +359,7 @@ func TestIsDoneNotComplete(t *testing.T) {
 
 	expectedDone := true
 	expectedComplete := false
-	done, complete := c.IsDone()
+	done, complete := c.IsDoneRunning()
 
 	if done != expectedDone || complete != expectedComplete {
 		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
@@ -216,7 +368,7 @@ func TestIsDoneNotComplete(t *testing.T) {
 	// Make sure we can handle unknown states
 	c.SetJobState("job4", proto.STATE_UNKNOWN)
 
-	done, complete = c.IsDone()
+	done, complete = c.IsDoneRunning()
 
 	if done != expectedDone || complete != expectedComplete {
 		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
@@ -233,6 +385,7 @@ func TestIsDoneComplete(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
+	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_COMPLETE)
@@ -240,14 +393,15 @@ func TestIsDoneComplete(t *testing.T) {
 
 	expectedDone := true
 	expectedComplete := true
-	done, complete := c.IsDone()
+	done, complete := c.IsDoneRunning()
 
 	if done != expectedDone || complete != expectedComplete {
 		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
 	}
 }
 
-// When the chain is done but not complete because a job's been stopped.
+// When the chain is not done or complete because stopped jobs are treated like
+// pending jobs.
 func TestIsDoneJobStopped(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
@@ -260,11 +414,11 @@ func TestIsDoneJobStopped(t *testing.T) {
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_STOPPED)
 	c.SetJobState("job3", proto.STATE_COMPLETE)
-	c.SetJobState("job4", proto.STATE_PENDING)
+	c.SetJobState("job4", proto.STATE_COMPLETE)
 
-	expectedDone := true
+	expectedDone := false
 	expectedComplete := false
-	done, complete := c.IsDone()
+	done, complete := c.IsDoneRunning()
 
 	if done != expectedDone || complete != expectedComplete {
 		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
@@ -498,10 +652,30 @@ func TestSequenceStartJob(t *testing.T) {
 	c := NewChain(jc)
 
 	expect := jobs["job1"]
-	actual := c.SequenceStartJob(jobs["job2"])
+	actual := c.SequenceStartJob("job2")
 
 	if !reflect.DeepEqual(actual, expect) {
 		t.Errorf("sequence start job= %v, expected %v", actual, expect)
+	}
+}
+
+func TestIsSequenceStartJobs(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc)
+
+	if c.IsSequenceStartJob("job2") {
+		t.Errorf("got true that job2 is a sequence start job, expected false")
+	}
+	if !c.IsSequenceStartJob("job1") {
+		t.Errorf("got that job1 is not a sequence start job, expected true")
 	}
 }
 
@@ -517,10 +691,8 @@ func TestCanRetrySequenceTrue(t *testing.T) {
 	}
 	c := NewChain(jc)
 
-	job := jobs["job2"]
-
 	expect := true
-	actual := c.CanRetrySequence(job)
+	actual := c.CanRetrySequence("job2")
 
 	if actual != expect {
 		t.Errorf("can retry sequence = %v, expected %v", actual, expect)
@@ -540,20 +712,21 @@ func TestCanRetrySequenceFalse(t *testing.T) {
 	c := NewChain(jc)
 
 	// 2 retries are configured for the sequence job2 is in
-	job := jobs["job2"]
-	// Increment sequence retry count twice to exhaust retries
-	c.IncrementSequenceRetryCount(job)
-	c.IncrementSequenceRetryCount(job)
+	jobId := "job2"
+	// Increment sequence tries thrice to exhaust retries
+	c.IncrementSequenceTries(jobId)
+	c.IncrementSequenceTries(jobId)
+	c.IncrementSequenceTries(jobId)
 
 	expect := false
-	actual := c.CanRetrySequence(job)
+	actual := c.CanRetrySequence(jobId)
 
 	if actual != expect {
 		t.Errorf("can retry sequence = %v, expected %v", actual, expect)
 	}
 }
 
-func TestIncrementSequenceRetryCount(t *testing.T) {
+func TestIncrementSequenceTries(t *testing.T) {
 	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
 	jc := &proto.JobChain{
 		Jobs: jobs,
@@ -565,18 +738,18 @@ func TestIncrementSequenceRetryCount(t *testing.T) {
 	}
 	c := NewChain(jc)
 
-	failedJob := jobs["job2"]
-	c.IncrementSequenceRetryCount(failedJob)
+	jobId := "job2"
+	c.IncrementSequenceTries(jobId)
 
 	expect := uint(1)
-	actual := c.SequenceRetryCount(failedJob)
+	actual := c.SequenceTries(jobId)
 
 	if actual != expect {
-		t.Errorf("sequence retry count= %v, expected %v", actual, expect)
+		t.Errorf("sequence tries= %v, expected %v", actual, expect)
 	}
 }
 
-func TestSequenceRetryCount(t *testing.T) {
+func TestSequenceTries(t *testing.T) {
 	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
 	jc := &proto.JobChain{
 		Jobs: jobs,
@@ -588,13 +761,13 @@ func TestSequenceRetryCount(t *testing.T) {
 	}
 	c := NewChain(jc)
 
-	job := jobs["job2"]
+	jobId := "job2"
 
 	expect := uint(0)
-	actual := c.SequenceRetryCount(job)
+	actual := c.SequenceTries(jobId)
 
 	if actual != expect {
-		t.Errorf("sequence retry count= %v, expected %v", actual, expect)
+		t.Errorf("sequence tries= %v, expected %v", actual, expect)
 	}
 }
 
@@ -609,12 +782,13 @@ func TestIsDoneRetryableSequenceFalse(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
+	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_FAIL)
 
 	expectDone := false
 	expectComplete := false
-	actualDone, actualComplete := c.IsDone()
+	actualDone, actualComplete := c.IsDoneRunning()
 
 	if actualDone != expectDone || actualComplete != expectComplete {
 		t.Errorf("done = %v, expected %v. complete = %v, expected %v.", actualDone, expectDone, actualComplete, expectComplete)
@@ -632,17 +806,18 @@ func TestIsDoneRetryableSequenceTrue(t *testing.T) {
 		},
 	}
 	c := NewChain(jc)
+	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_FAIL)
 
 	// Simulate exhausting sequence retries
-	failedJob := jobs["job2"]
-	c.IncrementSequenceRetryCount(failedJob)
-	c.IncrementSequenceRetryCount(failedJob)
+	failedJobId := "job2"
+	c.IncrementSequenceTries(failedJobId)
+	c.IncrementSequenceTries(failedJobId)
 
 	expectDone := true
 	expectComplete := false
-	actualDone, actualComplete := c.IsDone()
+	actualDone, actualComplete := c.IsDoneRunning()
 
 	if actualDone != expectDone || actualComplete != expectComplete {
 		t.Errorf("done = %v, expected %v. complete = %v, expected %v.", actualDone, expectDone, actualComplete, expectComplete)

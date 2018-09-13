@@ -54,11 +54,17 @@ type Request struct {
 // SuspendedJobChain (SJC) represents the data required to reconstruct and resume a
 // running job chain in the Job Runner.
 type SuspendedJobChain struct {
-	RequestId       string          `json:"requestId"`       // unique identifier for the SJC
-	JobChain        *JobChain       `json:"jobChain"`        // the job chain
-	JobTries        map[string]uint `json:"jobTries"`        // jobId -> total number of times a job has been tried
-	StoppedJobTries map[string]uint `json:"stoppedJobTries"` // jobId -> number of times job was tried before being stopped - within the current sequence try only!
-	SequenceRetries map[string]uint `json:"sequenceRetries"` // id of 1st job in sequence -> num of times sequence has been retried
+	// request the SJC is for - unique identifier
+	RequestId string    `json:"requestId"`
+	JobChain  *JobChain `json:"jobChain"`
+	// job.Id -> total number of times a job has been tried
+	TotalJobTries map[string]uint `json:"totalJobTries"`
+	// job.Id -> number of times a job was tried the last time it was run
+	LastRunJobTries map[string]uint `json:"lastRunJobTries"`
+	// Id of 1st job in sequence -> number of times sequence has been tried
+	SequenceTries map[string]uint `json:"sequenceTries"`
+	// number of jobs that have been run (each job counts only once, even if retried)
+	NumJobsRun uint `json:"numJobsRun"`
 }
 
 // RequestSpec represents the metadata of a request necessary to start the request.

@@ -15,19 +15,29 @@ import (
 
 // chain represents a job chain and some meta information about it.
 type chain struct {
+	// A note on the read/write mutexes in chain:
+	//   A lot of the methods in chain call each other - be careful not to make
+	//   nested RLock calls within one goroutine, or a Lock call from another
+	//   goroutine can cause a deadlock (and it will be very annoying to debug).
 	jcMux    *sync.RWMutex
 	jobChain *proto.JobChain
 
-	runningMux         *sync.RWMutex
-	running            map[string]proto.JobStatus // keyed on job id
-	n                  uint                       // N jobs ran
-	sequenceRetryCount map[string]uint            // Number of retries attempted so far
+	runningMux *sync.RWMutex
+	running    map[string]proto.JobStatus // keyed on job id
+	n          uint                       // Number of jobs run so far
+
+	seqTriesMux   *sync.RWMutex
+	sequenceTries map[string]uint // Number of sequence retries attempted so far
+
+	latestTriesMux *sync.RWMutex
+	latestRunTries map[string]uint // job.Id -> number of times tried within this sequence try
+	totalTriesMux  *sync.RWMutex
+	totalTries     map[string]uint // job.Id -> total number of times tried
 }
 
 // NewChain takes a JobChain proto (from the RM) and turns it into a Chain that
 // the JR can use.
 func NewChain(jc *proto.JobChain) *chain {
-	sequenceRetryCount := make(map[string]uint)
 	for jobName, job := range jc.Jobs {
 		job.State = proto.STATE_PENDING
 		job.Data = map[string]interface{}{}
@@ -38,10 +48,44 @@ func NewChain(jc *proto.JobChain) *chain {
 		jcMux:    &sync.RWMutex{},
 		jobChain: jc,
 
-		runningMux:         &sync.RWMutex{},
-		running:            map[string]proto.JobStatus{},
-		n:                  0,
-		sequenceRetryCount: sequenceRetryCount,
+		runningMux:     &sync.RWMutex{},
+		running:        map[string]proto.JobStatus{},
+		n:              0,
+		sequenceTries:  make(map[string]uint),
+		seqTriesMux:    &sync.RWMutex{},
+		totalTries:     make(map[string]uint),
+		totalTriesMux:  &sync.RWMutex{},
+		latestRunTries: make(map[string]uint),
+		latestTriesMux: &sync.RWMutex{},
+	}
+}
+
+// ResumeChain takes a SuspendedJobChain proto (from the RM) and turns it into a
+// Chain that the JR can use.
+func ResumeChain(sjc *proto.SuspendedJobChain) *chain {
+	// make sure all jobs have valid State + Data fields
+	for jobName, job := range sjc.JobChain.Jobs {
+		if job.State == proto.STATE_UNKNOWN {
+			job.State = proto.STATE_PENDING
+		}
+		if job.Data == nil {
+			job.Data = map[string]interface{}{}
+		}
+		sjc.JobChain.Jobs[jobName] = job
+	}
+
+	return &chain{
+		jcMux:          &sync.RWMutex{},
+		jobChain:       sjc.JobChain,
+		runningMux:     &sync.RWMutex{},
+		running:        map[string]proto.JobStatus{},
+		n:              sjc.NumJobsRun,
+		sequenceTries:  sjc.SequenceTries,
+		seqTriesMux:    &sync.RWMutex{},
+		totalTries:     sjc.TotalJobTries,
+		totalTriesMux:  &sync.RWMutex{},
+		latestRunTries: sjc.LastRunJobTries,
+		latestTriesMux: &sync.RWMutex{},
 	}
 }
 
@@ -51,7 +95,7 @@ type ErrInvalidChain struct {
 }
 
 func (e ErrInvalidChain) Error() string {
-	return e.Error()
+	return e.Message
 }
 
 // FirstJob finds the job in the chain with indegree 0. If there is not
@@ -74,12 +118,6 @@ func (c *chain) FirstJob() (proto.Job, error) {
 	return c.jobChain.Jobs[jobIds[0]], nil
 }
 
-func (c *chain) SequenceStartJob(j proto.Job) proto.Job {
-	c.jcMux.RLock()
-	defer c.jcMux.RUnlock()
-	return c.jobChain.Jobs[j.SequenceId]
-}
-
 // NextJobs finds all of the jobs adjacent to the given job.
 func (c *chain) NextJobs(jobId string) proto.Jobs {
 	c.jcMux.RLock()
@@ -97,29 +135,47 @@ func (c *chain) NextJobs(jobId string) proto.Jobs {
 }
 
 // JobIsReady returns whether or not a job is ready to run. A job is considered
-// ready to run if all of its previous jobs are complete. If any previous jobs
-// are not complete, the job is not ready to run.
+// ready to run if it is Pending or Stopped with some retry attempts remaining,
+// and all of its previous jobs are complete. If any previous jobs are not
+// complete, the job is not ready to run.
 func (c *chain) JobIsReady(jobId string) bool {
 	c.jcMux.RLock()
 	defer c.jcMux.RUnlock()
-	for _, job := range c.previousJobs(jobId) {
-		if job.State != proto.STATE_COMPLETE {
-			return false
-		}
-	}
-	return true
+	return c.jobIsReady(jobId)
 }
 
-// IsDone returns two booleans - the first one indicates whether or not the
+// RunnableJobs returns a list of all jobs that are ready to run. A job is
+// ready to run if all of its previous jobs are complete and it is Pending
+// or Stopped with some retries still remaining.
+func (c *chain) RunnableJobs() proto.Jobs {
+	runnableJobs := []proto.Job{}
+
+	// Loop through every job in the chain and check if it's ready to run. Only
+	// Pending + Stopped jobs may be ready to run.
+	for jobId, job := range c.jobChain.Jobs {
+		if !c.JobIsReady(jobId) {
+			continue
+		}
+
+		runnableJobs = append(runnableJobs, job)
+	}
+
+	return runnableJobs
+}
+
+// IsDoneRunning returns two booleans - the first one indicates whether or not the
 // chain is done, and the second one indicates whether or not the chain is
 // complete.
 //
-// A chain is done running if there are no more jobs in it that can run. This
-// can happen if all of the jobs in the chain are complete, or if some or all
-// of the jobs in the chain failed.
+// A chain is done running if there are no more jobs in it that can run or
+// are running. This can happen if all of the jobs in the chain are complete,
+// or if some or all of the jobs in the chain failed. Note that one failed job
+// does not mean the chain is done - there may still be pending jobs independent
+// of this failed job that can be run. Stopped jobs are treated the same as pending
+// jobs - they can be rerun (as they are when a suspended chain is resumed).
 //
 // A chain is complete if every job in it completed successfully.
-func (c *chain) IsDone() (done bool, complete bool) {
+func (c *chain) IsDoneRunning() (done bool, complete bool) {
 	c.jcMux.RLock()
 	defer c.jcMux.RUnlock()
 
@@ -127,7 +183,7 @@ func (c *chain) IsDone() (done bool, complete bool) {
 	complete = true
 	pendingJobs := proto.Jobs{}
 
-	// If any jobs still running (even if others are failed/stopped), not done.
+	// If any jobs are still running, the chain isn't done or complete.
 	for _, job := range c.jobChain.Jobs {
 		if job.State == proto.STATE_RUNNING {
 			return false, false
@@ -137,77 +193,139 @@ func (c *chain) IsDone() (done bool, complete bool) {
 	// Loop through every job in the chain and act on its state. Keep
 	// track of the jobs that aren't running or in a finished state so
 	// that we can later check to see if they are capable of running.
-LOOP:
 	for _, job := range c.jobChain.Jobs {
 		switch job.State {
-		// case proto.STATE_RUNNING:
-		// 	// If any jobs are running, the chain can't be done
-		// 	// or complete, so return false for both now.
-		// 	return false, false
+		case proto.STATE_RUNNING:
+			// We should never reach this case because we previously check for running jobs.
+			return false, false
 		case proto.STATE_COMPLETE:
 			// Move on to the next job.
-			continue LOOP
-		case proto.STATE_FAIL:
-			// This failed job is part of a sequence that can be retried
-			if c.CanRetrySequence(job) {
+			continue
+		case proto.STATE_PENDING, proto.STATE_STOPPED:
+			// Treat stopped jobs as pending jobs because they may be retried
+			// (as in a resumed job chain)
+			pendingJobs = append(pendingJobs, job)
+		default:
+			// Any job that matches none of the above cases is failed
+			if c.canRetrySequence(job.Id) {
+				// This failed job is part of a sequence that can be retried.
 				return false, false
 			}
-		case proto.STATE_STOPPED:
-			return true, false
-			// Like STATE_FAIL, but ignore sequence retries.
-		default:
-			// Any job that's not running, complete, or failed.
-			pendingJobs = append(pendingJobs, job)
 		}
 
-		// We can only arrive here if a job is not complete. If there
-		// is at least one job that is not complete, the whole chain is
-		// not complete. The chain could still be done, though, so we
-		// aren't ready to return yet.
+		// We can only arrive here if a job is not complete (pending or failed).
+		// If there is at least one job that is not complete, the whole chain
+		// is not complete. The chain could still be done, though, so we aren't
+		// ready to return yet.
 		complete = false
 	}
 
-	// For each pending job, check to see if all of its previous jobs
-	// completed. If they did, there's no reason the pending job can't run.
+	// For each pending job, check to see if it's ready to be run.
 	for _, job := range pendingJobs {
-		complete = false
-		allPrevComplete := true
-		for _, prevJob := range c.previousJobs(job.Id) {
-			if prevJob.State != proto.STATE_COMPLETE {
-				allPrevComplete = false
-				// We can break out of this loop if a single
-				// one of the previous jobs is not complete.
-				break
-			}
-		}
-
-		// If all of the previous jobs of a pending job are complete, the
-		// chain can't be complete because the pending job can still run.
-		if allPrevComplete == true {
-			return false, complete
+		if c.jobIsReady(job.Id) {
+			// If a job can be run, the chain can't be done.
+			done = false
+			break
 		}
 	}
-
-	return
+	return done, complete
 }
 
-func (c *chain) CanRetrySequence(j proto.Job) bool {
-	sequenceStartJob := c.SequenceStartJob(j)
-	return c.sequenceRetryCount[sequenceStartJob.Id] < sequenceStartJob.SequenceRetry
+func (c *chain) SequenceStartJob(jobId string) proto.Job {
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
+	return c.jobChain.Jobs[c.jobChain.Jobs[jobId].SequenceId]
 }
 
-func (c *chain) IncrementSequenceRetryCount(j proto.Job) {
-	sequenceStartJob := c.SequenceStartJob(j)
-	c.sequenceRetryCount[sequenceStartJob.Id] += 1
+func (c *chain) IsSequenceStartJob(jobId string) bool {
+	c.jcMux.RLock()
+	defer c.jcMux.RUnlock()
+	return (jobId == c.jobChain.Jobs[jobId].SequenceId)
 }
 
-func (c *chain) SequenceRetryCount(j proto.Job) uint {
-	sequenceStartJob := c.SequenceStartJob(j)
-	return c.sequenceRetryCount[sequenceStartJob.Id]
+func (c *chain) CanRetrySequence(jobId string) bool {
+	sequenceStartJob := c.SequenceStartJob(jobId)
+	c.seqTriesMux.RLock()
+	defer c.seqTriesMux.RUnlock()
+	return c.sequenceTries[sequenceStartJob.Id] <= sequenceStartJob.SequenceRetry
 }
 
-func (c *chain) SequenceRetryCounts() map[string]uint {
-	return c.sequenceRetryCount
+func (c *chain) IncrementSequenceTries(jobId string) {
+	c.jcMux.RLock()
+	seqId := c.jobChain.Jobs[jobId].SequenceId
+	c.jcMux.RUnlock()
+	c.seqTriesMux.Lock()
+	c.sequenceTries[seqId] += 1
+	c.seqTriesMux.Unlock()
+}
+
+func (c *chain) SequenceTries(jobId string) uint {
+	c.jcMux.RLock()
+	seqId := c.jobChain.Jobs[jobId].SequenceId
+	c.jcMux.RUnlock()
+	c.seqTriesMux.Lock()
+	defer c.seqTriesMux.Unlock()
+	return c.sequenceTries[seqId]
+}
+
+func (c *chain) AddJobTries(jobId string, tries uint) {
+	c.totalTriesMux.Lock()
+	c.totalTries[jobId] += tries
+	c.totalTriesMux.Unlock()
+
+	c.latestTriesMux.Lock()
+	c.latestRunTries[jobId] = tries
+	c.latestTriesMux.Unlock()
+}
+
+func (c *chain) AddLatestJobTries(jobId string, tries uint) {
+	c.latestTriesMux.Lock()
+	c.latestRunTries[jobId] = tries
+	c.latestTriesMux.Unlock()
+}
+
+func (c *chain) TotalTries(jobId string) uint {
+	c.totalTriesMux.RLock()
+	defer c.totalTriesMux.RUnlock()
+	return c.totalTries[jobId]
+}
+
+func (c *chain) LatestRunTries(jobId string) uint {
+	c.latestTriesMux.RLock()
+	defer c.latestTriesMux.RUnlock()
+	return c.latestRunTries[jobId]
+}
+
+func (c *chain) ToSuspended() proto.SuspendedJobChain {
+	c.jcMux.RLock()
+	jc := c.jobChain
+	c.jcMux.RUnlock()
+
+	c.seqTriesMux.RLock()
+	seqTries := c.sequenceTries
+	c.seqTriesMux.RUnlock()
+
+	c.totalTriesMux.RLock()
+	totalTries := c.totalTries
+	c.totalTriesMux.RUnlock()
+
+	c.latestTriesMux.RLock()
+	latestTries := c.latestRunTries
+	c.latestTriesMux.RUnlock()
+
+	c.runningMux.RLock()
+	n := c.n
+	c.runningMux.RUnlock()
+
+	sjc := proto.SuspendedJobChain{
+		RequestId:       c.RequestId(),
+		JobChain:        jc,
+		TotalJobTries:   totalTries,
+		LastRunJobTries: latestTries,
+		SequenceTries:   seqTries,
+		NumJobsRun:      n,
+	}
+	return sjc
 }
 
 // Validate checks if a job chain is valid. It returns an error if it's not.
@@ -264,7 +382,7 @@ func (c *chain) State() byte {
 	return c.jobChain.State
 }
 
-// State returns the chain's state.
+// JobChain returns the chain's JobChain.
 func (c *chain) JobChain() *proto.JobChain {
 	c.jcMux.RLock()
 	defer c.jcMux.RUnlock()
@@ -277,9 +395,14 @@ func (c *chain) SetJobState(jobId string, state byte) {
 
 	c.jcMux.Lock() // -- lock
 	j := c.jobChain.Jobs[jobId]
+	prevState := j.State
 	j.State = state
 	c.jobChain.Jobs[jobId] = j
 	c.jcMux.Unlock() // -- unlock
+
+	if prevState == state {
+		return
+	}
 
 	// Keep chain.running up to date
 	c.runningMux.Lock()
@@ -306,13 +429,24 @@ func (c *chain) SetJobState(jobId string, state byte) {
 		// job must not be running.
 		delete(c.running, jobId)
 	}
+
+	if state == proto.STATE_PENDING || state == proto.STATE_STOPPED {
+		// Job was stopped or job was previously done but set back to pending
+		// (i.e. on sequence retry). Decrement chain.n so that # of jobs run
+		// stays correct.
+		if c.n == 0 {
+			// Don't decrement below 0 - n is unsigned
+			return
+		}
+		c.n--
+	}
 }
 
 // Running returns a list of running jobs.
 func (c *chain) Running() map[string]proto.JobStatus {
 	// Return copy of c.running
-	c.runningMux.Lock()
-	defer c.runningMux.Unlock()
+	c.runningMux.RLock()
+	defer c.runningMux.RUnlock()
 	running := make(map[string]proto.JobStatus, len(c.running))
 	for jobId, jobStatus := range c.running {
 		running[jobId] = jobStatus
@@ -321,26 +455,23 @@ func (c *chain) Running() map[string]proto.JobStatus {
 }
 
 // //////////////////////////////////////////////////////////////////////////
-// Implement JOSN interfaces for custom (un)marshalling by chain.Repo
+// Implement JSON interfaces for custom (un)marshalling by chain.Repo
 // //////////////////////////////////////////////////////////////////////////
 
 type chainJSON struct {
-	JobChain *proto.JobChain            `json:"jobChain"`
-	Running  map[string]proto.JobStatus `json:"running"`
-	N        uint                       `json:"n"`
+	// An SJC has already fields for most of the info we need to store.
+	proto.SuspendedJobChain
+	Running map[string]proto.JobStatus `json:"running"`
 }
 
 func (c *chain) MarshalJSON() ([]byte, error) {
-	c.jcMux.Lock()
-	defer c.jcMux.Unlock()
-
-	c.runningMux.Lock()
-	defer c.runningMux.Unlock()
+	c.runningMux.RLock()
+	running := c.running
+	c.runningMux.RUnlock()
 
 	m := chainJSON{
-		JobChain: c.jobChain,
-		Running:  c.running,
-		N:        c.n,
+		SuspendedJobChain: c.ToSuspended(),
+		Running:           running,
 	}
 	return json.Marshal(m)
 }
@@ -354,15 +485,69 @@ func (c *chain) UnmarshalJSON(bytes []byte) error {
 
 	c.jcMux = &sync.RWMutex{}
 	c.jobChain = m.JobChain
-
+	c.seqTriesMux = &sync.RWMutex{}
+	c.sequenceTries = m.SequenceTries
+	c.totalTriesMux = &sync.RWMutex{}
+	c.totalTries = m.TotalJobTries
+	c.latestTriesMux = &sync.RWMutex{}
+	c.latestRunTries = m.LastRunJobTries
+	c.n = m.NumJobsRun
 	c.runningMux = &sync.RWMutex{}
 	c.running = m.Running
-	c.n = m.N
 
 	return nil
 }
 
 // -------------------------------------------------------------------------- //
+
+// jobIsReady returns whether or not a job is ready to run. A job is considered
+// ready to run if it is Pending or Stopped with some retry attempts remaining,
+// and all of its previous jobs are complete. If any previous jobs are not
+// complete, the job is not ready to run.
+// Doesn't lock jcMux, so suitable to call within other chain methods lock jcMux.
+func (c *chain) jobIsReady(jobId string) bool {
+	// Only Pending or Stopped jobs with available retries can be ready to run.
+	job := c.jobChain.Jobs[jobId]
+	switch job.State {
+	case proto.STATE_PENDING:
+	case proto.STATE_STOPPED:
+		triesDone := c.LatestRunTries(jobId)
+		if triesDone != 0 {
+			// If not already 0, subtract 1 because we don't count the try the job
+			// was stopped on.
+			triesDone--
+		}
+		if triesDone > job.Retry {
+			// no retries remaining
+			return false
+		}
+	default:
+		return false
+	}
+
+	// Check that all previous jobs are complete.
+	for _, job := range c.previousJobs(jobId) {
+		if job.State != proto.STATE_COMPLETE {
+			return false
+		}
+	}
+	return true
+}
+
+// Just like CanRetrySequence but without read locking jcMux. Used within methods
+// that already read lock the jcMux to avoid nested read locks.
+func (c *chain) canRetrySequence(jobId string) bool {
+	sequenceStartJob := c.sequenceStartJob(jobId)
+	c.seqTriesMux.RLock()
+	defer c.seqTriesMux.RUnlock()
+	return c.sequenceTries[sequenceStartJob.Id] <= sequenceStartJob.SequenceRetry
+}
+
+// Just like SequenceStartJob but without read locking jcMux. Used within methods
+// that already read lock the jcMux to avoid nested read locks.
+func (c *chain) sequenceStartJob(jobId string) proto.Job {
+	return c.jobChain.Jobs[c.jobChain.Jobs[jobId].SequenceId]
+}
 
 // previousJobs finds all of the immediately previous jobs to a given job.
 func (c *chain) previousJobs(jobId string) proto.Jobs {

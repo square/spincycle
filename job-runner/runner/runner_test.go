@@ -30,7 +30,7 @@ func TestFactory(t *testing.T) {
 		Bytes: []byte{},
 	}
 
-	jr, err := rf.Make(pJob, "abc", 0, 0)
+	jr, err := rf.Make(pJob, "abc", 0, 0, 0)
 	if err != mock.ErrJob {
 		t.Errorf("err = nil, expected %s", mock.ErrJob)
 	}

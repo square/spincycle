@@ -32,7 +32,7 @@ var (
 	ErrInvalidTraverser   = errors.New("traverser found, but type is invalid")
 
 	// Error when Job Runner is shutting down and not starting new job chains
-	ErrNoNewJobChains = errors.New("Job Runner is shutting down - no new job chains are being started")
+	ErrShuttingDown = errors.New("Job Runner is shutting down - no new job chains are being started")
 )
 
 // api provides controllers for endpoints it registers with a router.
@@ -64,11 +64,12 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 	// //////////////////////////////////////////////////////////////////////
 	// Create a new job chain and start running it.
 	api.echo.POST(API_ROOT+"job-chains", api.newJobChainHandler)
+	// Resume running a suspended job chain.
+	api.echo.POST(API_ROOT+"job-chains/resume", api.resumeJobChainHandler)
 	// Stop running a job chain.
 	api.echo.PUT(API_ROOT+"job-chains/:requestId/stop", api.stopJobChainHandler)
 	// Get the status of a job chain.
 	api.echo.GET(API_ROOT+"job-chains/:requestId/status", api.statusJobChainHandler)
-	// TODO felixp: add job-chains/resume route + handler for resuming SJCs
 
 	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler)
 
@@ -134,8 +135,10 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // running the job chain.
 func (api *API) newJobChainHandler(c echo.Context) error {
 	// If Job Runner is shutting down, don't start running any new job chains.
-	if api.shuttingDown() {
-		return handleError(ErrNoNewJobChains)
+	select {
+	case <-api.shutdownChan:
+		return handleError(ErrShuttingDown)
+	default:
 	}
 
 	// Convert the payload into a proto.JobChain.
@@ -164,6 +167,50 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 	// so we run it in a goroutine.
 	go func() {
 		defer api.traverserRepo.Remove(jc.RequestId)
+		t.Run()
+	}()
+
+	return nil
+}
+
+// POST <API_ROOT>/job-chains/resume
+// Resume running a previously suspended job chain. Do some basic validation on
+// the job chain and, if it passes, add it to the chain repo. If it doesn't pass,
+// return the validation error. Then start running the job chain.
+func (api *API) resumeJobChainHandler(c echo.Context) error {
+	// If Job Runner is shutting down, don't start running any new job chains.
+	select {
+	case <-api.shutdownChan:
+		return handleError(ErrShuttingDown)
+	default:
+	}
+
+	// Convert the payload into a proto.SuspendedJobChain.
+	var sjc proto.SuspendedJobChain
+	if err := c.Bind(&sjc); err != nil {
+		return err
+	}
+
+	// Create a new traverser.
+	t, err := api.traverserFactory.MakeFromSJC(sjc)
+	if err != nil {
+		return handleError(err)
+	}
+
+	// Save traverser to the repo.
+	wasAbsent := api.traverserRepo.SetIfAbsent(sjc.RequestId, t)
+	if !wasAbsent {
+		return handleError(ErrDuplicateTraverser)
+	}
+
+	// Set the location in the response header to point to this server.
+	c.Response().Header().Set("Location", chainLocation(sjc.RequestId, os.Hostname))
+
+	// Start the traverser, and remove it from the repo when it's
+	// done running. This could take a very long time to return,
+	// so we run it in a goroutine.
+	go func() {
+		defer api.traverserRepo.Remove(sjc.RequestId)
 		t.Run()
 	}()
 
@@ -243,7 +290,7 @@ func handleError(err error) *echo.HTTPError {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())
 		case ErrDuplicateTraverser:
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-		case ErrNoNewJobChains:
+		case ErrShuttingDown:
 			return echo.NewHTTPError(http.StatusServiceUnavailable, err.Error())
 		default:
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
@@ -258,14 +305,4 @@ func chainLocation(requestId string, hostname func() (string, error)) string {
 	h, _ := hostname()
 	url, _ := url.Parse(h + API_ROOT + "job-chains/" + requestId)
 	return url.EscapedPath()
-}
-
-// Indicates whether the Job Runner is in the process of shutting down
-func (api *API) shuttingDown() bool {
-	select {
-	case <-api.shutdownChan:
-		return true
-	default:
-		return false
-	}
 }

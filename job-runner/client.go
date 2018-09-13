@@ -17,6 +17,8 @@ import (
 type Client interface {
 	// NewJobChain takes a job chain, and sends it to the JR to be run immediately.
 	NewJobChain(proto.JobChain) error
+	// ResumeJobChain takes a suspended job chain and sends it to the JR to be resumed.
+	ResumeJobChain(proto.SuspendedJobChain) error
 	// StopRequest stops the job chain that corresponds to a given request Id.
 	StopRequest(string) error
 	// RequestStatus gets the status of the job chain that corresponds to a given request Id.
@@ -57,6 +59,30 @@ func (c *client) NewJobChain(jobChain proto.JobChain) error {
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("jr.Client.NewJobChain - unsuccessful status code: %d (response body: %s)",
+			resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+func (c *client) ResumeJobChain(sjc proto.SuspendedJobChain) error {
+	// POST /api/v1/job-chains/resume
+	url := c.baseUrl + "/api/v1/job-chains/resume"
+
+	// Create the payload.
+	payload, err := json.Marshal(sjc)
+	if err != nil {
+		return err
+	}
+
+	// Make the request.
+	resp, body, err := c.post(url, payload)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("jr.Client.ResumeJobChain - unsuccessful status code: %d (response body: %s)",
 			resp.StatusCode, string(body))
 	}
 

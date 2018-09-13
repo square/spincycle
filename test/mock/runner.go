@@ -19,7 +19,7 @@ type RunnerFactory struct {
 	MakeErr         error
 }
 
-func (f *RunnerFactory) Make(job proto.Job, requestId string, prevTryNo uint, sequenceTry uint) (runner.Runner, error) {
+func (f *RunnerFactory) Make(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (runner.Runner, error) {
 	return f.RunnersToReturn[job.Id], f.MakeErr
 }
 
@@ -39,7 +39,11 @@ type Runner struct {
 func (r *Runner) Run(jobData map[string]interface{}) runner.Return {
 	// If RunFunc is defined, use that.
 	if r.RunFunc != nil {
-		return r.RunReturn
+		state := r.RunFunc(jobData)
+		return runner.Return{
+			FinalState: state,
+			Tries:      r.RunReturn.Tries,
+		}
 	}
 
 	if r.RunWg != nil {
