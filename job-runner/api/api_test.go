@@ -197,12 +197,11 @@ func TestResumeJobChainSuccess(t *testing.T) {
 		},
 	}
 	sjc := proto.SuspendedJobChain{
-		RequestId:       requestId,
-		JobChain:        &jobChain,
-		TotalJobTries:   map[string]uint{},
-		LastRunJobTries: map[string]uint{},
-		SequenceTries:   map[string]uint{},
-		NumJobsRun:      0,
+		RequestId:         requestId,
+		JobChain:          &jobChain,
+		TotalJobTries:     map[string]uint{},
+		LatestRunJobTries: map[string]uint{},
+		SequenceTries:     map[string]uint{},
 	}
 	payload, err := json.Marshal(sjc)
 	if err != nil {
@@ -243,12 +242,11 @@ func TestResumeJobChainShutdown(t *testing.T) {
 		},
 	}
 	sjc := proto.SuspendedJobChain{
-		RequestId:       "abc",
-		JobChain:        &jobChain,
-		TotalJobTries:   map[string]uint{},
-		LastRunJobTries: map[string]uint{},
-		SequenceTries:   map[string]uint{},
-		NumJobsRun:      0,
+		RequestId:         "abc",
+		JobChain:          &jobChain,
+		TotalJobTries:     map[string]uint{},
+		LatestRunJobTries: map[string]uint{},
+		SequenceTries:     map[string]uint{},
 	}
 	payload, err := json.Marshal(sjc)
 	if err != nil {
@@ -288,12 +286,11 @@ func TestResumeJobChainTraverserError(t *testing.T) {
 		},
 	}
 	sjc := proto.SuspendedJobChain{
-		RequestId:       "abc",
-		JobChain:        &jobChain,
-		TotalJobTries:   map[string]uint{},
-		LastRunJobTries: map[string]uint{},
-		SequenceTries:   map[string]uint{},
-		NumJobsRun:      0,
+		RequestId:         "abc",
+		JobChain:          &jobChain,
+		TotalJobTries:     map[string]uint{},
+		LatestRunJobTries: map[string]uint{},
+		SequenceTries:     map[string]uint{},
 	}
 	payload, err := json.Marshal(sjc)
 	if err != nil {
@@ -323,12 +320,11 @@ func TestResumeJobChainMultipleTraverser(t *testing.T) {
 		},
 	}
 	sjc := proto.SuspendedJobChain{
-		RequestId:       "abc",
-		JobChain:        &jobChain,
-		TotalJobTries:   map[string]uint{},
-		LastRunJobTries: map[string]uint{},
-		SequenceTries:   map[string]uint{},
-		NumJobsRun:      0,
+		RequestId:         "abc",
+		JobChain:          &jobChain,
+		TotalJobTries:     map[string]uint{},
+		LatestRunJobTries: map[string]uint{},
+		SequenceTries:     map[string]uint{},
 	}
 	payload, err := json.Marshal(sjc)
 	if err != nil {

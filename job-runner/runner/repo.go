@@ -14,6 +14,7 @@ type Repo interface {
 	Set(jobId string, runner Runner)
 	Remove(jobId string)
 	Items() (map[string]Runner, error)
+	Count() int
 }
 
 type repo struct {
@@ -47,4 +48,9 @@ func (r *repo) Items() (map[string]Runner, error) {
 		runners[jobId] = runner
 	}
 	return runners, nil
+}
+
+// Count returns the number of Runners in the repo.
+func (r *repo) Count() int {
+	return r.c.Count()
 }

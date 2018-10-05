@@ -53,7 +53,7 @@ func NewRedisRepo(c RedisRepoConfig) (*RedisRepo, error) {
 // Add adds a chain to redis and returns any error encountered.  It returns an
 // error if there is already a Chain with the same RequestId. Keys are of the
 // form "#{RedisRepo.conf.Prefix}::#{CHAIN_KEY}::#{RequestId}".
-func (r *RedisRepo) Add(chain *chain) error {
+func (r *RedisRepo) Add(chain *Chain) error {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
@@ -78,7 +78,7 @@ func (r *RedisRepo) Add(chain *chain) error {
 
 // Set writes a chain to redis, overwriting any if it exists. Returns any
 // errors encountered.
-func (r *RedisRepo) Set(chain *chain) error {
+func (r *RedisRepo) Set(chain *Chain) error {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
@@ -94,7 +94,7 @@ func (r *RedisRepo) Set(chain *chain) error {
 }
 
 // Get takes a Chain RequestId and retrieves that Chain from redis.
-func (r *RedisRepo) Get(id string) (*chain, error) {
+func (r *RedisRepo) Get(id string) (*Chain, error) {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
@@ -105,7 +105,7 @@ func (r *RedisRepo) Get(id string) (*chain, error) {
 		return nil, err
 	}
 
-	var chain *chain
+	var chain *Chain
 	err = json.Unmarshal(data, &chain)
 	if err != nil {
 		return nil, err
@@ -115,7 +115,7 @@ func (r *RedisRepo) Get(id string) (*chain, error) {
 }
 
 // Get all job chains, even those owned/running on other JR instances.
-func (r *RedisRepo) GetAll() ([]chain, error) {
+func (r *RedisRepo) GetAll() ([]Chain, error) {
 	conn := r.ConnectionPool.Get()
 	defer conn.Close()
 
@@ -143,13 +143,13 @@ func (r *RedisRepo) GetAll() ([]chain, error) {
 	if err != nil {
 		return nil, err
 	}
-	chains := []chain{}
+	chains := []Chain{}
 	for _, val := range vals {
 		if val == nil {
 			// Chain removed between SCAN and MGET
 			continue
 		}
-		var c chain
+		var c Chain
 		if err := json.Unmarshal(val.([]byte), &c); err != nil {
 			return nil, err
 		}
@@ -198,6 +198,6 @@ func (r *RedisRepo) fmtIdKey(id string) string {
 
 // fmtChainKey takes a Chain and returns the key where that Chain is stored in
 // redis.
-func (r *RedisRepo) fmtChainKey(chain *chain) string {
+func (r *RedisRepo) fmtChainKey(chain *Chain) string {
 	return r.fmtIdKey(chain.RequestId())
 }

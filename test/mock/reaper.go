@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/proto"
 )
 
 var (
@@ -14,13 +13,20 @@ var (
 )
 
 type JobReaper struct {
-	ReapFunc     func(proto.Job)
+	RunFunc      func()
+	StopFunc     func()
 	FinalizeFunc func()
 }
 
-func (r *JobReaper) Reap(job proto.Job) {
-	if r.ReapFunc != nil {
-		r.ReapFunc(job)
+func (r *JobReaper) Run() {
+	if r.RunFunc != nil {
+		r.RunFunc()
+	}
+}
+
+func (r *JobReaper) Stop() {
+	if r.StopFunc != nil {
+		r.StopFunc()
 	}
 }
 
@@ -31,18 +37,20 @@ func (r *JobReaper) Finalize() {
 }
 
 type ReaperFactory struct {
-	ReapFunc     func(proto.Job)
+	RunFunc      func()
+	StopFunc     func()
 	FinalizeFunc func()
 }
 
 func (rf *ReaperFactory) Make() chain.JobReaper {
 	return &JobReaper{
-		ReapFunc:     rf.ReapFunc,
+		RunFunc:      rf.RunFunc,
+		StopFunc:     rf.StopFunc,
 		FinalizeFunc: rf.FinalizeFunc,
 	}
 }
 
-func (rf *ReaperFactory) MakeRunning(runJobChan chan proto.Job) chain.JobReaper {
+func (rf *ReaperFactory) MakeRunning() chain.JobReaper {
 	return rf.Make()
 }
 

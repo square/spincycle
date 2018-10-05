@@ -26,12 +26,13 @@ func TestRunning(t *testing.T) {
 			"job1": proto.Job{
 				Id:            "job1",
 				Type:          "type1",
+				State:         proto.STATE_PENDING,
 				SequenceId:    "job1",
 				SequenceRetry: 0,
 			},
 		},
 	}
-	c1 := chain.NewChain(jc1)
+	c1 := chain.NewChain(jc1, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c1.SetJobState("job1", proto.STATE_RUNNING) // sets runtime start ts
 
 	// Any short delay to make Runtime differ. chain1/job1 will have a runtime
@@ -48,12 +49,13 @@ func TestRunning(t *testing.T) {
 			"job2": proto.Job{
 				Id:            "job2",
 				Type:          "type2",
+				State:         proto.STATE_PENDING,
 				SequenceId:    "job2",
 				SequenceRetry: 0,
 			},
 		},
 	}
-	c2 := chain.NewChain(jc2)
+	c2 := chain.NewChain(jc2, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c2.SetJobState("job2", proto.STATE_RUNNING) // sets runtime start ts
 
 	repo := chain.NewMemoryRepo()

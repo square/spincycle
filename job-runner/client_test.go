@@ -113,10 +113,9 @@ func TestResumeJobChain(t *testing.T) {
 		TotalJobTries: map[string]uint{
 			"job1": 2,
 		},
-		LastRunJobTries: map[string]uint{
+		LatestRunJobTries: map[string]uint{
 			"job1": 1,
 		},
-		NumJobsRun: 1,
 	}
 	// Unsuccessful response status code.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

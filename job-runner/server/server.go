@@ -23,7 +23,6 @@ import (
 type Server struct {
 	appCtx       app.Context
 	api          *api.API
-	sigChan      chan os.Signal
 	shutdownChan chan struct{}
 }
 
@@ -40,7 +39,7 @@ func (s *Server) Run() error {
 		return err
 	}
 	go s.waitForShutdown()
-	return s.api.Run()
+	return s.api.Run() // returns after API is shut down
 }
 
 func (s *Server) Boot() error {
@@ -64,14 +63,10 @@ func (s *Server) API() *api.API {
 
 // Catch TERM and INT signals to gracefully shut down the Job Runner
 func (s *Server) waitForShutdown() {
-	s.sigChan = make(chan os.Signal, 1)
-	signal.Notify(s.sigChan, syscall.SIGINT, syscall.SIGTERM)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	sig := <-s.sigChan
-	if sig == nil {
-		// channel was closed
-		return
-	}
+	<-sigChan
 
 	// API + traversers watch shutdownChan
 	close(s.shutdownChan)

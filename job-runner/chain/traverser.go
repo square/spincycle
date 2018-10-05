@@ -1,4 +1,4 @@
-// Copyright 2018, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package chain
 
@@ -14,14 +14,25 @@ import (
 	"github.com/square/spincycle/retry"
 )
 
+var (
+	// Returned when Stop is called but the chain has already been suspended.
+	ErrShuttingDown = fmt.Errorf("chain not stopped because traverser is shutting down")
+)
+
 const (
-	// Time to wait for all active runners to return after stopping them.
-	STOP_TIMEOUT = 10 * time.Second
+	// Default timeout used by traverser factory for traverser's stopTimeout
+	// and sendTimeout.
+	defaultTimeout = 10 * time.Second
 
 	// Number of times to attempt sending a job log to the RM.
-	JOB_LOG_TRIES = 3
+	jobLogTries = 3
 	// Time to wait between attempts to send a job log to RM.
-	JOB_LOG_RETRY_WAIT = 500 * time.Millisecond
+	jobLogRetryWait = 500 * time.Millisecond
+
+	// Number of times to attempt sending chain state / SJC to RM in Reaper.
+	reaperTries = 5
+	// Time to wait between tries to send chain state/SJC to RM.
+	reaperRetryWait = 500 * time.Millisecond
 )
 
 // A Traverser provides the ability to run a job chain while respecting the
@@ -31,8 +42,6 @@ type Traverser interface {
 	// running the first job in the chain, and then, if the job completed,
 	// successfully, running its adjacent jobs. This process continues until there
 	// are no more jobs to run, or until the Stop method is called on the traverser.
-	//
-	// It returns an error if it fails to start.
 	Run()
 
 	// Stop makes a traverser stop traversing its job chain. It also sends a stop
@@ -73,23 +82,23 @@ func NewTraverserFactory(cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan
 	}
 }
 
-// Make makes a Traverser for the given job chain. The chain is first validated
+// Make makes a Traverser for the job chain. The chain is first validated
 // and saved to the chain repo.
 func (f *traverserFactory) Make(jobChain proto.JobChain) (Traverser, error) {
 	// Convert/wrap chain from proto to Go object.
-	chain := NewChain(&jobChain)
+	chain := NewChain(&jobChain, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	return f.make(chain)
 }
 
 // MakeFromSJC makes a Traverser from a suspended job chain.
 func (f *traverserFactory) MakeFromSJC(sjc proto.SuspendedJobChain) (Traverser, error) {
 	// Convert/wrap chain from proto to Go object.
-	chain := ResumeChain(&sjc)
+	chain := NewChain(sjc.JobChain, sjc.SequenceTries, sjc.TotalJobTries, sjc.LatestRunJobTries)
 	return f.make(chain)
 }
 
 // Creates a new Traverser from a chain. Used for both new and resumed chains.
-func (f *traverserFactory) make(chain *chain) (Traverser, error) {
+func (f *traverserFactory) make(chain *Chain) (Traverser, error) {
 	// Validate the chain
 	err := chain.Validate()
 	if err != nil {
@@ -107,7 +116,16 @@ func (f *traverserFactory) make(chain *chain) (Traverser, error) {
 	// for the chain: running, cleaning up, removing from repo when done, etc.
 	// And traverser and chain have the same lifespan: traverser is done when
 	// chain is done.
-	tr := NewTraverser(chain, f.chainRepo, f.rf, f.rmc, f.shutdownChan)
+	cfg := TraverserConfig{
+		Chain:         chain,
+		ChainRepo:     f.chainRepo,
+		RunnerFactory: f.rf,
+		RMClient:      f.rmc,
+		ShutdownChan:  f.shutdownChan,
+		StopTimeout:   defaultTimeout,
+		SendTimeout:   defaultTimeout,
+	}
+	tr := NewTraverser(cfg)
 	return tr, nil
 }
 
@@ -121,145 +139,189 @@ type traverser struct {
 	runJobChan   chan proto.Job // jobs to be run
 	doneJobChan  chan proto.Job // jobs that are done
 	doneChan     chan struct{}  // closed when traverser finishes running
-	stopChan     chan struct{}  // indicates JR has been stopped
 
-	stopMux *sync.RWMutex
+	stopMux   *sync.RWMutex // lock around checks to stopped
+	stopped   bool          // has traverser been stopped
+	suspended bool          // has traverser been suspended
 
-	chain      *chain
+	chain      *Chain
 	chainRepo  Repo // stores all currently running chains
 	rf         runner.Factory
 	runnerRepo runner.Repo // stores actively running jobs
 	rmc        rm.Client
 	logger     *log.Entry
 
-	StopTimeout time.Duration // Time to wait for runners to return after being stopped.
-	jlTries     int           // Number of times to try sending a JL to the RM.
-	jlRetryWait time.Duration // Time to wait between tries to send JL to RM.
+	stopTimeout time.Duration // Time to wait for jobs to stop
+	sendTimeout time.Duration // Time to wait for a job to send on doneJobChan.
 }
 
-func NewTraverser(chain *chain, cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) *traverser {
+type TraverserConfig struct {
+	Chain         *Chain
+	ChainRepo     Repo
+	RunnerFactory runner.Factory
+	RMClient      rm.Client
+	ShutdownChan  chan struct{}
+	StopTimeout   time.Duration
+	SendTimeout   time.Duration
+}
+
+func NewTraverser(cfg TraverserConfig) *traverser {
+	// Include request id in all logging.
+	logger := log.WithFields(log.Fields{"requestId": cfg.Chain.RequestId()})
+
+	// Channels used to communicate between traverser + reaper(s)
+	doneJobChan := make(chan proto.Job)
+	runJobChan := make(chan proto.Job)
+
+	runnerRepo := runner.NewRepo() // needed for traverser + reaper factory
+	reaperFactory := &ChainReaperFactory{
+		Chain:        cfg.Chain,
+		ChainRepo:    cfg.ChainRepo,
+		RMClient:     cfg.RMClient,
+		RMCTries:     reaperTries,
+		RMCRetryWait: reaperRetryWait,
+		Logger:       logger,
+		DoneJobChan:  doneJobChan,
+		RunJobChan:   runJobChan,
+		RunnerRepo:   runnerRepo,
+	}
+
 	return &traverser{
-		reaperFactory: NewReaperFactory(chain, cr, rmc),
-		chain:         chain,
-		chainRepo:     cr,
-		rf:            rf,
-		runnerRepo:    runner.NewRepo(),
-		stopChan:      make(chan struct{}),
-		shutdownChan:  shutdownChan,
-		runJobChan:    make(chan proto.Job),
-		doneJobChan:   make(chan proto.Job),
+		reaperFactory: reaperFactory,
+		logger:        logger,
+		chain:         cfg.Chain,
+		chainRepo:     cfg.ChainRepo,
+		rf:            cfg.RunnerFactory,
+		runnerRepo:    runnerRepo,
+		shutdownChan:  cfg.ShutdownChan,
+		runJobChan:    runJobChan,
+		doneJobChan:   doneJobChan,
 		doneChan:      make(chan struct{}),
+		rmc:           cfg.RMClient,
 		stopMux:       &sync.RWMutex{},
-		rmc:           rmc,
-		// Include the request id in all logging.
-		logger:      log.WithFields(log.Fields{"requestId": chain.RequestId()}),
-		StopTimeout: STOP_TIMEOUT,
-		jlTries:     JOB_LOG_TRIES,
-		jlRetryWait: JOB_LOG_RETRY_WAIT,
+		stopTimeout:   cfg.StopTimeout,
+		sendTimeout:   cfg.SendTimeout,
 	}
 }
 
-// Run runs all jobs in the chain and blocks until all jobs complete, a job fails,
-// or the chain is stopped or suspended.
+// Run runs all jobs in the chain and blocks until the chain finishes running, is
+// stopped, or is suspended.
 func (t *traverser) Run() {
 	t.logger.Infof("chain traverser started")
 	defer t.logger.Infof("chain traverser done")
 
-	t.reaper = t.reaperFactory.MakeRunning(t.runJobChan)
-
-	// Send final state or SJC to Request Manager.
-	defer func() {
-		t.reaper.Finalize() // stopMux lock unnecessary - traverser is done
-	}()
+	// Start a goroutine to run jobs. This consumes from the runJobChan. When
+	// jobs are done, they will be sent to the doneJobChan, which the job reapers
+	// consume from.
+	go t.runJobs()
 
 	// Find all the jobs we can start running. For a new job chain (not suspended),
 	// this'll end up being just the first job in the chain.
 	jobsToRun := t.chain.RunnableJobs()
-	if len(jobsToRun) == 0 {
-		// No jobs ready to run means the chain must already be done.
-		return
+
+	// Add the first jobs to runJobChan.
+	for _, job := range jobsToRun {
+		t.logger.Infof("sending initial job (%s) to runJobChan", job.Id)
+		if t.chain.IsSequenceStartJob(job.Id) {
+			// Starting a sequence, so increment sequence try count.
+			t.chain.IncrementSequenceTries(job.Id)
+			seqLogger := t.logger.WithFields(log.Fields{"sequence_id": job.SequenceId, "sequence_try": t.chain.SequenceTries(job.Id)})
+			seqLogger.Info("starting try of sequence")
+		}
+		t.runJobChan <- job
 	}
 
-	// Start a goroutine to run jobs. This consumes from the runJobChan. When
-	// jobs are done, they will be sent to the doneJobChan, which gets consumed
-	// from right below this.
-	go t.runJobs()
-
-	// Suspend running job chain if Job Runner shuts down.
+	// Start a goroutine to reap done jobs. The running reaper consumes from
+	// doneJobChan and sends the next jobs to be run to runJobChan.
+	runningReaperChan := make(chan struct{})
+	t.reaper = t.reaperFactory.MakeRunning()
 	go func() {
-		select {
-		case <-t.shutdownChan:
-			t.shutdown()
-		case <-t.doneChan: // check if chain is done (or this func might never return)
-			return
-		}
+		defer close(runningReaperChan) // indicate reaper is done (see select below)
+		defer close(t.runJobChan)      // stop runJobs goroutine
+		t.reaper.Run()
 	}()
 
-	// Add the first jobs to the runJobChan.
-	// Prevent Stop()/shutdown() from closing runJobChan and don't enqueue jobs
-	// if the traverser has already been stopped or shutdown.
-	t.stopMux.Lock()
+	// Wait for running reaper to be done or traverser to be shut down.
 	select {
-	case <-t.stopChan:
-		return
-	case <-t.shutdownChan:
-		return
-	default:
-		for _, job := range jobsToRun {
-			t.logger.Infof("sending initial job (%s) to runJobChan", job.Id)
-			if t.chain.IsSequenceStartJob(job.Id) {
-				// Starting a sequence, so increment sequence try count.
-				t.chain.IncrementSequenceTries(job.Id)
-				seqLogger := t.logger.WithFields(log.Fields{"sequence_id": job.SequenceId, "sequence_try": t.chain.SequenceTries(job.Id)})
-				seqLogger.Info("starting try of sequence")
-			}
-			t.runJobChan <- job
-		}
-	}
-	t.stopMux.Unlock()
-
-	// Reap jobs as they finish running. Stop reaping jobs when the doneJobChan
-	// is closed by runJobs - when the chain is done, stopped, or suspended.
-	for doneJob := range t.doneJobChan {
-		// Don't allow closing runJobChan / switching the reaper while we are
-		// reaping a job. Reap() should return quickly, so this is ok.
+	case <-runningReaperChan:
+		// If running reaper is done because traverser was stopped, we will
+		// wait for Stop() to finish. Otherwise, the chain finished normally
+		// (completed or failed) and we can return right away.
+		//
+		// We don't check if the chain was suspended, since that can only
+		// happen via the other case in this select.
 		t.stopMux.Lock()
-		t.reaper.Reap(doneJob)
+		if !t.stopped {
+			t.stopMux.Unlock()
+			return
+		}
 		t.stopMux.Unlock()
+	case <-t.shutdownChan:
+		// The Job Runner is shutting down. Stop the running reaper and suspend
+		// the job chain, to be resumed later by another Job Runner.
+		t.shutdown()
 	}
 
-	// Indicate that the chain is done running. Stops waitForShutdown() listener.
+	// Traverser is being stopped or shut down - wait for that to finish before
+	// returning.
 	select {
 	case <-t.doneChan:
-	default:
-		close(t.doneChan)
+		// Stopped/shutdown successfully - nothing left to do.
+		return
+	case <-time.After(20 * time.Second):
+		// Failed to stop/shutdown in a reasonable amount of time.
+		// Log the failure and return.
+		t.logger.Warnf("stopping or suspending the job chain took too long. Exiting...")
+		return
 	}
 }
 
-// Stop stops a running chain by stopping all its running jobs.
+// Stop stops the running job chain by switching the running chain reaper for a
+// stopped chain reaper and stopping all currently running jobs. Stop blocks until
+// all jobs have finished and the stopped reaper has send the chain's final state
+// to the RM.
 func (t *traverser) Stop() error {
-	// LOCK - can't close these chans while a job is being Reaped / initial
-	// jobs are being sent to runJobChan.
+	// Don't do anything if the traverser has already been stopped or suspended.
 	t.stopMux.Lock()
-
-	// Don't do anything if traverser has already been stopped.
-	select {
-	case <-t.stopChan:
+	defer t.stopMux.Unlock()
+	if t.stopped {
 		return nil
-	default:
+	} else if t.suspended {
+		return ErrShuttingDown
 	}
+	t.stopped = true
 
 	t.logger.Infof("stopping traverser and all jobs")
 
+	// Stop the current reaper and start running a reaper for stopped chains. This
+	// reaper saves jobs' states (but doesn't enqueue any more jobs to run) and
+	// sends the chain's final state to the RM when all jobs have stopped running.
+	t.reaper.Stop() // blocks until running reaper is done stopping
+	stoppedReaperChan := make(chan struct{})
 	t.reaper = t.reaperFactory.MakeStopped()
-	close(t.runJobChan) // will stop runJobs loop (stop running job more jobs)
-	close(t.stopChan)   // indicate traverser has been stopped
-	t.stopMux.Unlock()  // UNLOCK
+	go func() {
+		defer close(stoppedReaperChan)
+		t.reaper.Run()
+	}()
 
+	// Stop all job runners in the runner repo. Do this after switching to the
+	// stopped reaper so that when the jobs finish and are sent on doneJobChan,
+	// they are reaped correctly.
 	err := t.stopRunningJobs()
 	if err != nil {
 		return fmt.Errorf("problem stopping traverser: %s", err)
 	}
+
+	// Wait for the stopped reaper to finish. If it takes too long, some jobs
+	// haven't respond quickly to being stopped. Stop waiting for these jobs by
+	// stopping the stopped reaper.
+	select {
+	case <-stoppedReaperChan:
+	case <-time.After(t.stopTimeout):
+		t.logger.Warnf("timed out waiting for jobs to stop - stopping reaper")
+		t.reaper.Stop()
+	}
+	close(t.doneChan)
 	return nil
 }
 
@@ -298,126 +360,101 @@ func (t *traverser) Status() (proto.JobChainStatus, error) {
 
 // runJobs loops on the runJobChan, and runs each job that comes through the
 // channel. When the job is done, it sends the job out through the doneJobChan.
-// Once runJobChan is closed, it waits for any running jobs to finish and
-// then closes doneJobChan.
 func (t *traverser) runJobs() {
-	var runningWG sync.WaitGroup // used to wait for all jobs to finish running
-	stopTimeoutChan := make(chan struct{})
-	timeoutMux := &sync.Mutex{}
-
-	// Run all jobs that come in on runJobChan. This loop exits when
-	// runJobChan is closed (when the chain is stopped, suspended, or done).
+	// Run all jobs that come in on runJobChan. The loop exits when runJobChan
+	// is closed after the running reaper finishes.
 	for job := range t.runJobChan {
-		runningWG.Add(1) // A new job is starting.
-
-		// Explicitly pass the job in, or all goroutines
-		// would share the same loop "job" variable.
+		// Explicitly pass the job into the func, or all goroutines would share
+		// the same loop "job" variable.
 		go func(job proto.Job) {
-			defer runningWG.Done() // Job is done running.
+			jLogger := t.logger.WithFields(log.Fields{"job_id": job.Id, "sequence_id": job.SequenceId, "sequence_try": t.chain.SequenceTries(job.Id)})
 
-			t.runJob(&job)
+			// Always send the finished job to doneJobChan to be reaped. If the
+			// reaper isn't reaping any more jobs (if this job took too long to
+			// finish after being stopped), sending to doneJobChan won't be
+			// possible - timeout after a while so we don't leak this goroutine.
+			defer func() {
+				select {
+				case t.doneJobChan <- job:
+				case <-time.After(t.sendTimeout):
+					jLogger.Warnf("timed out sending job to doneJobChan")
+				}
+				// Remove the job's runner from the repo (if it was ever added)
+				// AFTER sending it to doneJobChan. This avoids a race condition
+				// when the stopped + suspended reapers check if the runnerRepo
+				// is empty.
+				t.runnerRepo.Remove(job.Id)
+			}()
 
-			// Send finished job to doneJobChan.
-			timeoutMux.Lock()
-			defer timeoutMux.Unlock()
-			select {
-			case <-stopTimeoutChan:
-				// If this job took too long to finish after being stopped,
-				// doneJobChan has already been closed - don't send job.
-				return
-			default:
-				t.doneJobChan <- job
+			// Retrieve job and sequence try info from the chain for the Runner.
+			sequenceTries := t.chain.SequenceTries(job.Id) // used in job logs
+			totalJobTries := t.chain.TotalTries(job.Id)    // used in job logs
+			// When resuming a stopped job, only try the job
+			// [allowed tries - tries before being stopped] times, so the total
+			// number of times the job is tried (during this sequence try) stays
+			// correct. The job's last try (the try it was stopped on) doesn't
+			// count, so subtract 1 if it was tried at least once before
+			// being stopped.
+			triesBeforeStopped := uint(0)
+			if job.State == proto.STATE_STOPPED {
+				triesBeforeStopped = t.chain.LatestRunTries(job.Id)
+				if triesBeforeStopped > 0 {
+					triesBeforeStopped--
+				}
 			}
+
+			runner, err := t.rf.Make(job, t.chain.RequestId(), totalJobTries, triesBeforeStopped, sequenceTries)
+			if err != nil {
+				// Problem creating the job runner - treat job as failed.
+				// Send a JobLog to the RM so that it knows this job failed.
+				job.State = proto.STATE_FAIL
+				err = fmt.Errorf("problem creating job runner: %s", err)
+				t.sendJL(job, err)
+				return
+			}
+
+			// Add the runner to the repo. Runners in the repo are used
+			// by the Status, Stop, and shutdown methods on the traverser.
+			t.runnerRepo.Set(job.Id, runner)
+
+			// Bail out if Stop was called or traverser shut down. It is
+			// important that this check happens AFTER the runner is added to
+			// the repo. Otherwise if Stop gets called after this check but
+			// before the runner is added to the repo, there will be nothing to
+			// stop the job from running.
+			//
+			// We don't lock stopMux around this check and runner.Run. It's okay if
+			// there's a small chance for the runner to be run after the traverser
+			// gets stopped or shut down - it'll just return after trying the job
+			// once.
+			if t.stopped {
+				job.State = proto.STATE_STOPPED
+
+				// Send a JL to the RM so that it knows this job was stopped.
+				// Add 1 to the total job tries, since this is used for keeping
+				// job logs unique.
+				t.chain.AddJobTries(job.Id, 1)
+				err = fmt.Errorf("not starting job because traverser has already been stopped")
+				t.sendJL(job, err)
+				return
+			} else if t.suspended {
+				job.State = proto.STATE_STOPPED
+				// Don't send a JL because this job will be resumed later,
+				// and don't include this try in the total # of tries (only
+				// set job tries for the latest run).
+				t.chain.SetLatestRunJobTries(job.Id, 1)
+				return
+			}
+
+			// Run the job. This is a blocking operation that could take a long time.
+			t.chain.SetJobState(job.Id, proto.STATE_RUNNING)
+			jLogger.Infof("running job")
+			ret := runner.Run(job.Data)
+
+			t.chain.AddJobTries(job.Id, ret.Tries)
+			job.State = ret.FinalState
 		}(job)
 	}
-
-	// Wait for all running jobs to finish. Timeout if running jobs
-	// haven't finished after 10 seconds.
-	waitChan := make(chan struct{})
-	go func() {
-		runningWG.Wait()
-		close(waitChan)
-	}()
-
-	go func() {
-		time.Sleep(t.StopTimeout)
-		close(stopTimeoutChan)
-	}()
-
-	select {
-	case <-stopTimeoutChan:
-		timeoutMux.Lock()
-		defer timeoutMux.Unlock()
-	case <-waitChan:
-	}
-
-	// Indicate there are no more jobs to reap. This kicks off finalizing the chain.
-	close(t.doneJobChan)
-}
-
-// runJob creates a job Runner for the given job and runs it. If there
-// are any errors creating the runner, it sends a JL that contains the error
-// to the RM. It modifies the original job with its final State before returning.
-func (t *traverser) runJob(job *proto.Job) {
-	jLogger := t.logger.WithFields(log.Fields{"job_id": job.Id, "sequence_id": job.SequenceId, "sequence_try": t.chain.SequenceTries(job.Id)})
-
-	// Make a job runner. If an error is encountered, set the
-	// state of the job to FAIL and create a JL with the error.
-	sequenceTries := t.chain.SequenceTries(job.Id) // used for job logs
-	previousTries := t.chain.TotalTries(job.Id)    // used for job logs
-	triesToSkip := uint(0)
-	if job.State == proto.STATE_STOPPED {
-		// When resuming a stopped job, take into account the number of times
-		// it has already been tried. Its last try (the try it was stopped on)
-		// doesn't count.
-		triesToSkip = t.chain.LatestRunTries(job.Id) - 1
-	}
-
-	runner, err := t.rf.Make(*job, t.chain.RequestId(), previousTries, triesToSkip, sequenceTries)
-
-	if err != nil {
-		job.State = proto.STATE_FAIL
-		t.sendJL(*job, err) // need to send a JL to the RM so that it knows this job failed
-		return
-	}
-
-	// Add the runner to the repo. Runners in the repo are used
-	// by the Status and Stop methods on the traverser.
-	t.runnerRepo.Set(job.Id, runner)
-	defer t.runnerRepo.Remove(job.Id)
-
-	// Bail out if Stop was called or traverser suspended. It is important
-	// that this check happens AFTER the runner is added to the repo,
-	// because otherwise if Stop gets called between the time that a job
-	// runner is created and it is added to the repo, there will be nothing
-	// to stop that job from running.
-	select {
-	case <-t.stopChan:
-		job.State = proto.STATE_STOPPED
-
-		t.chain.AddJobTries(job.Id, 1)
-
-		err = fmt.Errorf("not starting job because traverser has already been stopped")
-		t.sendJL(*job, err) // need to send a JL to the RM so that it knows this job failed
-		return
-	case <-t.shutdownChan:
-		job.State = proto.STATE_STOPPED
-		// don't include this try in the total # of tries since we're not sending a JL
-		t.chain.AddLatestJobTries(job.Id, 1)
-		return
-	default:
-	}
-
-	// Set the state of the job in the chain to "Running".
-	t.chain.SetJobState(job.Id, proto.STATE_RUNNING)
-
-	// Run the job. This is a blocking operation that could take a long time.
-	jLogger.Infof("running job")
-	ret := runner.Run(job.Data)
-
-	t.chain.AddJobTries(job.Id, ret.Tries)
-
-	job.State = ret.FinalState
 }
 
 // sendJL sends a job log to the Request Manager.
@@ -443,43 +480,68 @@ func (t *traverser) sendJL(job proto.Job, err error) {
 	}
 
 	// Send the JL to the RM.
-	err = retry.Do(t.jlTries, t.jlRetryWait,
+	err = retry.Do(jobLogTries, jobLogRetryWait,
 		func() error {
 			return t.rmc.CreateJL(t.chain.RequestId(), jl)
 		},
-		func(err error) {
-			jLogger.Errorf("problem sending job log (%#v) to the RM: %s. Retrying...", jl, err)
-		},
+		nil,
 	)
 	if err != nil {
-		jLogger.Errorf("failed to send job log (%#v) to Request Manager", jl)
+		jLogger.Errorf("problem sending job log (%#v) to the Request Manager: %s", jl, err)
 		return
 	}
-	jLogger.Infof("successfully sent job log (%#v) to Request Manager", jl)
 }
 
-// shutdown suspends the running chain by stopping all its jobs and sending
-// a suspended job chain to the Request Manager.
+// shutdown suspends the running chain by switching the running chain reaper for a
+// suspended chain reaper and stopping all currently running jobs. Once all jobs
+// have finished, the suspended reaper informs the RM about the suspended chain by
+// sending a SuspendedJobChain.
+//
+// When a Job Runner is shutting down, all of its traversers are shut down and their
+// running job chains suspended. The Request Manager can later resume these job
+// chains by sending them to a running Job Runner instance.
 func (t *traverser) shutdown() {
+	// Don't do anything if the traverser has already been stopped or suspended.
 	t.stopMux.Lock()
-
-	// Don't do anything if traverser has already been stopped.
-	select {
-	case <-t.stopChan:
+	defer t.stopMux.Unlock()
+	if t.stopped || t.suspended {
 		return
-	default:
 	}
+	t.suspended = true
 
 	t.logger.Info("suspending job chain - stopping all jobs")
 
-	t.reaper = t.reaperFactory.MakeSuspended() // switch to suspended reaper
-	close(t.runJobChan)                        // won't run any more jobs
-	t.stopMux.Unlock()
+	// Stop the current reaper and start running a reaper for suspended chains. This
+	// reaper saves jobs' states and prepares the chain to be resumed later, but
+	// doesn't enqueue any more jobs to run. When all jobs have stopped running,
+	// it sends the SuspendedJobChain to the RM (or the final state if the
+	// chain was completed or failed).
+	t.reaper.Stop() // blocks until running reaper is done stopping
+	suspendedReaperChan := make(chan struct{})
+	t.reaper = t.reaperFactory.MakeSuspended()
+	go func() {
+		defer close(suspendedReaperChan)
+		t.reaper.Run()
+	}()
 
+	// Stop all job runners in the runner repo. Do this after switching to the
+	// suspended reaper so that when the jobs finish and are sent on doneJobChan,
+	// they are reaped correctly.
 	err := t.stopRunningJobs()
 	if err != nil {
-		t.logger.Errorf("problem suspending chain: %s", err)
+		t.logger.Errorf("problem suspending job chain: %s", err)
 	}
+
+	// Wait for suspended reaper to finish. If it takes too long, some jobs
+	// haven't respond quickly to being stopped. Stop waiting for these jobs by
+	// stopping the suspended reaper.
+	select {
+	case <-suspendedReaperChan:
+	case <-time.After(t.stopTimeout):
+		t.logger.Warnf("timed out waiting for jobs to stop - stopping reaper")
+		t.reaper.Stop()
+	}
+	close(t.doneChan)
 }
 
 // stopRunningJobs stops all currently running jobs.
@@ -508,7 +570,7 @@ func (t *traverser) stopRunningJobs() error {
 		}(activeRunner)
 	}
 
-	// Check if there was an error when stopping at least one of the jobs.
+	// If there was an error when stopping at least one of the jobs, return it.
 	runnerWG.Wait()
 	if hadError {
 		return fmt.Errorf("problem stopping one or more job runners - see logs for more info")

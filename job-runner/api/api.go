@@ -6,11 +6,14 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/orcaman/concurrent-map"
@@ -116,15 +119,67 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 }
 
 func (api *API) Run() error {
+	// Shut down the API when the Job Runner shuts down.
+	doneChan := make(chan struct{})
+	doneShuttingDown := make(chan struct{})
+	go func() {
+		select {
+		case <-api.shutdownChan:
+			api.shutdown()
+			close(doneShuttingDown)
+		case <-doneChan:
+			return
+		}
+	}()
+
+	// Run API server.
+	var err error
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
-		return api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
+		err = api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
 	} else {
-		return api.echo.Start(api.appCtx.Config.Server.ListenAddress)
+		err = api.echo.Start(api.appCtx.Config.Server.ListenAddress)
 	}
+
+	// If API was shut down, wait to make sure it's done shutting down.
+	select {
+	case <-api.shutdownChan:
+		<-doneShuttingDown
+	default:
+		close(doneChan) // stop the shutdown goroutine
+	}
+	return err
 }
 
 func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.echo.ServeHTTP(w, r)
+}
+
+func (api *API) shutdown() {
+	// Wait for all traversers to shut down. Timeout if they aren't done
+	// within 20 seconds.
+	timeout := time.After(20 * time.Second)
+WAIT_FOR_TRAVERSERS:
+	for !api.traverserRepo.IsEmpty() {
+		select {
+		case <-time.After(10 * time.Millisecond):
+			// Check again if traversers are all done.
+		case <-timeout:
+			break WAIT_FOR_TRAVERSERS
+		}
+	}
+
+	// Shut down server.
+	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
+		err := api.echo.TLSServer.Shutdown(context.TODO())
+		if err != nil {
+			log.Warnf("error when shutting down API: %s", err)
+		}
+	} else {
+		err := api.echo.Server.Shutdown(context.TODO())
+		if err != nil {
+			log.Warnf("error when shutting down API: %s", err)
+		}
+	}
 }
 
 // ============================== CONTROLLERS ============================== //
@@ -296,8 +351,6 @@ func handleError(err error) *echo.HTTPError {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 	}
-
-	return nil
 }
 
 // chainLocation returns the URL location of a job chain

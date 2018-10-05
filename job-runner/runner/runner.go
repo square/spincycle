@@ -146,14 +146,11 @@ TRY_LOOP:
 			func() error {
 				return r.rmc.CreateJL(r.reqId, jl)
 			},
-			func(err error) {
-				tryLogger.Errorf("problem sending job log (%#v) to the RM: %s. Retrying...", jl, err)
-			},
+			nil,
 		)
 		if err != nil {
-			tryLogger.Errorf("failed to send job log (%#v) to Request Manager", jl)
+			tryLogger.Errorf("problem sending job log (%#v) to the Request Manager: %s", jl, err)
 		}
-		tryLogger.Infof("successfully sent job log (%#v) to Request Manager", jl)
 
 		// Set final job state to this job state
 		finalState = jobRet.State
@@ -181,7 +178,8 @@ TRY_LOOP:
 		select {
 		case <-time.After(r.retryWait):
 		case <-r.stopChan:
-			break TRY_LOOP // job stopped
+			// runner has been stopped
+			break TRY_LOOP
 		}
 		tryNo++
 	}

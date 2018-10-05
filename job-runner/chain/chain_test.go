@@ -11,6 +11,61 @@ import (
 	testutil "github.com/square/spincycle/test"
 )
 
+func TestNewChain(t *testing.T) {
+	jc := &proto.JobChain{
+		Jobs: map[string]proto.Job{
+			"job1": proto.Job{
+				Id:    "job1",
+				State: proto.STATE_COMPLETE,
+			},
+			"job2": proto.Job{
+				Id:    "job2",
+				State: proto.STATE_FAIL,
+			},
+			"job3": proto.Job{
+				Id:    "job3",
+				State: proto.STATE_STOPPED,
+			},
+			"job4": proto.Job{
+				Id:    "job4",
+				State: proto.STATE_UNKNOWN,
+			},
+			"job5": proto.Job{
+				Id:    "job5",
+				State: proto.STATE_RUNNING,
+			},
+			"job6": proto.Job{
+				Id:    "job6",
+				State: proto.STATE_PENDING,
+			},
+		},
+	}
+
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+
+	expectedJobStates := map[string]byte{
+		"job1": proto.STATE_COMPLETE,
+		"job2": proto.STATE_FAIL,
+		"job3": proto.STATE_STOPPED,
+		"job4": proto.STATE_FAIL,
+		"job5": proto.STATE_FAIL,
+		"job6": proto.STATE_PENDING,
+	}
+	for jobId, expectedState := range expectedJobStates {
+		if c.JobState(jobId) != expectedState {
+			t.Errorf("%s state = %d, expected state %d", jobId, c.JobState(
+				jobId), expectedState)
+		}
+	}
+
+	// Test NumJobsRun
+	c.SetJobState("job6", proto.STATE_RUNNING)
+	running := c.Running()
+	if running["job6"].N != 5 { // (jobs 1, 2, 4, 5, + 6) -> NumJobsRun = 5
+		t.Errorf("got NumJobsRun = %d, expected %d", running["job6"].N, 5)
+	}
+}
+
 func TestFirstJobMultiple(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
@@ -20,7 +75,7 @@ func TestFirstJobMultiple(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	_, err := c.FirstJob()
 	if err == nil {
@@ -37,7 +92,7 @@ func TestFirstJobOne(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedFirstJob := jc.Jobs["job1"]
 	firstJob, err := c.FirstJob()
@@ -57,7 +112,7 @@ func TestLastJobMultiple(t *testing.T) {
 			"job1": {"job2", "job3"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	_, err := c.lastJob()
 	if err == nil {
@@ -74,7 +129,7 @@ func TestLastJobOne(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedLastJob := jc.Jobs["job4"]
 	lastJob, err := c.lastJob()
@@ -94,7 +149,7 @@ func TestRunnableJobs(t *testing.T) {
 	// -> 1    4
 	//     \  /
 	//      3
-	// Job 3 and 5 should be ready to run
+	// Job 3 and 5 should be runnable
 
 	jobs := map[string]proto.Job{
 		"job1": proto.Job{
@@ -143,7 +198,7 @@ func TestRunnableJobs(t *testing.T) {
 			"job3": 3,
 			"job4": 1,
 		},
-		LastRunJobTries: map[string]uint{
+		LatestRunJobTries: map[string]uint{
 			"job1": 1,
 			"job2": 1,
 			"job3": 2, // job3 should have 1 try left
@@ -152,9 +207,8 @@ func TestRunnableJobs(t *testing.T) {
 		SequenceTries: map[string]uint{
 			"job1": 1,
 		},
-		NumJobsRun: 2, // job1 and job2
 	}
-	c := ResumeChain(sjc)
+	c := NewChain(sjc.JobChain, sjc.SequenceTries, sjc.TotalJobTries, sjc.LatestRunJobTries)
 
 	expectedJobs := proto.Jobs{jc.Jobs["job3"], jc.Jobs["job5"]}
 	sort.Sort(expectedJobs)
@@ -175,7 +229,7 @@ func TestNextJobs(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedNextJobs := proto.Jobs{jc.Jobs["job2"], jc.Jobs["job3"]}
 	sort.Sort(expectedNextJobs)
@@ -202,7 +256,7 @@ func TestPreviousJobs(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedPreviousJobs := proto.Jobs{jc.Jobs["job2"], jc.Jobs["job3"]}
 	sort.Sort(expectedPreviousJobs)
@@ -220,7 +274,7 @@ func TestPreviousJobs(t *testing.T) {
 	}
 }
 
-func TestJobIsReady(t *testing.T) {
+func TestIsRunnable(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(6),
 		AdjacencyList: map[string][]string{
@@ -229,43 +283,43 @@ func TestJobIsReady(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_PENDING)
 	c.SetJobState("job6", proto.STATE_STOPPED)
-	c.AddLatestJobTries("job6", 1) // tried once before stop
+	c.SetLatestRunJobTries("job6", 1) // tried once before stop
 
 	// Job 1 has already been run
-	expectedReady := false
-	ready := c.JobIsReady("job1")
+	expectedRunnable := false
+	runnable := c.IsRunnable("job1")
 
-	if ready != expectedReady {
-		t.Errorf("ready = %t, want %t", ready, expectedReady)
+	if runnable != expectedRunnable {
+		t.Errorf("runnable = %t, want %t", runnable, expectedRunnable)
 	}
 
 	// Job 4 can't run until job 3 is complete
-	expectedReady = false
-	ready = c.JobIsReady("job4")
+	expectedRunnable = false
+	runnable = c.IsRunnable("job4")
 
-	if ready != expectedReady {
-		t.Errorf("ready = %t, want %t", ready, expectedReady)
+	if runnable != expectedRunnable {
+		t.Errorf("runnable = %t, want %t", runnable, expectedRunnable)
 	}
 
 	// Job 5 can run (because Job 1 is done)
-	expectedReady = true
-	ready = c.JobIsReady("job5")
+	expectedRunnable = true
+	runnable = c.IsRunnable("job5")
 
-	if ready != expectedReady {
-		t.Errorf("ready = %t, want %t", ready, expectedReady)
+	if runnable != expectedRunnable {
+		t.Errorf("runnable = %t, want %t", runnable, expectedRunnable)
 	}
 
 	// Job 6 can run (stopped but can be retried)
-	expectedReady = true
-	ready = c.JobIsReady("job6")
+	expectedRunnable = true
+	runnable = c.IsRunnable("job6")
 
-	if ready != expectedReady {
-		t.Errorf("ready = %t, want %t", ready, expectedReady)
+	if runnable != expectedRunnable {
+		t.Errorf("runnable = %t, want %t", runnable, expectedRunnable)
 	}
 }
 
@@ -278,7 +332,7 @@ func TestIsDoneJobRunning(t *testing.T) {
 			"job2": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_RUNNING)
 
@@ -300,7 +354,7 @@ func TestIsDoneJobCanBeRun(t *testing.T) {
 			"job2": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
@@ -325,7 +379,7 @@ func TestIsDoneJobRetry(t *testing.T) {
 			"job2": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
@@ -350,7 +404,7 @@ func TestIsDoneNotComplete(t *testing.T) {
 			"job2": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_FAIL)
@@ -384,7 +438,7 @@ func TestIsDoneComplete(t *testing.T) {
 			"job2": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
@@ -410,7 +464,7 @@ func TestIsDoneJobStopped(t *testing.T) {
 			"job2": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_STOPPED)
 	c.SetJobState("job3", proto.STATE_COMPLETE)
@@ -429,7 +483,7 @@ func TestSetJobState(t *testing.T) {
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(1),
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	if jc.Jobs["job1"].State != proto.STATE_COMPLETE {
@@ -439,7 +493,7 @@ func TestSetJobState(t *testing.T) {
 
 func TestSetState(t *testing.T) {
 	jc := &proto.JobChain{}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	c.SetState(proto.STATE_RUNNING)
 	if c.State() != proto.STATE_RUNNING {
@@ -460,7 +514,7 @@ func TestIndegreeCounts(t *testing.T) {
 			"job7": {"job8"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedCounts := map[string]int{
 		"job1": 0,
@@ -492,7 +546,7 @@ func TestOutdegreeCounts(t *testing.T) {
 			"job6": {"job7"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedCounts := map[string]int{
 		"job1": 2,
@@ -520,7 +574,7 @@ func TestIsAcyclic(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedIsAcyclic := true
 	isAcyclic := c.isAcyclic()
@@ -539,7 +593,7 @@ func TestIsAcyclic(t *testing.T) {
 			"job4": {"job1"},
 		},
 	}
-	c = NewChain(jc)
+	c = NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedIsAcyclic = false
 	isAcyclic = c.isAcyclic()
@@ -559,7 +613,7 @@ func TestIsAcyclic(t *testing.T) {
 			"job5": {"job2", "job6"},
 		},
 	}
-	c = NewChain(jc)
+	c = NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedIsAcyclic = false
 	isAcyclic = c.isAcyclic()
@@ -577,7 +631,7 @@ func TestIsAcyclic(t *testing.T) {
 			"job3": {"job4", "job5"},
 		},
 	}
-	c = NewChain(jc)
+	c = NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedIsAcyclic = true
 	isAcyclic = c.isAcyclic()
@@ -595,7 +649,7 @@ func TestValidateAdjacencyList(t *testing.T) {
 			"job1": {"job2", "job3"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedValid := false
 	valid := c.adjacencyListIsValid()
@@ -612,7 +666,7 @@ func TestValidateAdjacencyList(t *testing.T) {
 			"job7": {},
 		},
 	}
-	c = NewChain(jc)
+	c = NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedValid = false
 	valid = c.adjacencyListIsValid()
@@ -629,7 +683,7 @@ func TestValidateAdjacencyList(t *testing.T) {
 			"job2": {"job3"},
 		},
 	}
-	c = NewChain(jc)
+	c = NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expectedValid = true
 	valid = c.adjacencyListIsValid()
@@ -649,7 +703,7 @@ func TestSequenceStartJob(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expect := jobs["job1"]
 	actual := c.SequenceStartJob("job2")
@@ -669,7 +723,7 @@ func TestIsSequenceStartJobs(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	if c.IsSequenceStartJob("job2") {
 		t.Errorf("got true that job2 is a sequence start job, expected false")
@@ -689,7 +743,7 @@ func TestCanRetrySequenceTrue(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	expect := true
 	actual := c.CanRetrySequence("job2")
@@ -709,7 +763,7 @@ func TestCanRetrySequenceFalse(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	// 2 retries are configured for the sequence job2 is in
 	jobId := "job2"
@@ -736,7 +790,7 @@ func TestIncrementSequenceTries(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	jobId := "job2"
 	c.IncrementSequenceTries(jobId)
@@ -759,7 +813,7 @@ func TestSequenceTries(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	jobId := "job2"
 
@@ -781,7 +835,7 @@ func TestIsDoneRetryableSequenceFalse(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_FAIL)
@@ -805,7 +859,7 @@ func TestIsDoneRetryableSequenceTrue(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	c := NewChain(jc)
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.IncrementSequenceTries("job1")
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_FAIL)

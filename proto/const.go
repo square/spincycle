@@ -22,7 +22,9 @@ const (
 	STATE_TIMEOUT // timeout
 	STATE_STOPPED // stopped by user
 
-	STATE_SUSPENDED // suspended; doesn't apply to jobs
+	// A request or chain can be suspended and then resumed at a later time.
+	// Jobs aren't suspended - they're stopped when a chain is suspended.
+	STATE_SUSPENDED
 )
 
 var StateName = map[byte]string{

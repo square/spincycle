@@ -17,9 +17,13 @@ var (
 type RunnerFactory struct {
 	RunnersToReturn map[string]*Runner // Keyed on job name.
 	MakeErr         error
+	MakeFunc        func(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (runner.Runner, error)
 }
 
 func (f *RunnerFactory) Make(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (runner.Runner, error) {
+	if f.MakeFunc != nil {
+		return f.MakeFunc(job, requestId, prevTryNo, triesToSkip, sequenceRetry)
+	}
 	return f.RunnersToReturn[job.Id], f.MakeErr
 }
 
