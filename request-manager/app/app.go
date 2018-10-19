@@ -15,8 +15,8 @@ import (
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/square/spincycle/config"
-	"github.com/square/spincycle/dev/jobs"
 	jr "github.com/square/spincycle/job-runner"
+	"github.com/square/spincycle/jobs"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/request-manager/id"
 	"github.com/square/spincycle/util"
