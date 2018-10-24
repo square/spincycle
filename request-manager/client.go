@@ -34,6 +34,11 @@ type Client interface {
 	// If the request is not running, it returns an error.
 	StopRequest(string) error
 
+	// SuspendRequest takes a request id and a SuspendedJobChain and suspends the
+	// corresponding request. It marks the request's state as suspended and saves
+	// the SuspendedJobChain.
+	SuspendRequest(string, proto.SuspendedJobChain) error
+
 	// RequestStatus gets the status of a request that corresponds to a
 	// given request id.
 	RequestStatus(string) (proto.RequestStatus, error)
@@ -120,6 +125,16 @@ func (c *client) StopRequest(requestId string) error {
 	return c.makeRequest("PUT", url, nil, http.StatusOK, nil)
 }
 
+func (c *client) SuspendRequest(requestId string, sjc proto.SuspendedJobChain) error {
+	// PUT /api/v1/requests/${requestId}/suspend
+
+	// Don't actually make the request for now (coming soon to a PR near you!):
+	// url := c.baseUrl + "/api/v1/requests/" + requestId + "/suspend"
+	// return c.makeRequest("PUT", url, sjc, http.StatusOK, nil)
+
+	return nil
+}
+
 func (c *client) RequestStatus(requestId string) (proto.RequestStatus, error) {
 	// GET /api/v1/requests/${requestId}/status
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/status"
@@ -173,7 +188,7 @@ func (c *client) SysStatRunning() (proto.RunningStatus, error) {
 // ------------------------------------------------------------------------- //
 
 // makeRequest is a helper function for making HTTP requests. The httpVerb, url,
-// and expectedStatusCode arguments are self explanitory. If the payloadStruct
+// and expectedStatusCode arguments are self explanatory. If the payloadStruct
 // argument is provided (if it's not nil), the struct will be marshalled into
 // JSON and sent as the payload of the request. If the respStruct argument is
 // provided (if it's not nil), the response body of the request will be

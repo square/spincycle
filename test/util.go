@@ -57,6 +57,7 @@ func InitJobsWithSequenceRetry(jobCount int, sequenceRetryCount uint) map[string
 		job := proto.Job{
 			Id:    fmt.Sprintf("job%d", i),
 			Bytes: bytes,
+			State: proto.STATE_PENDING,
 		}
 
 		// Set sequence data

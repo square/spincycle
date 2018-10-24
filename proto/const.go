@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package proto
 
@@ -21,24 +21,30 @@ const (
 	STATE_FAIL    // failed due to error or non-zero exit
 	STATE_TIMEOUT // timeout
 	STATE_STOPPED // stopped by user
+
+	// A request or chain can be suspended and then resumed at a later time.
+	// Jobs aren't suspended - they're stopped when a chain is suspended.
+	STATE_SUSPENDED
 )
 
 var StateName = map[byte]string{
-	STATE_UNKNOWN:  "UNKNOWN",
-	STATE_PENDING:  "PENDING",
-	STATE_RUNNING:  "RUNNING",
-	STATE_COMPLETE: "COMPLETE",
-	STATE_FAIL:     "FAIL",
-	STATE_TIMEOUT:  "TIMEOUT",
-	STATE_STOPPED:  "STOPPED",
+	STATE_UNKNOWN:   "UNKNOWN",
+	STATE_PENDING:   "PENDING",
+	STATE_RUNNING:   "RUNNING",
+	STATE_COMPLETE:  "COMPLETE",
+	STATE_FAIL:      "FAIL",
+	STATE_TIMEOUT:   "TIMEOUT",
+	STATE_STOPPED:   "STOPPED",
+	STATE_SUSPENDED: "SUSPENDED",
 }
 
 var StateValue = map[string]byte{
-	"UNKNOWN":  STATE_UNKNOWN,
-	"PENDING":  STATE_PENDING,
-	"RUNNING":  STATE_RUNNING,
-	"COMPLETE": STATE_COMPLETE,
-	"FAIL":     STATE_FAIL,
-	"TIMEOUT":  STATE_TIMEOUT,
-	"STOPPED":  STATE_STOPPED,
+	"UNKNOWN":   STATE_UNKNOWN,
+	"PENDING":   STATE_PENDING,
+	"RUNNING":   STATE_RUNNING,
+	"COMPLETE":  STATE_COMPLETE,
+	"FAIL":      STATE_FAIL,
+	"TIMEOUT":   STATE_TIMEOUT,
+	"STOPPED":   STATE_STOPPED,
+	"SUSPENDED": STATE_SUSPENDED,
 }

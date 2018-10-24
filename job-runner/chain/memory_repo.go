@@ -17,13 +17,13 @@ func NewMemoryRepo() *memoryRepo {
 	}
 }
 
-func (m *memoryRepo) Get(id string) (*chain, error) {
+func (m *memoryRepo) Get(id string) (*Chain, error) {
 	val, exists := m.ConcurrentMap.Get(id)
 	if !exists {
 		return nil, ErrNotFound
 	}
 
-	chain, ok := val.(*chain)
+	chain, ok := val.(*Chain)
 	if !ok {
 		return nil, ErrNotFound
 	}
@@ -31,16 +31,16 @@ func (m *memoryRepo) Get(id string) (*chain, error) {
 	return chain, nil
 }
 
-func (m *memoryRepo) GetAll() ([]chain, error) {
-	chains := []chain{}
+func (m *memoryRepo) GetAll() ([]Chain, error) {
+	chains := []Chain{}
 	for _, v := range m.ConcurrentMap.Items() {
-		chain := v.(*chain)
+		chain := v.(*Chain)
 		chains = append(chains, *chain)
 	}
 	return chains, nil
 }
 
-func (m *memoryRepo) Add(chain *chain) error {
+func (m *memoryRepo) Add(chain *Chain) error {
 	wasAbsent := m.ConcurrentMap.SetIfAbsent(chain.RequestId(), chain)
 	if !wasAbsent {
 		return ErrConflict
@@ -48,7 +48,7 @@ func (m *memoryRepo) Add(chain *chain) error {
 	return nil
 }
 
-func (m *memoryRepo) Set(chain *chain) error {
+func (m *memoryRepo) Set(chain *Chain) error {
 	m.ConcurrentMap.Set(chain.RequestId(), chain)
 	return nil
 }

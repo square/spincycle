@@ -103,7 +103,7 @@ func TestAdd(t *testing.T) {
 	setup()
 	defer teardown()
 
-	c := chain.NewChain(initJc())
+	c := chain.NewChain(initJc(), make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	err := repo.Add(c)
 	if err != nil {
@@ -127,7 +127,7 @@ func TestGetSet(t *testing.T) {
 	setup()
 	defer teardown()
 
-	c := chain.NewChain(initJc())
+	c := chain.NewChain(initJc(), make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	// Should not exist before Set
 	ret, err := repo.Get(c.RequestId())
@@ -155,7 +155,7 @@ func TestRemove(t *testing.T) {
 	setup()
 	defer teardown()
 
-	c := chain.NewChain(initJc())
+	c := chain.NewChain(initJc(), make(map[string]uint), make(map[string]uint), make(map[string]uint))
 
 	repo.Set(c)
 
@@ -196,7 +196,7 @@ func TestGetAll(t *testing.T) {
 			},
 		},
 	}
-	c1 := chain.NewChain(jc1)
+	c1 := chain.NewChain(jc1, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c1.SetJobState("job1", proto.STATE_PENDING)
 
 	jc2 := &proto.JobChain{
@@ -214,7 +214,7 @@ func TestGetAll(t *testing.T) {
 			},
 		},
 	}
-	c2 := chain.NewChain(jc2)
+	c2 := chain.NewChain(jc2, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c2.SetJobState("jobA", proto.STATE_RUNNING)
 
 	if err := repo.Add(c1); err != nil {

@@ -9,11 +9,12 @@ import (
 )
 
 // Repo is a small wrapper around a concurrent map that provides the ability to
-// store and retreive Runners in a thread-safe way.
+// store and retrieve Runners in a thread-safe way.
 type Repo interface {
 	Set(jobId string, runner Runner)
 	Remove(jobId string)
 	Items() (map[string]Runner, error)
+	Count() int
 }
 
 type repo struct {
@@ -47,4 +48,9 @@ func (r *repo) Items() (map[string]Runner, error) {
 		runners[jobId] = runner
 	}
 	return runners, nil
+}
+
+// Count returns the number of Runners in the repo.
+func (r *repo) Count() int {
+	return r.c.Count()
 }

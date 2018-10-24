@@ -17,9 +17,13 @@ var (
 type RunnerFactory struct {
 	RunnersToReturn map[string]*Runner // Keyed on job name.
 	MakeErr         error
+	MakeFunc        func(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (runner.Runner, error)
 }
 
-func (f *RunnerFactory) Make(job proto.Job, requestId string, prevTryNo uint, sequenceTry uint) (runner.Runner, error) {
+func (f *RunnerFactory) Make(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (runner.Runner, error) {
+	if f.MakeFunc != nil {
+		return f.MakeFunc(job, requestId, prevTryNo, triesToSkip, sequenceRetry)
+	}
 	return f.RunnersToReturn[job.Id], f.MakeErr
 }
 
@@ -30,7 +34,7 @@ type Runner struct {
 	AddedJobData map[string]interface{}                    // Data to add to jobData.
 	RunWg        *sync.WaitGroup                           // WaitGroup that gets released from when a runner starts running.
 	RunBlock     chan struct{}                             // Channel that runner.Run() will block on, if defined.
-	StopErr      error
+	IgnoreStop   bool                                      // false: return immediately after Stop, true: keep running after Stop
 	StatusResp   string
 
 	stopped bool // if Stop was called
@@ -39,7 +43,11 @@ type Runner struct {
 func (r *Runner) Run(jobData map[string]interface{}) runner.Return {
 	// If RunFunc is defined, use that.
 	if r.RunFunc != nil {
-		return r.RunReturn
+		state := r.RunFunc(jobData)
+		return runner.Return{
+			FinalState: state,
+			Tries:      r.RunReturn.Tries,
+		}
 	}
 
 	if r.RunWg != nil {
@@ -47,7 +55,7 @@ func (r *Runner) Run(jobData map[string]interface{}) runner.Return {
 	}
 	if r.RunBlock != nil {
 		<-r.RunBlock
-		if r.stopped {
+		if r.stopped && !r.IgnoreStop {
 			return r.RunReturn
 		}
 	}

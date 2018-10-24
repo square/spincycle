@@ -363,7 +363,7 @@ func TestGetJobChainSuccess(t *testing.T) {
 	}
 }
 
-func TestGetjlrror(t *testing.T) {
+func TestGetJLError(t *testing.T) {
 	reqId := "abcd1234"
 
 	setup(t, nil, http.StatusBadRequest, "")
@@ -411,7 +411,7 @@ func TestGetJLSuccess(t *testing.T) {
 	}
 }
 
-func TestCreatejlrror(t *testing.T) {
+func TestCreateJLError(t *testing.T) {
 	reqId := "abcd1234"
 	jobId := "job1"
 	jl := proto.JobLog{

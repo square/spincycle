@@ -10,8 +10,16 @@ import (
 	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/proto"
 	rm "github.com/square/spincycle/request-manager"
+	"github.com/square/spincycle/retry"
 
 	log "github.com/Sirupsen/logrus"
+)
+
+const (
+	// Number of times to attempt sending a job log to the RM.
+	JOB_LOG_TRIES = 3
+	// Time to wait between attempts to send a job log to RM.
+	JOB_LOG_RETRY_WAIT = 500 * time.Millisecond
 )
 
 type Return struct {
@@ -44,15 +52,15 @@ type runner struct {
 	reqId   string    // the request id the job belongs to
 	rmc     rm.Client // client used to send JLs to the RM
 	// --
-	jobId         string
-	jobName       string
-	jobType       string
-	prevTryNo     uint
-	sequenceId    string
-	sequenceRetry uint
-	maxTries      uint
-	retryWait     time.Duration
-	stopChan      chan struct{}
+	jobId       string
+	jobName     string
+	jobType     string
+	prevTryNo   uint
+	sequenceId  string
+	sequenceTry uint
+	maxTries    uint
+	retryWait   time.Duration
+	stopChan    chan struct{}
 	*sync.Mutex
 	logger    *log.Entry
 	startTime time.Time
@@ -60,23 +68,23 @@ type runner struct {
 
 // NewRunner takes a proto.Job struct and its corresponding job.Job interface, and
 // returns a Runner.
-func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, sequenceRetry uint, rmc rm.Client) Runner {
+func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, sequenceTry uint, rmc rm.Client) Runner {
 	return &runner{
 		realJob: realJob,
 		reqId:   reqId,
 		rmc:     rmc,
 		// --
-		jobId:         pJob.Id,
-		jobName:       pJob.Name,
-		jobType:       pJob.Type,
-		prevTryNo:     prevTryNo,
-		maxTries:      1 + pJob.Retry, // + 1 because we always run once
-		sequenceId:    pJob.SequenceId,
-		sequenceRetry: sequenceRetry,
-		retryWait:     time.Duration(pJob.RetryWait) * time.Millisecond,
-		stopChan:      make(chan struct{}),
-		Mutex:         &sync.Mutex{},
-		logger:        log.WithFields(log.Fields{"requestId": reqId, "jobId": pJob.Id}),
+		jobId:       pJob.Id,
+		jobName:     pJob.Name,
+		jobType:     pJob.Type,
+		prevTryNo:   prevTryNo,
+		maxTries:    1 + pJob.Retry, // + 1 because we always run once
+		sequenceId:  pJob.SequenceId,
+		sequenceTry: sequenceTry,
+		retryWait:   time.Duration(pJob.RetryWait) * time.Millisecond,
+		stopChan:    make(chan struct{}),
+		Mutex:       &sync.Mutex{},
+		logger:      log.WithFields(log.Fields{"requestId": reqId, "jobId": pJob.Id}),
 	}
 }
 
@@ -124,7 +132,7 @@ TRY_LOOP:
 			Type:        r.jobType,
 			Try:         r.prevTryNo + tryNo,
 			SequenceId:  r.sequenceId,
-			SequenceTry: 1 + r.sequenceRetry,
+			SequenceTry: r.sequenceTry,
 			StartedAt:   startedAt,
 			FinishedAt:  finishedAt,
 			State:       jobRet.State,
@@ -133,8 +141,15 @@ TRY_LOOP:
 			Stdout:      jobRet.Stdout,
 			Stderr:      jobRet.Stderr,
 		}
-		if err := r.rmc.CreateJL(r.reqId, jl); err != nil {
-			tryLogger.Errorf("problem sending job log (%#v) to the RM: %s", jl, err)
+		// Send the JL to the RM.
+		err := retry.Do(JOB_LOG_TRIES, JOB_LOG_RETRY_WAIT,
+			func() error {
+				return r.rmc.CreateJL(r.reqId, jl)
+			},
+			nil,
+		)
+		if err != nil {
+			tryLogger.Errorf("problem sending job log (%#v) to the Request Manager: %s", jl, err)
 		}
 
 		// Set final job state to this job state
@@ -163,9 +178,9 @@ TRY_LOOP:
 		select {
 		case <-time.After(r.retryWait):
 		case <-r.stopChan:
-			break TRY_LOOP // job stopped
+			// runner has been stopped
+			break TRY_LOOP
 		}
-
 		tryNo++
 	}
 

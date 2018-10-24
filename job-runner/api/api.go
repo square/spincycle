@@ -6,11 +6,14 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/orcaman/concurrent-map"
@@ -30,6 +33,9 @@ var (
 	ErrDuplicateTraverser = errors.New("traverser already exists")
 	ErrTraverserNotFound  = errors.New("traverser not found")
 	ErrInvalidTraverser   = errors.New("traverser found, but type is invalid")
+
+	// Error when Job Runner is shutting down and not starting new job chains
+	ErrShuttingDown = errors.New("Job Runner is shutting down - no new job chains are being started")
 )
 
 // api provides controllers for endpoints it registers with a router.
@@ -38,18 +44,20 @@ type API struct {
 	traverserFactory chain.TraverserFactory
 	traverserRepo    cmap.ConcurrentMap
 	stat             status.Manager
+	shutdownChan     chan struct{}
 	// --
 	echo *echo.Echo
 }
 
-// NewAPI cretes a new API struct. It initializes an echo web server within the
+// NewAPI creates a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
-func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager) *API {
+func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager, shutdownChan chan struct{}) *API {
 	api := &API{
 		appCtx:           appCtx,
 		traverserFactory: traverserFactory,
 		traverserRepo:    traverserRepo,
 		stat:             stat,
+		shutdownChan:     shutdownChan,
 		// --
 		echo: echo.New(),
 	}
@@ -59,6 +67,8 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 	// //////////////////////////////////////////////////////////////////////
 	// Create a new job chain and start running it.
 	api.echo.POST(API_ROOT+"job-chains", api.newJobChainHandler)
+	// Resume running a suspended job chain.
+	api.echo.POST(API_ROOT+"job-chains/resume", api.resumeJobChainHandler)
 	// Stop running a job chain.
 	api.echo.PUT(API_ROOT+"job-chains/:requestId/stop", api.stopJobChainHandler)
 	// Get the status of a job chain.
@@ -109,15 +119,67 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 }
 
 func (api *API) Run() error {
+	// Shut down the API when the Job Runner shuts down.
+	doneChan := make(chan struct{})
+	doneShuttingDown := make(chan struct{})
+	go func() {
+		select {
+		case <-api.shutdownChan:
+			api.shutdown()
+			close(doneShuttingDown)
+		case <-doneChan:
+			return
+		}
+	}()
+
+	// Run API server.
+	var err error
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
-		return api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
+		err = api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
 	} else {
-		return api.echo.Start(api.appCtx.Config.Server.ListenAddress)
+		err = api.echo.Start(api.appCtx.Config.Server.ListenAddress)
 	}
+
+	// If API was shut down, wait to make sure it's done shutting down.
+	select {
+	case <-api.shutdownChan:
+		<-doneShuttingDown
+	default:
+		close(doneChan) // stop the shutdown goroutine
+	}
+	return err
 }
 
 func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.echo.ServeHTTP(w, r)
+}
+
+func (api *API) shutdown() {
+	// Wait for all traversers to shut down. Timeout if they aren't done
+	// within 20 seconds.
+	timeout := time.After(20 * time.Second)
+WAIT_FOR_TRAVERSERS:
+	for !api.traverserRepo.IsEmpty() {
+		select {
+		case <-time.After(10 * time.Millisecond):
+			// Check again if traversers are all done.
+		case <-timeout:
+			break WAIT_FOR_TRAVERSERS
+		}
+	}
+
+	// Shut down server.
+	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
+		err := api.echo.TLSServer.Shutdown(context.TODO())
+		if err != nil {
+			log.Warnf("error when shutting down API: %s", err)
+		}
+	} else {
+		err := api.echo.Server.Shutdown(context.TODO())
+		if err != nil {
+			log.Warnf("error when shutting down API: %s", err)
+		}
+	}
 }
 
 // ============================== CONTROLLERS ============================== //
@@ -127,6 +189,13 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // chain repo. If it doesn't pass, return the validation error. Then start
 // running the job chain.
 func (api *API) newJobChainHandler(c echo.Context) error {
+	// If Job Runner is shutting down, don't start running any new job chains.
+	select {
+	case <-api.shutdownChan:
+		return handleError(ErrShuttingDown)
+	default:
+	}
+
 	// Convert the payload into a proto.JobChain.
 	var jc proto.JobChain
 	if err := c.Bind(&jc); err != nil {
@@ -153,6 +222,50 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 	// so we run it in a goroutine.
 	go func() {
 		defer api.traverserRepo.Remove(jc.RequestId)
+		t.Run()
+	}()
+
+	return nil
+}
+
+// POST <API_ROOT>/job-chains/resume
+// Resume running a previously suspended job chain. Do some basic validation on
+// the job chain and, if it passes, add it to the chain repo. If it doesn't pass,
+// return the validation error. Then start running the job chain.
+func (api *API) resumeJobChainHandler(c echo.Context) error {
+	// If Job Runner is shutting down, don't start running any new job chains.
+	select {
+	case <-api.shutdownChan:
+		return handleError(ErrShuttingDown)
+	default:
+	}
+
+	// Convert the payload into a proto.SuspendedJobChain.
+	var sjc proto.SuspendedJobChain
+	if err := c.Bind(&sjc); err != nil {
+		return err
+	}
+
+	// Create a new traverser.
+	t, err := api.traverserFactory.MakeFromSJC(sjc)
+	if err != nil {
+		return handleError(err)
+	}
+
+	// Save traverser to the repo.
+	wasAbsent := api.traverserRepo.SetIfAbsent(sjc.RequestId, t)
+	if !wasAbsent {
+		return handleError(ErrDuplicateTraverser)
+	}
+
+	// Set the location in the response header to point to this server.
+	c.Response().Header().Set("Location", chainLocation(sjc.RequestId, os.Hostname))
+
+	// Start the traverser, and remove it from the repo when it's
+	// done running. This could take a very long time to return,
+	// so we run it in a goroutine.
+	go func() {
+		defer api.traverserRepo.Remove(sjc.RequestId)
 		t.Run()
 	}()
 
@@ -232,12 +345,12 @@ func handleError(err error) *echo.HTTPError {
 			return echo.NewHTTPError(http.StatusNotFound, err.Error())
 		case ErrDuplicateTraverser:
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		case ErrShuttingDown:
+			return echo.NewHTTPError(http.StatusServiceUnavailable, err.Error())
 		default:
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 	}
-
-	return nil
 }
 
 // chainLocation returns the URL location of a job chain
