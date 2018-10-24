@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/proto"
@@ -34,6 +35,8 @@ func (f factory) Make(jid job.Id) (job.Job, error) {
 		return NewNop(jid), nil
 	case "shell-command":
 		return NewShellCommand(jid), nil
+	case "sleep":
+		return NewSleep(jid), nil
 	}
 	return nil, job.ErrUnknownJobType
 }
@@ -151,6 +154,100 @@ func (j *ShellCommand) setStatus(msg string) {
 	j.Lock()
 	defer j.Unlock()
 	j.status = msg
+}
+
+// Sleep is a job.Job that sleeps for a given time.
+type Sleep struct {
+	// Internal data (serialized)
+	Duration time.Duration `json:"duration"` // how long to sleep
+
+	// While running
+	stopChan chan struct{}
+	stopped  bool
+	*sync.Mutex
+
+	// Meta
+	id job.Id
+}
+
+// NewSleep instantiates a new Sleep job. This should only be called
+// by the Factory. jobName must be unique within a job chain.
+func NewSleep(jid job.Id) *Sleep {
+	return &Sleep{
+		id:       jid,
+		Mutex:    &sync.Mutex{},
+		stopChan: make(chan struct{}),
+		stopped:  false,
+	}
+}
+
+// Create is a job.Job interface method.
+func (j *Sleep) Create(jobArgs map[string]interface{}) error {
+	arg, ok := jobArgs["duration"]
+	if !ok {
+		return job.ErrArgNotSet{Arg: "duration"}
+	}
+	durationStr := arg.(string) + "ms"
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		return err
+	}
+	j.Duration = duration
+
+	return nil
+}
+
+// Serialize is a job.Job interface method.
+func (j *Sleep) Serialize() ([]byte, error) {
+	return json.Marshal(j)
+}
+
+// Deserialize is a job.Job interface method.
+func (j *Sleep) Deserialize(bytes []byte) error {
+	var d Sleep
+	if err := json.Unmarshal(bytes, &d); err != nil {
+		return err
+	}
+	j.Duration = d.Duration
+
+	return nil
+}
+
+// Run is a job.Job interface method.
+func (j *Sleep) Run(jobData map[string]interface{}) (job.Return, error) {
+	ret := job.Return{}
+
+	select {
+	case <-time.After(j.Duration):
+		ret.State = proto.STATE_COMPLETE
+	case <-j.stopChan:
+		ret.State = proto.STATE_STOPPED
+	}
+
+	return ret, nil
+}
+
+// Stop is a job.Job interface method.
+func (j *Sleep) Stop() error {
+	j.Lock()
+	defer j.Unlock()
+	if j.stopped {
+		return nil
+	}
+	j.stopped = true
+
+	close(j.stopChan)
+	return nil
+}
+
+// Status is a job.Job interface method.
+func (j *Sleep) Status() string {
+	return "sleeping"
+}
+
+// Id is a job.Job interface method.
+func (j *Sleep) Id() job.Id {
+	return j.id
 }
 
 // Nop is a no-op job that does nothing and always returns success. It's used in
