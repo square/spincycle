@@ -121,6 +121,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 			RetryWait:     node.RetryWait,
 			SequenceId:    node.SequenceId,
 			SequenceRetry: node.SequenceRetry,
+			State:         proto.STATE_PENDING,
 		}
 		jc.Jobs[jobId] = job
 	}

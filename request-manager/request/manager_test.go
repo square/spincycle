@@ -183,6 +183,12 @@ func TestCreate(t *testing.T) {
 		}
 	*/
 
+	for _, job := range actualJobChain.Jobs {
+		if job.State != proto.STATE_PENDING {
+			t.Errorf("job %s has state %s, expected all jobs to be STATE_PENDING", job.Id, proto.StateName[job.State])
+		}
+	}
+
 	expectedReq := proto.Request{
 		Id:        actualReq.Id, // no other way of getting this from outside the package
 		Type:      reqParams.Type,
