@@ -197,6 +197,15 @@ create_db() {
 }
 
 build() {
+  if [[ ! -L "$REPO_ROOT_DIR/jobs" ]]; then
+    echo "Installing development sandbox jobs..."
+    rm "$REPO_ROOT_DIR/jobs/factory.go"
+    rmdir "$REPO_ROOT_DIR/jobs"
+    ln -s dev/jobs "$REPO_ROOT_DIR/jobs"
+  else
+    echo "Using development sandbox jobs"
+  fi
+
   if [[ ! -x "$RM_BIN" ]] || [[ "$BUILD" ]]; then
     echo "Building request manager..."
     cd "$REPO_ROOT_DIR/request-manager/bin"

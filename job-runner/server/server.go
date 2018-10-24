@@ -12,12 +12,12 @@ import (
 	"github.com/orcaman/concurrent-map"
 
 	"github.com/square/spincycle/config"
-	"github.com/square/spincycle/dev/jobs"
 	"github.com/square/spincycle/job-runner/api"
 	"github.com/square/spincycle/job-runner/app"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job-runner/status"
+	"github.com/square/spincycle/jobs"
 )
 
 type Server struct {
