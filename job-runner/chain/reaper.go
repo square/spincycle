@@ -405,8 +405,10 @@ func (r *SuspendedChainReaper) Finalize() {
 	if done {
 		// If chain finished, send final state to RM.
 		if complete {
+			r.logger.Infof("chain is done, all jobs finished successfully")
 			r.chain.SetState(proto.STATE_COMPLETE)
 		} else {
+			r.logger.Infof("chain is done, some jobs failed")
 			r.chain.SetState(proto.STATE_FAIL)
 		}
 		r.chainRepo.Set(r.chain)
@@ -417,6 +419,7 @@ func (r *SuspendedChainReaper) Finalize() {
 	}
 
 	// Chain isn't done - send SuspendedJobChain to RM.
+	r.logger.Infof("chain is not done - sending Suspended Job Chain to RM...")
 	r.chain.SetState(proto.STATE_SUSPENDED)
 	r.chainRepo.Set(r.chain)
 	sjc := r.chain.ToSuspended()
@@ -428,7 +431,7 @@ func (r *SuspendedChainReaper) Finalize() {
 	)
 	if err != nil {
 		// If we couldn't suspend the request, mark it as failed instead.
-		r.logger.Errorf("problem sending suspended job chain to the Request Manager (%s). Treating chain as failed.", err)
+		r.logger.Errorf("problem sending Suspended Job Chain to the Request Manager (%s). Treating chain as failed.", err)
 		r.chain.SetState(proto.STATE_FAIL)
 		r.sendFinalState(finishedAt)
 	}
@@ -530,8 +533,10 @@ func (r *StoppedChainReaper) Finalize() {
 	// and send this final state to the RM.
 	_, complete := r.chain.IsDoneRunning()
 	if complete {
+		r.logger.Infof("chain is done, all jobs finished successfully")
 		r.chain.SetState(proto.STATE_COMPLETE)
 	} else {
+		r.logger.Infof("chain is done, some jobs failed")
 		r.chain.SetState(proto.STATE_FAIL)
 	}
 	r.chainRepo.Set(r.chain)

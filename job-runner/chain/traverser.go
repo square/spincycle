@@ -309,7 +309,9 @@ func (t *traverser) Stop() error {
 	// they are reaped correctly.
 	err := t.stopRunningJobs()
 	if err != nil {
-		return fmt.Errorf("problem stopping traverser: %s", err)
+		// Don't return the error yet - we still want to wait for the stop
+		// reaper to be done.
+		err = fmt.Errorf("traverser was stopped, but encountered an error in the process: %s", err)
 	}
 
 	// Wait for the stopped reaper to finish. If it takes too long, some jobs
@@ -322,7 +324,7 @@ func (t *traverser) Stop() error {
 		t.reaper.Stop()
 	}
 	close(t.doneChan)
-	return nil
+	return err
 }
 
 // Status returns the status of currently running jobs in the chain.

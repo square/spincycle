@@ -292,7 +292,7 @@ func (m *manager) Stop(requestId string) error {
 	// Tell the JR to stop running the job chain for the request.
 	err = m.jrc.StopRequest(requestId)
 	if err != nil {
-		return err
+		return fmt.Errorf("error stopping request in Job Runner: %s", err)
 	}
 
 	return nil
