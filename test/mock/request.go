@@ -4,8 +4,10 @@ package mock
 
 import (
 	"errors"
+	"net/http"
 
 	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/request-manager/auth"
 )
 
 var (
@@ -85,4 +87,25 @@ func (r *RequestManager) JobChain(reqId string) (proto.JobChain, error) {
 		return r.JobChainFunc(reqId)
 	}
 	return proto.JobChain{}, nil
+}
+
+// --------------------------------------------------------------------------
+
+type Auth struct {
+	AuthenticateFunc func(*http.Request) (auth.Caller, error)
+	AuthorizeFunc    func(c auth.Caller, op string, req proto.Request) error
+}
+
+func (a Auth) Authenticate(req *http.Request) (auth.Caller, error) {
+	if a.AuthenticateFunc != nil {
+		return a.AuthenticateFunc(req)
+	}
+	return auth.Caller{}, nil
+}
+
+func (a Auth) Authorize(c auth.Caller, op string, req proto.Request) error {
+	if a.AuthorizeFunc != nil {
+		return a.AuthorizeFunc(c, op, req)
+	}
+	return nil
 }

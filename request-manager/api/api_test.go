@@ -13,6 +13,7 @@ import (
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/app"
+	"github.com/square/spincycle/request-manager/auth"
 	testutil "github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
 )
@@ -462,5 +463,139 @@ func TestCreateJLHandlerJobFailed(t *testing.T) {
 	// Check that the IncrementFinishedJobs method on the request manager was NOT called.
 	if rmCalled != false {
 		t.Errorf("IncrementFinishedJob on the request manager was called, expected it not to be")
+	}
+}
+
+func TestAuth(t *testing.T) {
+	// Test authentication and authorizaiton with an auth plugin we control.
+	// The app default auth allows everything, so we have to override the plugin.
+	var caller auth.Caller
+	var authenErr, authorErr error
+	var authenticateCalled, authorizeCalled, createCalled, startCalled bool
+	var authOp string
+	var authReq proto.Request
+	reset := func() {
+		authenticateCalled = false
+		authorizeCalled = false
+		createCalled = false
+		startCalled = false
+		authenErr = nil
+		authorErr = nil
+		authOp = ""
+		authReq = proto.Request{}
+	}
+	ctx := app.Defaults()
+	ctx.Plugins.Auth = mock.Auth{
+		AuthenticateFunc: func(*http.Request) (auth.Caller, error) {
+			authenticateCalled = true
+			return caller, authenErr
+		},
+		AuthorizeFunc: func(c auth.Caller, op string, req proto.Request) error {
+			authorizeCalled = true
+			authOp = op
+			authReq = req
+			return authorErr
+		},
+	}
+
+	req := proto.Request{
+		Id:    "xyz",
+		State: proto.STATE_PENDING,
+	}
+	rm := &mock.RequestManager{
+		CreateFunc: func(proto.CreateRequestParams) (proto.Request, error) {
+			createCalled = true
+			return req, nil
+		},
+		StartFunc: func(string) error {
+			startCalled = true
+			return nil
+		},
+	}
+
+	server := httptest.NewServer(api.NewAPI(ctx, rm, &mock.JLStore{}, &mock.RMStatus{}))
+	defer func() {
+		server.CloseClientConnections()
+		server.Close()
+	}()
+	baseURL := server.URL + api.API_ROOT
+
+	payload := `{"type":"something","args":{"first":"arg1","second":"arg2"}}`
+
+	// Authentication fails
+	// ----------------------------------------------------------------------
+
+	reset()
+	authenErr = fmt.Errorf("forced authenticated error")
+
+	statusCode, _, err := testutil.MakeHTTPRequest("POST", baseURL+"requests", []byte(payload), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statusCode != http.StatusUnauthorized {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusUnauthorized)
+	}
+	if authenticateCalled == false {
+		t.Errorf("Authenticate not called, expected it to be called")
+	}
+	if authorizeCalled == true {
+		t.Errorf("Authorize called, expected it NOT to be called")
+	}
+	if createCalled == true {
+		t.Errorf("request.Manager.Create called, expected it NOT to be called")
+	}
+
+	// Authentication ok, then authorize fails in the controller
+	// ----------------------------------------------------------------------
+
+	reset()
+	authorErr = fmt.Errorf("forced authorization error")
+
+	statusCode, _, err = testutil.MakeHTTPRequest("POST", baseURL+"requests", []byte(payload), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statusCode != http.StatusUnauthorized {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusUnauthorized)
+	}
+	if authenticateCalled == false {
+		t.Errorf("Authenticate not called, expected it to be called")
+	}
+	if authorizeCalled == false {
+		t.Errorf("Authorize not called, expected it to be called")
+	}
+	if authOp != proto.REQUEST_OP_START {
+		t.Errorf("got op %s, expected %s", authOp, proto.REQUEST_OP_START)
+	}
+	if createCalled == false { // have to create it to authorize it
+		t.Errorf("request.Manager.Create not called, expected it to be called")
+	}
+	if startCalled == true { // but auth fails, so don't start it
+		t.Errorf("request.Manager.Start called, expected it NOT to be called")
+	}
+
+	// All auth OK
+	// ----------------------------------------------------------------------
+
+	reset()
+
+	statusCode, _, err = testutil.MakeHTTPRequest("POST", baseURL+"requests", []byte(payload), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if statusCode != http.StatusCreated {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusCreated)
+	}
+	if authenticateCalled == false {
+		t.Errorf("Authenticate not called, expected it to be called")
+	}
+	if authorizeCalled == false {
+		t.Errorf("Authorize not called, expected it to be called")
+	}
+	if createCalled == false {
+		t.Errorf("request.Manager.Create not called, expected it to be called")
+	}
+	if startCalled == false {
+		t.Errorf("request.Manager.Start not called, expected it to be called")
 	}
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/app"
+	"github.com/square/spincycle/request-manager/auth"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
@@ -76,21 +77,15 @@ func NewAPI(appCtx app.Context, rm request.Manager, jls joblog.Store, stat statu
 	api.echo.Use(middleware.Recover())
 	api.echo.Use(middleware.Logger())
 
-	// Auth hook
+	// Auth plugin: authenticate user or app
 	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if appCtx.Hooks.Auth == nil {
-				return next(c) // no auth
-			}
-			ok, err := appCtx.Hooks.Auth(c.Request())
+			caller, err := appCtx.Plugins.Auth.Authenticate(c.Request())
 			if err != nil {
-				return err
+				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
-			if !ok {
-				//c.Response().Header().Set(echo.HeaderWWWAuthenticate, basic+" realm="+realm)
-				return echo.ErrUnauthorized // 401
-			}
-			return next(c) // auth OK
+			c.Set("caller", caller)
+			return next(c) // authenticed
 		}
 	}))
 
@@ -124,8 +119,6 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.echo.ServeHTTP(w, r)
 }
 
-// ============================== CONTROLLERS ============================== //
-
 // POST <API_ROOT>/requests
 // Create a new request and start it.
 func (api *API) createRequestHandler(c echo.Context) error {
@@ -149,6 +142,11 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	req, err := api.rm.Create(reqParams)
 	if err != nil {
 		return handleError(err)
+	}
+
+	// Authorize caller to start request
+	if err := api.appCtx.Plugins.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_START, req); err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 	}
 
 	// Start the request.
@@ -216,6 +214,15 @@ func (api *API) finishRequestHandler(c echo.Context) error {
 // if the request is not running.
 func (api *API) stopRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
+
+	// Authorize caller to stop request
+	// @todo: provide full Request to auth plugin
+	req := proto.Request{
+		Id: reqId,
+	}
+	if err := api.appCtx.Plugins.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_STOP, req); err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
+	}
 
 	if err := api.rm.Stop(reqId); err != nil {
 		return handleError(err)

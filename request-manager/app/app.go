@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	myconn "github.com/go-mysql/conn"
@@ -17,6 +18,7 @@ import (
 	"github.com/square/spincycle/config"
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/jobs"
+	"github.com/square/spincycle/request-manager/auth"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/request-manager/id"
 	"github.com/square/spincycle/util"
@@ -25,6 +27,7 @@ import (
 type Context struct {
 	Hooks     Hooks
 	Factories Factories
+	Plugins   Plugins
 
 	Config config.RequestManager
 }
@@ -37,8 +40,11 @@ type Factories struct {
 
 type Hooks struct {
 	LoadConfig  func(Context) (config.RequestManager, error)
-	Auth        func(*http.Request) (bool, error)
 	SetUsername func(*http.Request) (string, error)
+}
+
+type Plugins struct {
+	Auth auth.Auth
 }
 
 func Defaults() Context {
@@ -53,6 +59,9 @@ func Defaults() Context {
 			SetUsername: (func(ireq *http.Request) (string, error) {
 				return "admin", nil
 			}),
+		},
+		Plugins: Plugins{
+			Auth: auth.AllowAll{},
 		},
 	}
 }
@@ -77,23 +86,26 @@ func LoadConfig(ctx Context) (config.RequestManager, error) {
 }
 
 func MakeGrapher(ctx Context) (grapher.GrapherFactory, error) {
-	allGrapherCfgs := grapher.Config{
+	specs := grapher.Config{
 		Sequences: map[string]*grapher.SequenceSpec{},
 	}
 	// For each config in the cfg.SpecFileDir directory, read the file and
 	// then aggregate all of the resulting configs into a single struct.
-	files, _ := ioutil.ReadDir(ctx.Config.SpecFileDir) // add your specs to this dir
-	for _, f := range files {
-		grapherCfg, err := grapher.ReadConfig(ctx.Config.SpecFileDir + "/" + f.Name())
+	specFiles, err := ioutil.ReadDir(ctx.Config.SpecFileDir)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range specFiles {
+		spec, err := grapher.ReadConfig(filepath.Join(ctx.Config.SpecFileDir, f.Name()))
 		if err != nil {
-			return nil, fmt.Errorf("error reading grapher config file %s: %s", f.Name(), err)
+			return nil, fmt.Errorf("error reading spec file %s: %s", f.Name(), err)
 		}
-		for k, v := range grapherCfg.Sequences {
-			allGrapherCfgs.Sequences[k] = v
+		for name, spec := range spec.Sequences {
+			specs.Sequences[name] = spec
 		}
 	}
 	idf := id.NewGeneratorFactory(4, 100) // generate 4-character ids for jobs
-	grf := grapher.NewGrapherFactory(jobs.Factory, &allGrapherCfgs, idf)
+	grf := grapher.NewGrapherFactory(jobs.Factory, &specs, idf)
 	return grf, nil
 }
 

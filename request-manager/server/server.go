@@ -6,7 +6,6 @@ package server
 import (
 	"fmt"
 
-	"github.com/square/spincycle/config"
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/app"
 	"github.com/square/spincycle/request-manager/joblog"
@@ -59,13 +58,7 @@ func (s *Server) API() *api.API {
 // --------------------------------------------------------------------------
 
 func loadConfig(appCtx *app.Context) error {
-	var err error
-	var cfg config.RequestManager
-	if appCtx.Hooks.LoadConfig != nil {
-		cfg, err = appCtx.Hooks.LoadConfig(*appCtx)
-	} else {
-		cfg, err = appCtx.Hooks.LoadConfig(*appCtx)
-	}
+	cfg, err := appCtx.Hooks.LoadConfig(*appCtx)
 	if err != nil {
 		return fmt.Errorf("error loading config at %s", err)
 	}
@@ -74,42 +67,33 @@ func loadConfig(appCtx *app.Context) error {
 }
 
 func makeAPI(appCtx app.Context) (*api.API, error) {
-	var err error
-
-	// //////////////////////////////////////////////////////////////////////
-	// Grapher Factory
-	// //////////////////////////////////////////////////////////////////////
+	// Grapher: load, parse, and validate specs. Done only once on startup.
 	grf, err := appCtx.Factories.MakeGrapher(appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("error loading config at %s", err)
+		return nil, fmt.Errorf("MakeGrapher: %s", err)
 	}
 
-	// //////////////////////////////////////////////////////////////////////
-	// Job Runner Client
-	// //////////////////////////////////////////////////////////////////////
+	// Job Runner Client: how the Request Manager talks to Job Runners
 	jrc, err := appCtx.Factories.MakeJobRunnerClient(appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("error loading config at %s", err)
+		return nil, fmt.Errorf("MakeJobRunnerClient: %s", err)
 	}
 
-	// //////////////////////////////////////////////////////////////////////
-	// DB Connection Pool
-	// //////////////////////////////////////////////////////////////////////
+	// Db connection pool: for requests, job chains, etc. (pretty much everything)
 	dbc, err := appCtx.Factories.MakeDbConnPool(appCtx)
 	if err != nil {
-		return nil, fmt.Errorf("error loading config at %s", err)
+		return nil, fmt.Errorf("MakeDbConnPool: %s", err)
 	}
 
-	// //////////////////////////////////////////////////////////////////////
-	// Request Manager, Job Log Store, and Job Chain Store
-	// //////////////////////////////////////////////////////////////////////
+	// Request Manager: core logic and coordination
 	rm := request.NewManager(grf, dbc, jrc)
 
-	// //////////////////////////////////////////////////////////////////////
-	// API
-	// //////////////////////////////////////////////////////////////////////
+	// Status: figure out request status using db and Job Runners (real-time)
 	stat := status.NewManager(dbc, jrc)
+
+	// Job log store: save job log entries (JLE) from Job Runners
 	jls := joblog.NewStore(dbc)
 
+	// API: endpoints and controllers, also handles auth via auth plugin
 	return api.NewAPI(appCtx, rm, jls, stat), nil
 }
