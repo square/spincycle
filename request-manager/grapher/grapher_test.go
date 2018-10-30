@@ -1312,7 +1312,7 @@ func TestAuthSpec(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect := &Config{
+	expect := Config{
 		Sequences: map[string]*SequenceSpec{
 			"req1": &SequenceSpec{
 				Name:    "req1",

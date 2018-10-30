@@ -78,15 +78,15 @@ type Config struct {
 // ReadConfig will read from configFile and return a Config that the user
 // can then use for NewGrapher(). configFile is expected to be in the yaml
 // format specified.
-func ReadConfig(configFile string) (*Config, error) {
+func ReadConfig(configFile string) (Config, error) {
+	var cfg Config
 	sequenceData, err := ioutil.ReadFile(configFile)
 	if err != nil {
-		return nil, err
+		return cfg, err
 	}
-	cfg := &Config{}
-	err = yaml.Unmarshal(sequenceData, cfg)
+	err = yaml.Unmarshal(sequenceData, &cfg)
 	if err != nil {
-		return nil, err
+		return cfg, err
 	}
 
 	for sequenceName, sequence := range cfg.Sequences {
@@ -99,13 +99,13 @@ func ReadConfig(configFile string) (*Config, error) {
 		seen := map[string]bool{}
 		for _, acl := range sequence.ACL {
 			if acl.Admin && len(acl.Ops) != 0 {
-				return nil, fmt.Errorf("invalid user ACL for %s in %s: admin=true and ops are mutually exclusive; set admin=false or remove ops", sequenceName, configFile)
+				return cfg, fmt.Errorf("invalid user ACL for %s in %s: admin=true and ops are mutually exclusive; set admin=false or remove ops", sequenceName, configFile)
 			}
 			if acl.Role == "" {
-				return nil, fmt.Errorf("invalid user ACL for %s in %s: role is not set (empty string); it must be set", sequenceName, configFile)
+				return cfg, fmt.Errorf("invalid user ACL for %s in %s: role is not set (empty string); it must be set", sequenceName, configFile)
 			}
 			if seen[acl.Role] {
-				return nil, fmt.Errorf("duplicate user ACL for %s in %s: role=%s", sequenceName, configFile, acl.Role)
+				return cfg, fmt.Errorf("duplicate user ACL for %s in %s: role=%s", sequenceName, configFile, acl.Role)
 			}
 			seen[acl.Role] = true
 		}

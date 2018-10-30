@@ -134,8 +134,13 @@ type TLS struct {
 
 // Auth configuration.
 type Auth struct {
-	// Callers with one of these roles are request admins (allowed all ops) for all requests.
+	// Callers with one of these roles are admins (allowed all ops) for all requests.
 	AdminRoles []string `yaml:"admin_roles"`
+
+	// Strict requires all requests to have ACLs, else callers are denied unless
+	// they have an admin role. Strict is disabled by default which, with the default
+	// auth plugin, allows all callers (no auth).
+	Strict bool `yaml:"strict"`
 }
 
 ///////////////////////////////////////////////////////////////////////////////

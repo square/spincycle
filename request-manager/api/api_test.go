@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
+	"github.com/labstack/echo"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/api"
@@ -21,8 +22,12 @@ import (
 var server *httptest.Server
 
 func setup(rm *mock.RequestManager, jls *mock.JLStore) {
-	a := api.NewAPI(app.Defaults(), rm, jls, &mock.RMStatus{})
-	server = httptest.NewServer(a)
+	appCtx := app.Defaults()
+	appCtx.RM = rm
+	appCtx.JLS = jls
+	appCtx.Status = &mock.RMStatus{}
+	appCtx.Auth = auth.NewManager(auth.AllowAll{}, map[string][]auth.ACL{}, []string{"all"}, false)
+	server = httptest.NewServer(api.NewAPI(appCtx))
 }
 
 func cleanup() {
@@ -483,6 +488,10 @@ func TestAuth(t *testing.T) {
 		authorErr = nil
 		authOp = ""
 		authReq = proto.Request{}
+		caller = auth.Caller{
+			User:  "dn",
+			Roles: []string{"role1", "role2"}, // matches roles in auth-001.yaml (see below)
+		}
 	}
 	ctx := app.Defaults()
 	ctx.Plugins.Auth = mock.Auth{
@@ -500,9 +509,10 @@ func TestAuth(t *testing.T) {
 
 	req := proto.Request{
 		Id:    "xyz",
+		Type:  "req1",
 		State: proto.STATE_PENDING,
 	}
-	rm := &mock.RequestManager{
+	ctx.RM = &mock.RequestManager{
 		CreateFunc: func(proto.CreateRequestParams) (proto.Request, error) {
 			createCalled = true
 			return req, nil
@@ -513,14 +523,28 @@ func TestAuth(t *testing.T) {
 		},
 	}
 
-	server := httptest.NewServer(api.NewAPI(ctx, rm, &mock.JLStore{}, &mock.RMStatus{}))
+	acls := map[string][]auth.ACL{
+		"req1": []auth.ACL{
+			{
+				Role:  "role1",
+				Admin: true,
+			},
+			{
+				Role: "role2",
+				Ops:  []string{"start", "stop"},
+			},
+		},
+	}
+	ctx.Auth = auth.NewManager(ctx.Plugins.Auth, acls, nil, true)
+
+	server := httptest.NewServer(api.NewAPI(ctx))
 	defer func() {
 		server.CloseClientConnections()
 		server.Close()
 	}()
 	baseURL := server.URL + api.API_ROOT
 
-	payload := `{"type":"something","args":{"first":"arg1","second":"arg2"}}`
+	payload := `{"type":"req1","args":{"arg1":"hello","second":"arg2"}}`
 
 	// Authentication fails
 	// ----------------------------------------------------------------------
@@ -551,7 +575,9 @@ func TestAuth(t *testing.T) {
 	reset()
 	authorErr = fmt.Errorf("forced authorization error")
 
-	statusCode, _, err = testutil.MakeHTTPRequest("POST", baseURL+"requests", []byte(payload), nil)
+	var resp echo.HTTPError
+	statusCode, _, err = testutil.MakeHTTPRequest("POST", baseURL+"requests", []byte(payload), &resp)
+	t.Logf("resp: %+v", resp)
 	if err != nil {
 		t.Fatal(err)
 	}

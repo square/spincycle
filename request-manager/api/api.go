@@ -3,6 +3,7 @@
 // Package api provides controllers for each api endpoint. Controllers are
 // "dumb wiring"; there is little to no application logic in this package.
 // Controllers call and coordinate other packages to satisfy the api endpoint.
+// Authentication and authorization happen in controllers.
 package api
 
 import (
@@ -31,7 +32,6 @@ type API struct {
 	appCtx app.Context
 	rm     request.Manager
 	jls    joblog.Store
-	stat   status.Manager
 	// --
 	echo *echo.Echo
 }
@@ -39,12 +39,11 @@ type API struct {
 // NewAPI creates a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
 // @todo: create a struct of managers and pass that in here instead?
-func NewAPI(appCtx app.Context, rm request.Manager, jls joblog.Store, stat status.Manager) *API {
+func NewAPI(appCtx app.Context) *API {
 	api := &API{
 		appCtx: appCtx,
-		rm:     rm,
-		jls:    jls,
-		stat:   stat,
+		rm:     appCtx.RM,
+		jls:    appCtx.JLS,
 		// --
 		echo: echo.New(),
 	}
@@ -77,7 +76,8 @@ func NewAPI(appCtx app.Context, rm request.Manager, jls joblog.Store, stat statu
 	api.echo.Use(middleware.Recover())
 	api.echo.Use(middleware.Logger())
 
-	// Auth plugin: authenticate user or app
+	// Auth plugin: authenticate caller. This is called before every route.
+	// @todo: ignore OPTION requests?
 	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			caller, err := appCtx.Plugins.Auth.Authenticate(c.Request())
@@ -107,6 +107,7 @@ func NewAPI(appCtx app.Context, rm request.Manager, jls joblog.Store, stat statu
 	return api
 }
 
+// Run makes the API listen on the configured address.
 func (api *API) Run() error {
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
 		return api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
@@ -115,6 +116,7 @@ func (api *API) Run() error {
 	}
 }
 
+// ServeHTTP makes the API implement the http.HandlerFunc interface.
 func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.echo.ServeHTTP(w, r)
 }
@@ -122,6 +124,9 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // POST <API_ROOT>/requests
 // Create a new request and start it.
 func (api *API) createRequestHandler(c echo.Context) error {
+	// ----------------------------------------------------------------------
+	// Make and validate request
+
 	// Convert the payload into a proto.CreateRequestParams.
 	var reqParams proto.CreateRequestParams
 	if err := c.Bind(&reqParams); err != nil {
@@ -138,18 +143,21 @@ func (api *API) createRequestHandler(c echo.Context) error {
 		}
 	}
 
-	// Create the request.
 	req, err := api.rm.Create(reqParams)
 	if err != nil {
 		return handleError(err)
 	}
 
-	// Authorize caller to start request
-	if err := api.appCtx.Plugins.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_START, req); err != nil {
+	// ----------------------------------------------------------------------
+	// Authorize
+
+	if err := api.appCtx.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_START, req); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 	}
 
-	// Start the request.
+	// ----------------------------------------------------------------------
+	// Run (non-blocking)
+
 	if err := api.rm.Start(req.Id); err != nil {
 		return handleError(err)
 	}
@@ -220,7 +228,7 @@ func (api *API) stopRequestHandler(c echo.Context) error {
 	req := proto.Request{
 		Id: reqId,
 	}
-	if err := api.appCtx.Plugins.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_STOP, req); err != nil {
+	if err := api.appCtx.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_STOP, req); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 	}
 
@@ -329,7 +337,7 @@ func (api *API) requestListHandler(c echo.Context) error {
 // GET <API_ROOT>/status/running
 // Report all requests that are running.
 func (api *API) statusRunningHandler(c echo.Context) error {
-	running, err := api.stat.Running(status.NoFilter)
+	running, err := api.appCtx.Status.Running(status.NoFilter)
 	if err != nil {
 		return handleError(err)
 	}

@@ -30,7 +30,7 @@ type Grapher struct {
 // An id generator must also be provided (used for generating ids for nodes).
 //
 // A new Grapher should be made for every request.
-func NewGrapher(nf job.Factory, cfg *Config, idgen id.Generator) *Grapher {
+func NewGrapher(nf job.Factory, cfg Config, idgen id.Generator) *Grapher {
 	o := &Grapher{
 		JobFactory:   nf,
 		AllSequences: cfg.Sequences,
@@ -48,12 +48,12 @@ type GrapherFactory interface {
 // grapherFactory implements the GrapherFactory interface.
 type grapherFactory struct {
 	jf     job.Factory
-	config *Config
+	config Config
 	idf    id.GeneratorFactory
 }
 
 // NewGrapherFactory creates a GrapherFactory.
-func NewGrapherFactory(jf job.Factory, cfg *Config, idf id.GeneratorFactory) GrapherFactory {
+func NewGrapherFactory(jf job.Factory, cfg Config, idf id.GeneratorFactory) GrapherFactory {
 	return &grapherFactory{
 		jf:     jf,
 		config: cfg,
