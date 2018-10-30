@@ -93,6 +93,19 @@ func TestManagerWithACLs(t *testing.T) {
 		t.Errorf("auth plugin Authorize not called, expected it to be called")
 	}
 
+	// Admin role match allowed: role1 is admin role, so even though op is fake,
+	// doesn't matter. Admin roles can do anything wrt pre-auth. The auth plugin
+	// can still deny it later.
+	authCalled = false
+	caller.Roles = []string{"role1"}
+	err = m.Authorize(caller, "fake", req)
+	if err != nil {
+		t.Errorf("not allowed (%s), expected Authorize to return nil", err)
+	}
+	if authCalled == false {
+		t.Errorf("auth plugin Authorize not called, expected it to be called")
+	}
+
 	// If auth plugin Authorize denies, manager denies
 	authCalled = false
 	authErr = fmt.Errorf("fake auth error")

@@ -104,6 +104,12 @@ REQUEST_ACLS:
 			}
 			rolesMatch = true // yes
 
+			// Is it an admin role? If yes, then allow all ops.
+			if acl.Admin {
+				opMatch = true // yes
+				break REQUEST_ACLS
+			}
+
 			for _, aclop := range acl.Ops {
 				// Does role grant caller the op?
 				if aclop != op {
