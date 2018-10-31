@@ -35,7 +35,7 @@ func TestManagerWithACLs(t *testing.T) {
 	m := auth.NewManager(plugin, acls, adminRoles, true)
 
 	caller := auth.Caller{
-		User:  "dn",
+		Name:  "dn",
 		Roles: []string{"dev"}, // no admin role
 	}
 	req := proto.Request{
@@ -145,7 +145,7 @@ func TestManagerNoACLs(t *testing.T) {
 	m := auth.NewManager(plugin, acls, nil, true) // true = STRICT MODE
 
 	caller := auth.Caller{
-		User:  "dn",
+		Name:  "dn",
 		Roles: []string{"dev"}, // no admin role
 	}
 	req := proto.Request{

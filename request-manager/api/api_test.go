@@ -21,12 +21,22 @@ import (
 
 var server *httptest.Server
 
+var mockAuth = mock.Auth{
+	AuthenticateFunc: func(*http.Request) (auth.Caller, error) {
+		return auth.Caller{
+			Name:  "test",
+			Roles: []string{"test"},
+		}, nil
+	},
+}
+
 func setup(rm *mock.RequestManager, jls *mock.JLStore) {
 	appCtx := app.Defaults()
 	appCtx.RM = rm
 	appCtx.JLS = jls
 	appCtx.Status = &mock.RMStatus{}
-	appCtx.Auth = auth.NewManager(auth.AllowAll{}, map[string][]auth.ACL{}, []string{"all"}, false)
+	appCtx.Plugins.Auth = mockAuth
+	appCtx.Auth = auth.NewManager(mockAuth, map[string][]auth.ACL{}, []string{"test"}, false)
 	server = httptest.NewServer(api.NewAPI(appCtx))
 }
 
@@ -489,7 +499,7 @@ func TestAuth(t *testing.T) {
 		authOp = ""
 		authReq = proto.Request{}
 		caller = auth.Caller{
-			User:  "dn",
+			Name:  "dn",
 			Roles: []string{"role1", "role2"}, // matches roles in auth-001.yaml (see below)
 		}
 	}

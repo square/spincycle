@@ -115,7 +115,7 @@ func LoadConfig(ctx Context) (config.RequestManager, error) {
 		case "staging":
 			cfgFile = "config/staging.yaml"
 		case "production":
-			cfgFile = "config/staging.yaml"
+			cfgFile = "config/production.yaml"
 		default:
 			cfgFile = "config/development.yaml"
 		}

@@ -1,3 +1,9 @@
+// Copyright 2018, Square, Inc.
+
+// Package auth provides request authentication and authorization. By default,
+// there is no auth; all callers and requests are allowed. The Plugin interface
+// allows user-defined auth in combination with user-defined request sepc ACLs.
+// See docs/auth.md.
 package auth
 
 import (
@@ -7,34 +13,56 @@ import (
 	"github.com/square/spincycle/proto"
 )
 
-// Caller represents an app or user making a request. Callers are determined by
-// the auth plugin, if any.
+// Caller represents an HTTP client making a request. Callers are determined by
+// the Plugin Authenticate method. The default Plugin (AllowAll) returns a zero
+// value Caller.
 type Caller struct {
-	App   string   // caller is app, or
-	User  string   // caller is human (mutually exclusive)
-	Roles []string // for User
+	// Name of the caller, whether human (username) or machine (app name). The
+	// name is user-defined and only used by Spin Cycle for logging and setting
+	// proto.Request.User.
+	Name string
+
+	// Roles are user-defined role names, like "admin" or "engineer". Rolls
+	// are matched against request ACL roles in specs, which are also user-defined.
+	// Roles are case-sensitive and not modified by Spin Cycle in any way.
+	Roles []string
 }
 
 // Plugin represents the auth plugin. Every request is authenticated and authorized.
+// The default Plugin (AllowAll) allows everything: all callers, requests, and ops.
+//
+// To enable user-defined auth, set App.Context.Plugins.Auth. See docs/customize.md.
 type Plugin interface {
-	// Authenticate caller from HTTP request.
+	// Authenticate caller from HTTP request. If allowed, return a Caller and nil.
+	// Access is denied (HTTP 401) on any error.
+	//
+	// The returned Caller is user-defined. The most important field is Roles
+	// which will be matched against request ACL roles from the specs.
 	Authenticate(*http.Request) (Caller, error)
 
-	// Authorize the created request with user-provided args.
+	// Authorize caller to do op for the request. If allowed, return nil.
+	// Access is denied (HTTP 401) on any error.
+	//
+	// This method is post-authorization. Pre-authorization happens automatically
+	// by Spin Cycle: it matches a caller role and op to a request ACL role and op.
+	// On match, it calls this method. Therefore, when this method is called,
+	// it is guaranteed that the caller is authorized for the request and op based
+	// on the request ACLs. This method can do further authorization based on
+	// the request. For example, if request "stop-host" has arg "hostname", a
+	// user-defined Plugin can limit callers to stopping only hosts they own by
+	// inspecting the "hostname" arg in the request.
 	Authorize(c Caller, op string, req proto.Request) error
 }
 
-// AllowAll is the default auth plugin which allows all callers and requests (no auth).
+// AllowAll is the default Plugin which allows all callers and requests (no auth).
 type AllowAll struct{}
 
+// Authenticate returns a zero value Caller and nil (allow).
 func (a AllowAll) Authenticate(*http.Request) (Caller, error) {
-	return Caller{
-		App:   "all",
-		User:  "all",
-		Roles: []string{"all"},
-	}, nil
+	return Caller{}, nil
 }
 
+// Authorize returns nil (allow).
 func (a AllowAll) Authorize(c Caller, op string, req proto.Request) error {
 	return nil
 }
@@ -43,12 +71,21 @@ func (a AllowAll) Authorize(c Caller, op string, req proto.Request) error {
 // The latter is mapped to the former in Server.Boot to keep the two packages
 // decoupled, i.e. decouple spec syntax from internal data structures.
 type ACL struct {
-	Role  string   // user-defined role
-	Admin bool     // all ops allowed if true
-	Ops   []string // proto.REQUEST_OP_*
+	// User-defined role. This must exactly match a Caller role for the ACL
+	// to match.
+	Role string
+
+	// Role grants admin access (all ops) to request. Mutually exclusive with Ops.
+	Admin bool
+
+	// Ops granted to this role. Mutually exclusive with Admin.
+	Ops []string
 }
 
-// Manager provides request authorization using the auth plugin and a list of ACLs.
+// Manager provides pre- and post-authorization. It matches caller ACLs to request
+// ACLs, and calls Plugin.Authorize when there is a match. It also handles admin
+// roles and strict auth logic. Authentication is not handled by the Manager; that
+// happens in api.API middleware.
 type Manager struct {
 	plugin     Plugin
 	acls       map[string][]ACL // request-name (type) -> acl: (if any)
@@ -65,12 +102,17 @@ func NewManager(plugin Plugin, acls map[string][]ACL, adminRoles []string, stric
 	}
 }
 
-// Authorize authorizes the request based on its ACLs, if any. First, this checks
-// the caller's roles (provided by the auth plugin Authenticate method) against
-// the request ACL roles. If there's a match which allows the request, it calls
-// the auth plugin Authorize method to let it authorize the request based on request
-// args. For example, the caller might not be allowed to run the request on certain
-// hosts. If authorized, returns nil; else, returns an error.
+// Authorize authorizes the request based on its ACLs, if any. If the Caller has
+// an admin role, it is allowed immediately (no further checks). Else, Caller
+// roles are matched to request ACL roles. On match, the op is matched to the
+// request ACL ops. On match again, the Plugin Authorize method is called for
+// post-authorization. If it returns nil, the request is allowed.
+//
+// If the request has no ACLs and the caller does not have an admin role, strict
+// mode determines the result: allow if disabled (no ACLs = allow allow), deny
+// if enabled (no ACLs = deny all non-admins).
+//
+// Any return error denies the request (HTTP 401), and the error message explains why.
 func (m Manager) Authorize(caller Caller, op string, req proto.Request) error {
 	// Always allow admins, nothing more to check
 	if m.isAdmin(caller) {
@@ -139,6 +181,7 @@ REQUEST_ACLS:
 	return nil // allow
 }
 
+// isAdmin returns true if the caller has an admin role.
 func (m Manager) isAdmin(caller Caller) bool {
 	if len(m.adminRoles) == 0 {
 		return false
