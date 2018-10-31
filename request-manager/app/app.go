@@ -61,8 +61,18 @@ type Factories struct {
 // the LoadConfig hook allows the user to load and parse the config file, completely
 // overriding the built-in code.
 type Hooks struct {
-	LoadConfig  func(Context) (config.RequestManager, error)
-	LoadSpecs   func(Context) (grapher.Config, error)
+	// LoadConfig loads the Request Manager config file. This hook overrides
+	// the default function. Spin Cycle fails to start if it returns an error.
+	LoadConfig func(Context) (config.RequestManager, error)
+
+	// LoadSpecs loads the request specification files (specs). This hook overrides
+	// the default function. Spin Cycle fails to start if it returns an error.
+	LoadSpecs func(Context) (grapher.Config, error)
+
+	// SetUsername sets proto.Request.User. The auth.Plugin.Authenticate method is
+	// called first which sets the username to Caller.Name. This hook is called after
+	// and overrides the username. The request fails and returns HTTP 500 if it
+	// returns an error.
 	SetUsername func(*http.Request) (string, error)
 }
 
@@ -92,9 +102,6 @@ func Defaults() Context {
 		},
 		Hooks: Hooks{
 			LoadConfig: LoadConfig,
-			SetUsername: (func(ireq *http.Request) (string, error) {
-				return "admin", nil
-			}),
 		},
 		Plugins: Plugins{
 			Auth: auth.AllowAll{},

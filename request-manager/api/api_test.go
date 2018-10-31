@@ -35,6 +35,9 @@ func setup(rm *mock.RequestManager, jls *mock.JLStore) {
 	appCtx.RM = rm
 	appCtx.JLS = jls
 	appCtx.Status = &mock.RMStatus{}
+	appCtx.Hooks.SetUsername = func(*http.Request) (string, error) {
+		return "admin", nil
+	}
 	appCtx.Plugins.Auth = mockAuth
 	appCtx.Auth = auth.NewManager(mockAuth, map[string][]auth.ACL{}, []string{"test"}, false)
 	server = httptest.NewServer(api.NewAPI(appCtx))

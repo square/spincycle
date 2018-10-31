@@ -85,24 +85,24 @@ func NewAPI(appCtx app.Context) *API {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 			c.Set("caller", caller)
+			c.Set("username", caller.Name)
 			return next(c) // authenticed
 		}
 	}))
 
-	// SetUsername hook
-	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			if appCtx.Hooks.SetUsername == nil {
-				return next(c) // no auth
+	// SetUsername hook, overrides ^
+	if appCtx.Hooks.SetUsername != nil {
+		api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c echo.Context) error {
+				username, err := appCtx.Hooks.SetUsername(c.Request())
+				if err != nil {
+					return err
+				}
+				c.Set("username", username)
+				return next(c)
 			}
-			username, err := appCtx.Hooks.SetUsername(c.Request())
-			if err != nil {
-				return err
-			}
-			c.Set("username", username)
-			return next(c)
-		}
-	}))
+		}))
+	}
 
 	return api
 }

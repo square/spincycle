@@ -2,7 +2,7 @@
 
 // Package auth provides request authentication and authorization. By default,
 // there is no auth; all callers and requests are allowed. The Plugin interface
-// allows user-defined auth in combination with user-defined request sepc ACLs.
+// allows user-defined auth in combination with user-defined request spec ACLs.
 // See docs/auth.md.
 package auth
 
@@ -82,7 +82,7 @@ type ACL struct {
 	Ops []string
 }
 
-// Manager provides pre- and post-authorization. It matches caller ACLs to request
+// Manager provides pre- and post-authorization. It matches caller roles to request
 // ACLs, and calls Plugin.Authorize when there is a match. It also handles admin
 // roles and strict auth logic. Authentication is not handled by the Manager; that
 // happens in api.API middleware.
@@ -109,7 +109,7 @@ func NewManager(plugin Plugin, acls map[string][]ACL, adminRoles []string, stric
 // post-authorization. If it returns nil, the request is allowed.
 //
 // If the request has no ACLs and the caller does not have an admin role, strict
-// mode determines the result: allow if disabled (no ACLs = allow allow), deny
+// mode determines the result: allow if disabled (no ACLs = allow all), deny
 // if enabled (no ACLs = deny all non-admins).
 //
 // Any return error denies the request (HTTP 401), and the error message explains why.
