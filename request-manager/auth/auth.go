@@ -114,7 +114,8 @@ func NewManager(plugin Plugin, acls map[string][]ACL, adminRoles []string, stric
 //
 // Any return error denies the request (HTTP 401), and the error message explains why.
 func (m Manager) Authorize(caller Caller, op string, req proto.Request) error {
-	// Always allow admins, nothing more to check
+	// Always allow admins, nothing more to check. This is global admin_roles from config:
+	// role which are admins for all requests regardless of request-specific ACLs.
 	if m.isAdmin(caller) {
 		return nil // allow
 	}
@@ -146,7 +147,8 @@ REQUEST_ACLS:
 			}
 			rolesMatch = true // yes
 
-			// Is it an admin role? If yes, then allow all ops.
+			// Is it an admin role? If yes, then allow all ops. This is
+			// request-specific admin role, not global admin_roles from config.
 			if acl.Admin {
 				opMatch = true // yes
 				break REQUEST_ACLS
