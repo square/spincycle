@@ -1305,3 +1305,48 @@ func TestBadEach001(t *testing.T) {
 		t.Error("err is nil, expected an error")
 	}
 }
+
+func TestAuthSpec(t *testing.T) {
+	// Test that the acl: part of a request is parsed properly
+	got, err := ReadConfig("../test/specs/auth-001.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expect := Config{
+		Sequences: map[string]*SequenceSpec{
+			"req1": &SequenceSpec{
+				Name:    "req1",
+				Request: true,
+				Args: SequenceArgs{
+					Required: []*ArgSpec{
+						{
+							Name: "arg1",
+							Desc: "required arg 1",
+						},
+					},
+				},
+				ACL: []ACL{
+					{
+						Role:  "role1",
+						Admin: true,
+					},
+					{
+						Role:  "role2",
+						Admin: false,
+						Ops:   []string{"start", "stop"},
+					},
+				},
+				Nodes: map[string]*NodeSpec{
+					"node1": &NodeSpec{
+						Name:     "node1",
+						Category: "job",
+						NodeType: "job1type",
+					},
+				},
+			},
+		},
+	}
+	if diff := deep.Equal(got, expect); diff != nil {
+		t.Error(diff)
+	}
+}

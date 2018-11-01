@@ -48,3 +48,8 @@ var StateValue = map[string]byte{
 	"STOPPED":   STATE_STOPPED,
 	"SUSPENDED": STATE_SUSPENDED,
 }
+
+const (
+	REQUEST_OP_START = "start"
+	REQUEST_OP_STOP  = "stop"
+)

@@ -29,6 +29,10 @@ type RequestManager struct {
 	// The directory that holds all of the grapher spec files. This dir
 	// should not contain anything other than spec files.
 	SpecFileDir string `yaml:"spec_file_dir"`
+
+	// Auth specifies auth plugin options. If a user-provide auth plugin is not
+	// given, these options are ignored and all users and apps have admin access.
+	Auth Auth `yaml:"auth"`
 }
 
 // The config used by the Job Runner. This is read from in
@@ -126,6 +130,17 @@ type TLS struct {
 
 	// The CA file to use.
 	CAFile string `yaml:"ca_file"`
+}
+
+// Auth configuration.
+type Auth struct {
+	// Callers with one of these roles are admins (allowed all ops) for all requests.
+	AdminRoles []string `yaml:"admin_roles"`
+
+	// Strict requires all requests to have ACLs, else callers are denied unless
+	// they have an admin role. Strict is disabled by default which, with the default
+	// auth plugin, allows all callers (no auth).
+	Strict bool `yaml:"strict"`
 }
 
 ///////////////////////////////////////////////////////////////////////////////

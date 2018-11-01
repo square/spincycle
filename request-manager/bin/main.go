@@ -10,6 +10,10 @@ import (
 )
 
 func main() {
-	err := server.Run(app.Defaults())
+	s := server.NewServer(app.Defaults())
+	if err := s.Boot(); err != nil {
+		log.Fatalf("Error starting Request Manager: %s", err)
+	}
+	err := s.Run()
 	log.Fatalf("Request Manager stopped: %s", err)
 }

@@ -3,6 +3,7 @@
 // Package api provides controllers for each api endpoint. Controllers are
 // "dumb wiring"; there is little to no application logic in this package.
 // Controllers call and coordinate other packages to satisfy the api endpoint.
+// Authentication and authorization happen in controllers.
 package api
 
 import (
@@ -14,6 +15,7 @@ import (
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/app"
+	"github.com/square/spincycle/request-manager/auth"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
@@ -30,7 +32,6 @@ type API struct {
 	appCtx app.Context
 	rm     request.Manager
 	jls    joblog.Store
-	stat   status.Manager
 	// --
 	echo *echo.Echo
 }
@@ -38,12 +39,11 @@ type API struct {
 // NewAPI creates a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
 // @todo: create a struct of managers and pass that in here instead?
-func NewAPI(appCtx app.Context, rm request.Manager, jls joblog.Store, stat status.Manager) *API {
+func NewAPI(appCtx app.Context) *API {
 	api := &API{
 		appCtx: appCtx,
-		rm:     rm,
-		jls:    jls,
-		stat:   stat,
+		rm:     appCtx.RM,
+		jls:    appCtx.JLS,
 		// --
 		echo: echo.New(),
 	}
@@ -76,42 +76,38 @@ func NewAPI(appCtx app.Context, rm request.Manager, jls joblog.Store, stat statu
 	api.echo.Use(middleware.Recover())
 	api.echo.Use(middleware.Logger())
 
-	// Auth hook
+	// Auth plugin: authenticate caller. This is called before every route.
+	// @todo: ignore OPTION requests?
 	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if appCtx.Hooks.Auth == nil {
-				return next(c) // no auth
-			}
-			ok, err := appCtx.Hooks.Auth(c.Request())
+			caller, err := appCtx.Auth.Authenticate(c.Request())
 			if err != nil {
-				return err
+				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
-			if !ok {
-				//c.Response().Header().Set(echo.HeaderWWWAuthenticate, basic+" realm="+realm)
-				return echo.ErrUnauthorized // 401
-			}
-			return next(c) // auth OK
+			c.Set("caller", caller)
+			c.Set("username", caller.Name)
+			return next(c) // authenticed
 		}
 	}))
 
-	// SetUsername hook
-	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			if appCtx.Hooks.SetUsername == nil {
-				return next(c) // no auth
+	// SetUsername hook, overrides ^
+	if appCtx.Hooks.SetUsername != nil {
+		api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c echo.Context) error {
+				username, err := appCtx.Hooks.SetUsername(c.Request())
+				if err != nil {
+					return err
+				}
+				c.Set("username", username)
+				return next(c)
 			}
-			username, err := appCtx.Hooks.SetUsername(c.Request())
-			if err != nil {
-				return err
-			}
-			c.Set("username", username)
-			return next(c)
-		}
-	}))
+		}))
+	}
 
 	return api
 }
 
+// Run makes the API listen on the configured address.
 func (api *API) Run() error {
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
 		return api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
@@ -120,15 +116,17 @@ func (api *API) Run() error {
 	}
 }
 
+// ServeHTTP makes the API implement the http.HandlerFunc interface.
 func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.echo.ServeHTTP(w, r)
 }
 
-// ============================== CONTROLLERS ============================== //
-
 // POST <API_ROOT>/requests
 // Create a new request and start it.
 func (api *API) createRequestHandler(c echo.Context) error {
+	// ----------------------------------------------------------------------
+	// Make and validate request
+
 	// Convert the payload into a proto.CreateRequestParams.
 	var reqParams proto.CreateRequestParams
 	if err := c.Bind(&reqParams); err != nil {
@@ -145,13 +143,21 @@ func (api *API) createRequestHandler(c echo.Context) error {
 		}
 	}
 
-	// Create the request.
 	req, err := api.rm.Create(reqParams)
 	if err != nil {
 		return handleError(err)
 	}
 
-	// Start the request.
+	// ----------------------------------------------------------------------
+	// Authorize
+
+	if err := api.appCtx.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_START, req); err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
+	}
+
+	// ----------------------------------------------------------------------
+	// Run (non-blocking)
+
 	if err := api.rm.Start(req.Id); err != nil {
 		return handleError(err)
 	}
@@ -216,6 +222,15 @@ func (api *API) finishRequestHandler(c echo.Context) error {
 // if the request is not running.
 func (api *API) stopRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
+
+	// Authorize caller to stop request
+	// @todo: provide full Request to auth plugin
+	req := proto.Request{
+		Id: reqId,
+	}
+	if err := api.appCtx.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_STOP, req); err != nil {
+		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
+	}
 
 	if err := api.rm.Stop(reqId); err != nil {
 		return handleError(err)
@@ -322,7 +337,7 @@ func (api *API) requestListHandler(c echo.Context) error {
 // GET <API_ROOT>/status/running
 // Report all requests that are running.
 func (api *API) statusRunningHandler(c echo.Context) error {
-	running, err := api.stat.Running(status.NoFilter)
+	running, err := api.appCtx.Status.Running(status.NoFilter)
 	if err != nil {
 		return handleError(err)
 	}

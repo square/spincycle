@@ -3,6 +3,7 @@
 package grapher
 
 import (
+	"fmt"
 	"io/ioutil"
 
 	"gopkg.in/yaml.v2"
@@ -32,11 +33,12 @@ type NodeArg struct {
 // SequenceSpec defines the structure expected from the config yaml file to
 // define each sequence
 type SequenceSpec struct {
-	Name    string               `yaml:"name"`  // name of the sequence
-	Args    SequenceArgs         `yaml:"args"`  // arguments to the sequence
-	Nodes   map[string]*NodeSpec `yaml:"nodes"` // list of nodes that are a part of the sequence
-	Retry   uint                 `yaml:"retry"` // the number of times to retry the sequence if it fails
-	Request bool                 // whether or not the sequence spec is a user request
+	Name    string               `yaml:"name"`    // name of the sequence
+	Args    SequenceArgs         `yaml:"args"`    // arguments to the sequence
+	Nodes   map[string]*NodeSpec `yaml:"nodes"`   // list of nodes that are a part of the sequence
+	Retry   uint                 `yaml:"retry"`   // the number of times to retry the sequence if it fails
+	Request bool                 `yaml:"request"` // whether or not the sequence spec is a user request
+	ACL     []ACL                `yaml:"acl"`     // allowed caller roles (optional)
 }
 
 // SequenceArgs defines the structure expected from the config file to define
@@ -58,6 +60,16 @@ type ArgSpec struct {
 	Default string `yaml:"default"`
 }
 
+// ACL represents one role-based ACL entry. Every auth.Caller (from the
+// user-provided auth plugin Authenticate method) is authorized with a matching
+// ACL, else the request is denied with HTTP 401 unauthorized. Roles are
+// user-defined. If Admin is true, Ops cannot be set.
+type ACL struct {
+	Role  string   `yaml:"role"`  // user-defined role
+	Admin bool     `yaml:"admin"` // all ops allowed if true
+	Ops   []string `yaml:"ops"`   // proto.REQUEST_OP_*
+}
+
 // All Sequences in the yaml. Also contains the user defined no-op job.
 type Config struct {
 	Sequences map[string]*SequenceSpec `yaml:"sequences"`
@@ -66,21 +78,36 @@ type Config struct {
 // ReadConfig will read from configFile and return a Config that the user
 // can then use for NewGrapher(). configFile is expected to be in the yaml
 // format specified.
-func ReadConfig(configFile string) (*Config, error) {
+func ReadConfig(configFile string) (Config, error) {
+	var cfg Config
 	sequenceData, err := ioutil.ReadFile(configFile)
 	if err != nil {
-		return nil, err
+		return cfg, err
 	}
-	cfg := &Config{}
-	err = yaml.Unmarshal(sequenceData, cfg)
+	err = yaml.Unmarshal(sequenceData, &cfg)
 	if err != nil {
-		return nil, err
+		return cfg, err
 	}
 
 	for sequenceName, sequence := range cfg.Sequences {
 		sequence.Name = sequenceName
 		for nodeName, node := range sequence.Nodes {
 			node.Name = nodeName
+		}
+
+		// Validate ACLs, if any
+		seen := map[string]bool{}
+		for _, acl := range sequence.ACL {
+			if acl.Admin && len(acl.Ops) != 0 {
+				return cfg, fmt.Errorf("invalid user ACL for %s in %s: admin=true and ops are mutually exclusive; set admin=false or remove ops", sequenceName, configFile)
+			}
+			if acl.Role == "" {
+				return cfg, fmt.Errorf("invalid user ACL for %s in %s: role is not set (empty string); it must be set", sequenceName, configFile)
+			}
+			if seen[acl.Role] {
+				return cfg, fmt.Errorf("duplicate user ACL for %s in %s: role=%s", sequenceName, configFile, acl.Role)
+			}
+			seen[acl.Role] = true
 		}
 	}
 

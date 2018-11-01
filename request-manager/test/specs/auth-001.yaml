@@ -1,0 +1,16 @@
+sequences:
+  req1:
+    args:
+      required:
+        - name: arg1
+          desc: "required arg 1"
+    request: true
+    acl:
+      - role: "role1"
+        admin: true
+      - role: "role2"
+        ops:  [start,stop]
+    nodes:
+      node1:
+        category: job
+        type: job1type
