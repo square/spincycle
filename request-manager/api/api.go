@@ -80,7 +80,7 @@ func NewAPI(appCtx app.Context) *API {
 	// @todo: ignore OPTION requests?
 	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			caller, err := appCtx.Plugins.Auth.Authenticate(c.Request())
+			caller, err := appCtx.Auth.Authenticate(c.Request())
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}

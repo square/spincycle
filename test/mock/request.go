@@ -91,19 +91,19 @@ func (r *RequestManager) JobChain(reqId string) (proto.JobChain, error) {
 
 // --------------------------------------------------------------------------
 
-type Auth struct {
+type AuthPlugin struct {
 	AuthenticateFunc func(*http.Request) (auth.Caller, error)
 	AuthorizeFunc    func(c auth.Caller, op string, req proto.Request) error
 }
 
-func (a Auth) Authenticate(req *http.Request) (auth.Caller, error) {
+func (a AuthPlugin) Authenticate(req *http.Request) (auth.Caller, error) {
 	if a.AuthenticateFunc != nil {
 		return a.AuthenticateFunc(req)
 	}
 	return auth.Caller{}, nil
 }
 
-func (a Auth) Authorize(c auth.Caller, op string, req proto.Request) error {
+func (a AuthPlugin) Authorize(c auth.Caller, op string, req proto.Request) error {
 	if a.AuthorizeFunc != nil {
 		return a.AuthorizeFunc(c, op, req)
 	}

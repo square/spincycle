@@ -82,15 +82,15 @@ type ACL struct {
 	Ops []string
 }
 
-// Manager provides pre- and post-authorization. It matches caller roles to request
-// ACLs, and calls Plugin.Authorize when there is a match. It also handles admin
-// roles and strict auth logic. Authentication is not handled by the Manager; that
-// happens in api.API middleware.
+// Manager uses a Plugin to authenticate and authorize. It handles all auth-related
+// code and config: user-defined Plugin (or default: AllowAll), request ACLs from
+// specs, and options from the config file. Other components use a Manager, not the
+// Plugin directly.
 type Manager struct {
-	plugin     Plugin
-	acls       map[string][]ACL // request-name (type) -> acl: (if any)
-	adminRoles []string
-	strict     bool
+	plugin     Plugin           // user-defined or AllowAll
+	acls       map[string][]ACL // from request specs
+	adminRoles []string         // from config file
+	strict     bool             // from config file
 }
 
 func NewManager(plugin Plugin, acls map[string][]ACL, adminRoles []string, strict bool) Manager {
@@ -100,6 +100,12 @@ func NewManager(plugin Plugin, acls map[string][]ACL, adminRoles []string, stric
 		adminRoles: adminRoles,
 		strict:     strict,
 	}
+}
+
+// Authenticate wraps the plugin Authenticate method. Unlike Authorize, there
+// is no extra logic.
+func (m Manager) Authenticate(req *http.Request) (Caller, error) {
+	return m.plugin.Authenticate(req)
 }
 
 // Authorize authorizes the request based on its ACLs, if any. If the Caller has

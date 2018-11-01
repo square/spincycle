@@ -2,12 +2,34 @@ package auth_test
 
 import (
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/auth"
 	"github.com/square/spincycle/test/mock"
 )
+
+func TestManagerAuthenticate(t *testing.T) {
+	caller := auth.Caller{
+		Name:  "test",
+		Roles: []string{"test"},
+	}
+	plugin := mock.AuthPlugin{
+		AuthenticateFunc: func(req *http.Request) (auth.Caller, error) {
+			return caller, nil
+		},
+	}
+
+	m := auth.NewManager(plugin, map[string][]auth.ACL{}, nil, true)
+	gotCaller, err := m.Authenticate(nil)
+	if err != nil {
+		t.Error(err)
+	}
+	if gotCaller.Name != caller.Name {
+		t.Errorf("got Caller.Name=%s, expected %s", gotCaller.Name, caller.Name)
+	}
+}
 
 func TestManagerWithACLs(t *testing.T) {
 	acls := map[string][]auth.ACL{
@@ -25,7 +47,7 @@ func TestManagerWithACLs(t *testing.T) {
 
 	authCalled := false
 	var authErr error
-	plugin := mock.Auth{
+	plugin := mock.AuthPlugin{
 		AuthorizeFunc: func(caller auth.Caller, op string, req proto.Request) error {
 			authCalled = true
 			return authErr
@@ -136,7 +158,7 @@ func TestManagerNoACLs(t *testing.T) {
 
 	authCalled := false
 	var authErr error
-	plugin := mock.Auth{
+	plugin := mock.AuthPlugin{
 		AuthorizeFunc: func(caller auth.Caller, op string, req proto.Request) error {
 			authCalled = true
 			return authErr

@@ -21,7 +21,7 @@ import (
 
 var server *httptest.Server
 
-var mockAuth = mock.Auth{
+var mockAuth = mock.AuthPlugin{
 	AuthenticateFunc: func(*http.Request) (auth.Caller, error) {
 		return auth.Caller{
 			Name:  "test",
@@ -507,7 +507,7 @@ func TestAuth(t *testing.T) {
 		}
 	}
 	ctx := app.Defaults()
-	ctx.Plugins.Auth = mock.Auth{
+	ctx.Plugins.Auth = mock.AuthPlugin{
 		AuthenticateFunc: func(*http.Request) (auth.Caller, error) {
 			authenticateCalled = true
 			return caller, authenErr
