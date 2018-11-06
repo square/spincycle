@@ -102,6 +102,7 @@ func Defaults() Context {
 		},
 		Hooks: Hooks{
 			LoadConfig: LoadConfig,
+			LoadSpecs:  LoadSpecs,
 		},
 		Plugins: Plugins{
 			Auth: auth.AllowAll{},
