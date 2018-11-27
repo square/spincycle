@@ -22,7 +22,6 @@ type RequestManager struct {
 	StopFunc                  func(string) error
 	FinishFunc                func(string, proto.FinishRequestParams) error
 	StatusFunc                func(string) (proto.RequestStatus, error)
-	UpdateFunc                func(proto.Request, byte) error
 	IncrementFinishedJobsFunc func(string) error
 	SpecsFunc                 func() []proto.RequestSpec
 	JobChainFunc              func(string) (proto.JobChain, error)
@@ -63,13 +62,6 @@ func (r *RequestManager) Stop(reqId string) error {
 	return nil
 }
 
-func (r *RequestManager) Update(req proto.Request, state byte) error {
-	if r.UpdateFunc != nil {
-		return r.UpdateFunc(req, state)
-	}
-	return nil
-}
-
 func (r *RequestManager) Status(reqId string) (proto.RequestStatus, error) {
 	if r.StatusFunc != nil {
 		return r.StatusFunc(reqId)
@@ -101,29 +93,13 @@ func (r *RequestManager) JobChain(reqId string) (proto.JobChain, error) {
 // --------------------------------------------------------------------------
 
 type RequestResumer struct {
-	RunFunc       func()
-	ResumeAllFunc func()
-	CleanupFunc   func()
-	SuspendFunc   func(string, proto.SuspendedJobChain) error
+	RunFunc     func()
+	SuspendFunc func(string, proto.SuspendedJobChain) error
 }
 
 func (r *RequestResumer) Run() {
 	if r.RunFunc != nil {
 		r.RunFunc()
-	}
-	return
-}
-
-func (r *RequestResumer) ResumeAll() {
-	if r.ResumeAllFunc != nil {
-		r.ResumeAllFunc()
-	}
-	return
-}
-
-func (r *RequestResumer) Cleanup() {
-	if r.CleanupFunc != nil {
-		r.CleanupFunc()
 	}
 	return
 }

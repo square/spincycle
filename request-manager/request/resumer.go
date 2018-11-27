@@ -19,99 +19,49 @@ import (
 )
 
 type Resumer interface {
-	// Run starts running the Resumer's resume loop, which periodically calls
-	// ResumeAll to resume any Suspended Job Chains stored in its database. Run
-	// blocks until the resumer is shut down (by closing shutdownChan).
+	// Run periodically attempts to resume any Suspended Job Chains stored in
+	// the database, and also cleans up any SJCs that get into a bad state. Run
+	// blocks until the Resumer is shut down by closing shutdownChan.
 	Run()
-
-	// ResumeAll tries to resumes all Suspended Job Chains and cleans up any SJCs
-	// or requests that have been suspended for too long. All errors are logged,
-	// not returned.
-	ResumeAll()
-
-	// Cleanup cleans up any old or abandoned SJCs and any suspended requests that
-	// don't have an SJC. Old SJCs (suspended more than 1 hour ago) are deleted,
-	// abandoned SJCs (claimed by an RM but not resumed) are unclaimed so they can
-	// be resumed, and suspended requests without SJCs are marked as failed.
-	Cleanup()
 
 	// Suspend marks a running request as suspended and saves the corresponding
 	// suspended job chain.
 	Suspend(requestId string, sjc proto.SuspendedJobChain) error
 }
 
+// TODO(felixp): This kind of comment can probably be moved out of the code
+// and into the docs once we start writing those.
 // --------------------------------------------------------------------------
-// Lifecycle of a Suspended Job Chain:
+// Request Resumer:
 //
-//  When a Job Runner wants to suspend a job chain it's running, it sends a
-//  Suspended Job Chain, containing all the info necessary to recreate the
-//  job chain it's running, to the Request Manager. The request Resumer then
-//  saves this SJC and marks the corresponding request as Suspended.
+// When a Job Runner shuts down, it suspends all the job chains it's currently
+// running by sending Suspended Job Chains (SJCs), which contain all the info
+// necessary to recreate the running job chain, to the Request Manager. In the RM,
+// incoming SJCs are sent to the Resumer, which saves the SJC and sets the
+// corresponding request's state to Suspended.
 //
-//  Every 5 seconds, the request Resumer loops over all of the Suspended Job
-//  Chains it has saved, in a random order. It tries to resume each one by:
-//   - claiming the SJC, so no other Resumer can try to resume it
-//   - sending the SJC to a Job Runner
-//   - updating the state of the request as RUNNING (+ saving which JR host it's
-//     running on)
-//   - deleting the SJC
-//  If the Resumer fails at any step, it unclaims the SJC before continuing, so
-//  another Resumer can try again to resume this request later.
+// When the Resumer is running, every few seconds it attempts to resume all the SJCs
+// stored in its database. For each, the Resumer first "claims" the SJC -
+// marking in the database that it is working on resuming this SJC, so no other
+// Resumer (in another RM instance) will simultaneosly try to resume the SJC. The
+// Resumer checks that the associated request's state is really Suspended, and then
+// the SJC gets sent to a Job Runner. If this is successful, the request's state
+// gets updated to Running and the SJC is deleted. If sending the SJC to the Job
+// Runner fails (perhaps there is no Job Runner instance currently running), the
+// Resumer "unclaims" the SJC, removing its claim on the SJC and allowing another
+// Resumer (or the same Resumer at a later time) to retry this process.
 //
-//  Once the Resumer has looped over all of the Suspended Job Chains, it performs
-//  some cleanup. Any SJCs that have been claimed by other Resumers but haven't
-//  been updated in a while are unclaimed - the Resumer using these probably
-//  encountered a problem. Any SJCs more than an hour old are deleted, and their
-//  requests marked as failed. Any requests that are marked as SUSPENDED but don't
-//  have a corresponding SJC are marked as failed.
+// After the attempting to resume all SJCs, the Resumer does some cleanup of any
+// remaining SJCs it has stored. Old SJCs, which were suspended more than an hour
+// ago, are deleted and their request's states changed from Suspended to Failed.
+// Abandonded SJCs, which have been claimed by another Resumer for a while but
+// haven't been successfully resumed, are unclaimed - the Resumers that claimed
+// these requests probably crashed midway through trying to resume the SJC.
 // --------------------------------------------------------------------------
-
-// (my notes)
-//
-// Suspend:
-// 1: Resumer receives a request ID + SJC.
-// 2: Resumer checks that request's state = RUNNING. If not, it returns an error
-// 3: Resumer saves the SJC in its database.
-// 4: Resumer sets the request's state to SUSPENDED. If not able to, deletes the
-//    SJC it just saved, and returns an error.
-//
-// Resume:
-// Every 5 seconds:
-//  Resumer retrieves the request ID of all SJCs, in a random order.
-//  For each request ID:
-//   - check that request state = SUSPENDED. If not, continue. We don't
-//     delete the SJC, since it's possible that the request was just suspended,
-//     and the SJC has been saved but the request state hasn't been updated.
-//   - claim the SJC by setting rm_host = this RM host. If we fail to claim the
-//     SJC (meaning it was claimed by another Resumer), continue.
-//   - send the SJC to a Job Runner to be resumed. If we get an error, retry a few
-//     times. If we still end up with an error, unclaim the SJC and continue.
-//   - update the state of the request to RUNNING (+ set jr_host to the JR running
-//     it). If this fails, it means the state of the request was not SUSPENDED. We
-//     checked to make sure the state was SUSPENDED earlier, so this shouldn't
-//     happen. If it does happen, log an error and keep going, since we still want
-//     to delete the SJC.
-//   - delete the SJC. We shouldn't get an error doing this, but if we do, log it
-//     and continue.
-//  Once we're done looping through all the SJCs, do some cleanup:
-//   - Get all SJCs that are claimed but haven't been updated in the last minute.
-//     For each: if it's request is SUSPENDED, unclaim it. Otherwise delete it.
-//   - Get all SJCs that are unclaimed but were suspended more than an hour ago.
-//     Delete all of them and, if their requests are SUSPENDED, mark them FAILED.
-//   - Get all requests that are SUSPENDED but don't have an SJC saved. Mark them
-//     as FAILED.
-//
-//
 
 const (
 	// How often we try to resume any suspended job chains.
 	ResumeInterval = 10 * time.Second
-)
-
-var (
-	ErrShuttingDown = errors.New("Request Manager is shutting down - cannot suspend requests")
-
-	ErrNotUnclaimed = errors.New("could not find SJC to unclaim - either no SJC exists for this request, or this RM instance has not claimed the SJC")
 )
 
 // resumer implements the Resumer interface.
@@ -145,35 +95,27 @@ func NewResumer(cfg ResumerConfig) Resumer {
 	}
 }
 
-// Run starts running the resumer loop, which periodically attempts to
-// resume any SJCs in the db, until the resumer is shut down by closing
-// shutdownChan.
+// Run tries to resume and cleanup all SJCs every 10 seconds until shutdownChan
+// is closed.
 func (r *resumer) Run() {
 	for {
 		select {
 		case <-r.shutdownChan:
 			return
 		case <-time.After(r.resumeInterval):
-			r.ResumeAll()
-			r.Cleanup()
+			r.resumeAll()
+
+			// Unclaim SJCs that another RM has had claimed for a long time.
+			r.cleanupAbandonedSJCs()
+
+			// Delete SJCs that haven't been resumed within an hour.
+			r.cleanupOldSJCs()
 		}
 	}
 }
 
 // Suspend a running request and save its suspended job chain.
 func (r *resumer) Suspend(requestId string, sjc proto.SuspendedJobChain) (err error) {
-	logger := log.WithFields(log.Fields{"requestId": requestId})
-	logger.Infof("suspending request")
-
-	// Log whether we succeeded before returning.
-	defer func() {
-		if err != nil { // named return value
-			logger.Errorf("failed to suspend request: %s", err)
-		} else {
-			logger.Infof("successfully suspended request")
-		}
-	}()
-
 	sjc.RequestId = requestId // make sure the SJC's request id = request id given
 
 	req, err := r.rm.Get(requestId)
@@ -216,8 +158,7 @@ func (r *resumer) Suspend(requestId string, sjc proto.SuspendedJobChain) (err er
 	}
 
 	// Mark request as suspended and set JR host to null. This will only update the
-	// request if the current state is RUNNING. If this fails, the request's state
-	// has been changed since we checked it.
+	// request if the current state is RUNNING (it should be, per the earlier test).
 	req.State = proto.STATE_SUSPENDED
 	req.JobRunnerHost = nil
 	err = r.updateRequestWithTxn(req, proto.STATE_RUNNING, txn)
@@ -228,20 +169,13 @@ func (r *resumer) Suspend(requestId string, sjc proto.SuspendedJobChain) (err er
 		return err
 	}
 
-	err = txn.Commit()
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return txn.Commit()
 }
 
-// Attempt to resume all currently suspended job chains (and corresponding
-// requests).
-func (r *resumer) ResumeAll() {
-	log.Infof("attempting to resume suspended requests")
-	defer log.Infof("done resuming suspended requests")
-
+// resumeAll tries to resume all currently suspended job chains. All errors are
+// logged, not returned - we want the resumer to keep running even if there's a
+// one-time problem resuming requests.
+func (r *resumer) resumeAll() {
 	// Connect to database
 	ctx := context.TODO()
 	conn, err := r.dbc.Open(ctx)
@@ -249,10 +183,10 @@ func (r *resumer) ResumeAll() {
 		log.Errorf("could not connect to database: %s", err)
 		return
 	}
-	defer r.dbc.Close(conn) // don't leak conn
+	defer r.dbc.Close(conn)
 
 	// Retrieve Request IDs + states for all (unclaimed) SJCs, in random order.
-	q := "SELECT requests.request_id, requests.state FROM suspended_job_chains sjcs JOIN requests ON sjcs.request_id = requests.request_id WHERE sjcs.rm_host IS NULL ORDER BY RAND()"
+	q := "SELECT requests.request_id, requests.state, sjcs.suspended_job_chain FROM suspended_job_chains sjcs JOIN requests ON sjcs.request_id = requests.request_id WHERE sjcs.rm_host IS NULL ORDER BY RAND()"
 	rows, err := conn.QueryContext(ctx, q)
 	if err != nil {
 		log.Errorf("error querying db for SJCs: %s", err)
@@ -261,16 +195,24 @@ func (r *resumer) ResumeAll() {
 	defer rows.Close()
 
 	var requests []proto.Request
+	sjcs := make(map[string]proto.SuspendedJobChain) // request id -> SJC
 	for rows.Next() {
 		var req proto.Request
-		if err := rows.Scan(&req.Id, &req.State); err != nil {
+		var rawSJC []byte
+		if err := rows.Scan(&req.Id, &req.State, &rawSJC); err != nil {
 			log.Errorf("error scanning rows: %s", err)
 			return
 		}
 
+		var sjc proto.SuspendedJobChain
+		if err := json.Unmarshal(rawSJC, &sjc); err != nil {
+			log.Errorf("cannot unmarshal suspended job chain (req id = %s): %s", req.Id, err)
+			return
+		}
+
 		requests = append(requests, req)
+		sjcs[req.Id] = sjc
 	}
-	rows.Close() // must close before making more queries on this connection
 
 	// Attempt to resume each SJC.
 	for _, req := range requests {
@@ -282,58 +224,19 @@ func (r *resumer) ResumeAll() {
 		default:
 		}
 
-		// Only resume the SJC if its request is actually suspended.
-		if req.State != proto.STATE_SUSPENDED {
-			// Delete the SJC - we don't need to resume a request that isn't
-			// suspended. MySQL transactions make sure we aren't catching Suspend()
-			// in between saving the SJC and updating the request state.
-			reqLogger := log.WithFields(log.Fields{"request": req.Id})
-			reqLogger.Errorf("cannot resume request because request is not suspended (state = %s) - deleting SJC", proto.StateName[req.State])
-			if err := r.deleteSJC(req.Id, conn); err != nil {
-				reqLogger.Errorf("error deleting SJC: %s", err)
-			}
-			continue
-		}
-
-		r.resume(req.Id, conn)
+		r.resume(req, sjcs[req.Id], conn)
 	}
 }
 
-// Cleanup cleans up old SJCs and SJCs that have been abandoned by another RM. SJCs
-// more than 1 hour old are deleted and their request marked as Failed. SJCs that
-// have been claimed by an RM but never resumed are unclaimed so that another RM
-// may try to resume them.
-func (r *resumer) Cleanup() {
-	// Unclaim or delete SJCs that another RM has had claimed for a long time.
-	r.cleanupAbandonedSJCs()
-
-	// Delete SJCs that haven't been resumed within an hour.
-	r.cleanupOldSJCs()
-}
-
-// Attemps to resume a request. The resumer doesn't care whether the request
-// actually gets resumed (it'll be tried again later), so we log all errors instead
-// of returning them.
-func (r *resumer) resume(requestId string, conn *sql.Conn) {
-	reqLogger := log.WithFields(log.Fields{"request": requestId})
-
-	// Always unclaim a claimed SJC, so it can be tried again later.
-	var claimed bool
-	defer func() {
-		if claimed {
-			err := r.unclaimSJC(requestId, true, conn)
-			if err != nil {
-				reqLogger.Errorf("error unclaiming SJC: %s", err)
-			}
-			reqLogger.Infof("unclaimed SJC")
-		}
-	}()
+// Attempts to resume a request. Log all errors instead of returning them. We
+// don't care if we fail to resume the request - it'll be tried again later.
+func (r *resumer) resume(req proto.Request, sjc proto.SuspendedJobChain, conn *sql.Conn) {
+	reqLogger := log.WithFields(log.Fields{"request": req.Id})
 
 	// Try to claim the SJC, to indicate that this RM instance is attempting to
 	// resume it. If we fail to claim the SJC, another RM must have already
 	// claimed it - continue to the next request.
-	var err error
-	claimed, err = r.claimSJC(requestId, conn)
+	claimed, err := r.claimSJC(req.Id, conn)
 	if err != nil {
 		reqLogger.Errorf("error claiming SJC: %s", err)
 		return
@@ -341,11 +244,29 @@ func (r *resumer) resume(requestId string, conn *sql.Conn) {
 	if !claimed {
 		return
 	}
-	reqLogger.Infof("claimed SJC")
 
-	sjc, err := r.getClaimedSJC(requestId, conn)
-	if err != nil {
-		reqLogger.Errorf("error retrieving claimed SJC: %s", err)
+	// Always unclaim the SJC, so it can be tried again later.
+	defer func() {
+		if claimed {
+			err := r.unclaimSJC(req.Id, true, conn)
+			if err != nil {
+				reqLogger.Errorf("error unclaiming SJC: %s", err)
+			}
+		}
+	}()
+
+	// Only resume the SJC if this request is actually suspended.
+	if req.State != proto.STATE_SUSPENDED {
+		// Delete the SJC - we don't need to resume a request that isn't
+		// suspended. Transactions make sure we can't catch Suspend()
+		// in between saving an SJC and updating its request's state.
+		reqLogger.Errorf("cannot resume request because request is not suspended (state = %s) - deleting SJC", proto.StateName[req.State])
+		if err := r.deleteSJC(req.Id, conn); err != nil {
+			reqLogger.Errorf("error deleting SJC: %s", err)
+			return
+		}
+		claimed = false // deleted the SJC, so don't need to unclaim it
+		return
 	}
 
 	// Send suspended job chain to JR, which will resume running it.
@@ -358,35 +279,29 @@ func (r *resumer) resume(requestId string, conn *sql.Conn) {
 	// Update the request's state and save the JR host running it. Since we
 	// previously checked that the request state was STATE_SUSPENDED, this
 	// should always succeed.
-	req := proto.Request{
-		Id:            requestId,
-		State:         proto.STATE_RUNNING,
-		JobRunnerHost: &host,
-	}
+	req.State = proto.STATE_RUNNING
+	req.JobRunnerHost = &host
 	if err = r.updateRequest(req, proto.STATE_SUSPENDED, conn); err != nil {
 		reqLogger.Errorf("error setting request state to STATE_RUNNING and saving job runner hostname: %s", err)
 		return
 	}
-	reqLogger.Infof("resumed request")
 
 	// Now that we've resumed running the request, we can delete the SJC. We don't
 	// do this within the same transaction as updating the request, because even if
 	// deleting the SJC fails, the job chain has already been sent to the JR and we
 	// want to update the request state to Running.
-	if err := r.deleteSJC(requestId, conn); err != nil {
+	if err := r.deleteSJC(req.Id, conn); err != nil {
 		reqLogger.Errorf("error deleting SJC: %s", err)
 		return
 	}
 	claimed = false // we've deleted the SJC, so no longer need to unclaim it
-	reqLogger.Infof("deleted SJC")
 }
 
-// Find SJCs that have been claimed by an RM but have not been updated in a while.
-// Determine whether the request was already resumed and remove the SJC from db if
-// so, or unclaim it to be resumed in the future.
+// Find SJCs that have been claimed by an RM but have not been updated in a while
+// (the RM probably crashed) and unclaim them so they can be resumed in the future.
+// It's possible one of these SJCs was already resumed, but resumeAll will take
+// care of deleting it next time it runs.
 func (r *resumer) cleanupAbandonedSJCs() {
-	log.Infof("cleaning up abandoned SJCs")
-
 	// Connect to database
 	ctx := context.TODO()
 	conn, err := r.dbc.Open(ctx)
@@ -398,7 +313,7 @@ func (r *resumer) cleanupAbandonedSJCs() {
 
 	// Retrieve request ID for all claimed SJCs that haven't been updated in the
 	// last 5 minutes. The RM that claimed them probably encountered some problem
-	// eg. it crashed), so we want to make sure they aren't claimed forever.
+	// (eg. it crashed), so we want to make sure they aren't claimed forever.
 	q := "SELECT request_id FROM suspended_job_chains WHERE rm_host IS NOT NULL AND last_updated_at < NOW() - INTERVAL 5 MINUTE"
 	rows, err := conn.QueryContext(ctx, q)
 	if err != nil {
@@ -437,8 +352,6 @@ func (r *resumer) cleanupAbandonedSJCs() {
 // the SJCs from the db. This also takes care of SJCs that were resumed, but
 // didn't get deleted correctly.
 func (r *resumer) cleanupOldSJCs() {
-	log.Infof("cleaning up old SJCs")
-
 	// Connect to database
 	ctx := context.TODO()
 	conn, err := r.dbc.Open(ctx)
@@ -487,12 +400,15 @@ func (r *resumer) cleanupOldSJCs() {
 		// Change the request state to Failed if it's currently Suspended. The
 		// request might not be Suspended if an RM did resume the request, but
 		// failed on deleting the SJC. Update will return db.ErrNotUpdated in this
-		// case - check for this and ignore it.
+		// case - ignore this error.
 		req.State = proto.STATE_FAIL
 		req.JobRunnerHost = nil
 		err = r.updateRequest(req, proto.STATE_SUSPENDED, conn)
 		if err != nil && err != db.ErrNotUpdated {
 			reqLogger.Errorf("error changing request state from SUSPENDED to FAILED: %s", err)
+			if err := r.unclaimSJC(req.Id, true, conn); err != nil {
+				reqLogger.Errorf("error unclaiming SJC: %s", err)
+			}
 			continue
 
 		}
@@ -502,6 +418,9 @@ func (r *resumer) cleanupOldSJCs() {
 		err = r.deleteSJC(req.Id, conn)
 		if err != nil {
 			reqLogger.Errorf("error deleting SJC: %s", err)
+			if err := r.unclaimSJC(req.Id, true, conn); err != nil {
+				reqLogger.Errorf("error unclaiming SJC: %s", err)
+			}
 			continue
 		}
 	}
@@ -509,6 +428,8 @@ func (r *resumer) cleanupOldSJCs() {
 	return
 }
 
+// Update the State and JR host of a request. This is a wrapper around
+// updateRequestWithTxn that creates a transaction for updating the request.
 func (r *resumer) updateRequest(request proto.Request, curState byte, conn *sql.Conn) error {
 	// Start a transaction.
 	txn, err := conn.BeginTx(context.TODO(), nil)
@@ -543,7 +464,7 @@ func (r *resumer) updateRequestWithTxn(request proto.Request, curState byte, txn
 
 	switch cnt {
 	case 0:
-		// Either the request;s current state != curState, or no request with the
+		// Either the request's current state != curState, or no request with the
 		// id given exists.
 		return db.ErrNotUpdated
 	case 1:
@@ -555,8 +476,8 @@ func (r *resumer) updateRequestWithTxn(request proto.Request, curState byte, txn
 	}
 }
 
-// Remove an SJC that from the db. The RM does not need to have claimed the SJC to
-// delete it.
+// deleteSJC removes an SJC from the db. The RM needs to have claimed the
+// SJC in order to delete it.
 func (r *resumer) deleteSJC(requestId string, conn *sql.Conn) error {
 	// Start a transaction.
 	txn, err := conn.BeginTx(context.TODO(), nil)
@@ -565,8 +486,10 @@ func (r *resumer) deleteSJC(requestId string, conn *sql.Conn) error {
 	}
 	defer txn.Rollback()
 
-	q := "DELETE FROM suspended_job_chains WHERE request_id = ?"
-	result, err := txn.Exec(q, requestId)
+	q := "DELETE FROM suspended_job_chains WHERE request_id = ? AND rm_host = ?"
+	result, err := txn.Exec(q,
+		requestId,
+		r.host)
 	if err != nil {
 		return err
 	}
@@ -578,40 +501,15 @@ func (r *resumer) deleteSJC(requestId string, conn *sql.Conn) error {
 
 	switch count {
 	case 0:
-		return fmt.Errorf("cannot find SJC to delete")
+		return fmt.Errorf("cannot find SJC to delete - may not be claimed by RM")
 	case 1: // Success
+		log.Infof("deleted sjc %s", requestId)
 		return txn.Commit()
 	default:
 		// This should be impossible since we specify the primary key (request id)
 		// in the WHERE clause of the update.
 		return db.ErrMultipleUpdated
 	}
-}
-
-// Retrieve an SJC that this RM has claimed using the given request id.
-func (r *resumer) getClaimedSJC(requestId string, conn *sql.Conn) (proto.SuspendedJobChain, error) {
-	var sjc proto.SuspendedJobChain
-
-	var rawSJC []byte
-	q := "SELECT suspended_job_chain FROM suspended_job_chains WHERE request_id = ? AND rm_host = ?"
-	if err := conn.QueryRowContext(context.TODO(), q,
-		requestId,
-		r.host,
-	).Scan(&rawSJC); err != nil {
-		switch err {
-		case sql.ErrNoRows:
-			// The SJC doesn't exist or the RM hasn't claimed it.
-			return sjc, fmt.Errorf("cannot retrieve suspended job chain (req id = %s) - does not exist, or RM has not claimed it", requestId)
-		default:
-			return sjc, err
-		}
-	}
-
-	if err := json.Unmarshal(rawSJC, &sjc); err != nil {
-		return sjc, fmt.Errorf("cannot unmarshal suspended job chain (req id = %s): %s", requestId, err)
-	}
-
-	return sjc, nil
 }
 
 // Claim that this RM will resume the SJC corresponding to the request id.
@@ -660,7 +558,9 @@ func (r *resumer) claimSJC(requestId string, conn *sql.Conn) (bool, error) {
 
 // Un-claim the SJC corresponding to the request id - indicates an RM is no longer
 // trying to resume this SJC - so it may be claimed again later.
-// strict = true requires that this RM has a claim on the SJC.
+// strict = true requires that this RM has a claim on the SJC, or unclaimSJC
+// will return an error. Strict should always be used except when cleaning up
+// abandoned SJCs.
 func (r *resumer) unclaimSJC(requestId string, strict bool, conn *sql.Conn) error {
 	// Start a transaction
 	ctx := context.TODO()
@@ -695,7 +595,7 @@ func (r *resumer) unclaimSJC(requestId string, strict bool, conn *sql.Conn) erro
 
 	switch count {
 	case 0:
-		return ErrNotUnclaimed
+		return errors.New("could not find SJC to unclaim - either no SJC exists for this request, or this RM instance has not claimed the SJC")
 	case 1: // Success
 		return txn.Commit()
 	default:

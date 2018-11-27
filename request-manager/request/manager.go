@@ -46,10 +46,6 @@ type Manager interface {
 	// state from the proto.FinishRequestParams argument.
 	Finish(requestId string, finishParams proto.FinishRequestParams) error
 
-	// Update updates the state, started/finished timestamps (if set), and JR host
-	// of the provided request, as long as its current state matches the state given.
-	Update(request proto.Request, curState byte) error
-
 	// IncrementFinishedJobs increments the count of the FinishedJobs field
 	// on the request and saves it to the db.
 	IncrementFinishedJobs(requestId string) error
@@ -264,7 +260,7 @@ func (m *manager) Start(requestId string) error {
 	// This will only update the request if the current state is PENDING. The
 	// state should be PENDING since we checked this earlier, but it's possible
 	// something else has changed the state since then.
-	err = m.Update(req, proto.STATE_PENDING)
+	err = m.updateRequest(req, proto.STATE_PENDING)
 	if err != nil {
 		return err
 	}
@@ -313,6 +309,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	// If the request is running, get the chain's live status from the job runner.
 	var liveS proto.JobStatuses
 	if req.State == proto.STATE_RUNNING {
+		// TODO update to query the specific JR host that is running this request
 		s, err := m.jrc.RequestStatus(req.Id)
 		if err != nil {
 			return reqStatus, err
@@ -409,7 +406,7 @@ func (m *manager) Finish(requestId string, finishParams proto.FinishRequestParam
 	req.State = finishParams.State
 
 	// This will only update the request if the current state is RUNNING.
-	err = m.Update(req, proto.STATE_RUNNING)
+	err = m.updateRequest(req, proto.STATE_RUNNING)
 	if err != nil {
 		if prevState != proto.STATE_RUNNING {
 			return NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[prevState])
@@ -572,10 +569,10 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 	return req, nil
 }
 
-// Update updates the state and JR host of the provided request, as well as the
-// started/finished timestamps if they are set. The request is updated only if its
-// current state (in the db) matches the state provided.
-func (m *manager) Update(req proto.Request, curState byte) error {
+// Updates the state, started/finished timestamps, and JR host of the provided
+// request. The request is updated only if its current state (in the db) matches
+// the state provided.
+func (m *manager) updateRequest(req proto.Request, curState byte) error {
 	ctx := context.TODO()
 	conn, err := m.dbc.Open(ctx)
 	if err != nil {
@@ -583,29 +580,15 @@ func (m *manager) Update(req proto.Request, curState byte) error {
 	}
 	defer m.dbc.Close(conn) // don't leak conn
 
-	txn, err := conn.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer txn.Rollback()
-
-	// Create the query - if the provided request has StartedAt and/or FinishedAt
-	// set, include those fields. Fields that should never be updated by this
-	// package are not listed in this query.
-	var query string
-	var args []interface{}
-	if req.StartedAt == nil && req.FinishedAt == nil {
-		query = "UPDATE requests SET state = ?, jr_host = ? WHERE request_id = ? AND state = ?"
-		args = []interface{}{req.State, req.JobRunnerHost, req.Id, curState}
-	} else if req.StartedAt == nil {
-		query = "UPDATE requests SET state = ?, started_at = ?, jr_host = ? WHERE request_id = ? AND state = ?"
-		args = []interface{}{req.State, req.StartedAt, req.JobRunnerHost, req.Id, curState}
-	} else {
-		query = "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_host = ? WHERE request_id = ? AND state = ?"
-		args = []interface{}{req.State, req.StartedAt, req.FinishedAt, req.JobRunnerHost, req.Id, curState}
-	}
-
-	res, err := txn.ExecContext(ctx, query, args...)
+	// Fields that should never be updated by this package are not listed in this query.
+	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_host = ? WHERE request_id = ? AND state = ?"
+	res, err := conn.ExecContext(ctx, q,
+		req.State,
+		req.StartedAt,
+		req.FinishedAt,
+		req.JobRunnerHost,
+		req.Id,
+		curState)
 	if err != nil {
 		return err
 	}
@@ -626,6 +609,5 @@ func (m *manager) Update(req proto.Request, curState byte) error {
 		return db.ErrMultipleUpdated
 	}
 
-	txn.Commit()
 	return nil
 }

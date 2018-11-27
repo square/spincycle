@@ -21,7 +21,6 @@ import (
 type Server struct {
 	appCtx  app.Context
 	api     *api.API
-	resumer request.Resumer
 	sigChan chan os.Signal
 }
 
@@ -42,7 +41,7 @@ func (s *Server) Run() error {
 	// Start running the request resumer.
 	resumerDone := make(chan struct{})
 	go func() {
-		s.resumer.Run()
+		s.appCtx.RR.Run()
 		close(resumerDone)
 	}()
 

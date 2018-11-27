@@ -47,7 +47,7 @@ func setupResumer(t *testing.T, dataFile string) string {
 	// Create a real myconn.Pool using the db and sql.DB created above.
 	dbc = myconn.NewPool(db)
 
-	// Create a shutdown channel
+	// Create a shutdown channel - this is a package var from manager_test.go
 	shutdownChan = make(chan struct{})
 
 	rm = request.NewManager(&grapher.MockGrapherFactory{}, dbc, &mock.JRClient{}, shutdownChan)
@@ -193,13 +193,20 @@ func TestResume(t *testing.T) {
 	}
 	r := request.NewResumer(cfg)
 
-	r.ResumeAll()
-	r.Cleanup()
+	// Run the resumer. Shut it down after a while, so it doesn't keep running forever.
+	runDone := make(chan struct{})
+	go func() {
+		r.Run()
+		close(runDone)
+	}()
+	time.Sleep(500 * time.Millisecond)
+	close(shutdownChan)
+	<-runDone
 
-	// Expected to happen during Run:
+	// Expected to happen:
 	//  suspended___________: sent to JR, req = Running, + SJC deleted
-	//  abandoned_sjc_______: SJC unclaimed
-	//  running_abandoned___: SJC unclaimed
+	//  abandoned_sjc_______: SJC unclaimed, then resumed (sent to JR, Running, SJC deleted)
+	//  running_abandoned___: SJC unclaimed, then SJC deleted
 	//  running_with_old_sjc: SJC deleted
 	//  old_sjc_____________: try to resume (forced fail), delete SJC, req = Failed
 	//  no_sjc______________: req = Failed
@@ -207,6 +214,7 @@ func TestResume(t *testing.T) {
 	// Check SJC sent correctly to JR.
 	expectedSJCs := map[string]proto.SuspendedJobChain{
 		"suspended___________": testdb.SavedSJCs["suspended___________"],
+		"abandoned_sjc_______": testdb.SavedSJCs["abandoned_sjc_______"],
 	}
 	if diff := deep.Equal(receivedSJCs, expectedSJCs); diff != nil {
 		t.Error(diff)
@@ -220,53 +228,22 @@ func TestResume(t *testing.T) {
 	}
 	defer dbc.Close(conn)
 
-	q := "SELECT request_id, rm_host FROM suspended_job_chains ORDER BY request_id"
-	rows, err := conn.QueryContext(ctx, q)
+	var count int
+	q := "SELECT COUNT(*) FROM suspended_job_chains"
+	err = conn.QueryRowContext(ctx, q).Scan(&count)
 	if err != nil {
 		t.Errorf("error querying db: %s", err)
 		return
 	}
-	defer rows.Close()
-
-	presentIds := []string{}
-	claimed := make(map[string]bool)
-	for rows.Next() {
-		var id string
-		var rmHost sql.NullString
-		if err := rows.Scan(&id, &rmHost); err != nil {
-			t.Errorf("error scanning row: %s", err)
-			return
-		}
-		presentIds = append(presentIds, id)
-
-		if rmHost.Valid {
-			claimed[id] = true
-		} else {
-			claimed[id] = false
-		}
-	}
-
-	expectedIds := []string{
-		"abandoned_sjc_______",
-		"running_abandoned___",
-	}
-	if diff := deep.Equal(presentIds, expectedIds); diff != nil {
-		t.Error(diff)
-	}
-
-	expectedClaimed := map[string]bool{
-		"abandoned_sjc_______": false,
-		"running_abandoned___": false,
-	}
-	if diff := deep.Equal(claimed, expectedClaimed); diff != nil {
-		t.Error(diff)
+	if count != 0 {
+		t.Errorf("expected all SJCs to be deleted - %d still in db", count)
 	}
 
 	// Check request states + JR Host.
 	expectedStates := map[string]byte{
 		"suspended___________": proto.STATE_RUNNING,
 		"running_with_old_sjc": proto.STATE_RUNNING,
-		"abandoned_sjc_______": proto.STATE_SUSPENDED,
+		"abandoned_sjc_______": proto.STATE_RUNNING,
 		"running_abandoned___": proto.STATE_RUNNING,
 		"old_sjc_____________": proto.STATE_FAIL,
 		"no_sjc______________": proto.STATE_FAIL,
@@ -284,30 +261,10 @@ func TestResume(t *testing.T) {
 
 		if req.Id == "suspended___________" {
 			if req.JobRunnerHost == nil {
-				t.Errorf("request JR host = nil, expected %d", "returned_by_jr")
+				t.Errorf("request JR host = nil, expected %s", "returned_by_jr")
 			} else if *req.JobRunnerHost != "returned_by_jr" {
-				t.Errorf("request JR host = %d, expected %d", *req.JobRunnerHost, "returned_by_jr")
+				t.Errorf("request JR host = %s, expected %s", *req.JobRunnerHost, "returned_by_jr")
 			}
 		}
-	}
-
-	// ResumeAll again. Expect:
-	//  abandoned_sjc_______ should be resumed
-	//  running_abandoned___ should be deleted
-	r.ResumeAll()
-	if _, ok := receivedSJCs["abandoned_sjc_______"]; !ok {
-		t.Errorf("expected %s to be resumed", "abandoned_sjc_______")
-	}
-
-	var count int
-	q = "SELECT COUNT(*) FROM suspended_job_chains"
-	err = conn.QueryRowContext(ctx, q).Scan(&count)
-	if err != nil {
-		t.Errorf("error querying db: %s", err)
-		return
-	}
-
-	if count != 0 {
-		t.Errorf("expected all SJCs to be deleted - %d still in db", count)
 	}
 }

@@ -273,9 +273,9 @@ func (api *API) stopRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
 	// Authorize caller to stop request
-	// @todo: provide full Request to auth plugin
-	req := proto.Request{
-		Id: reqId,
+	req, err := api.rm.Get(reqId)
+	if err != nil {
+		return handleError(err)
 	}
 	if err := api.appCtx.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_STOP, req); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
