@@ -15,7 +15,7 @@ import (
 
 // UUID generates a UUID without any "-" in it.
 func UUID() string {
-	return strings.Replace(uuid.NewV4().String(), "-", "", -1)
+	return strings.Replace(uuid.Must(uuid.NewV4()).String(), "-", "", -1)
 }
 
 // XID generates a globally unique, 12-byte xid.
