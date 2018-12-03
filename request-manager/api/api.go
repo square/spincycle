@@ -292,15 +292,13 @@ func (api *API) stopRequestHandler(c echo.Context) error {
 // Suspend a request and save its suspended job chain. The Job Runner hits this
 // endpoint when suspending a job chain on shutdown.
 func (api *API) suspendRequestHandler(c echo.Context) error {
-	reqId := c.Param("reqId")
-
 	// Convert the payload into a proto.FinishRequestParams.
 	var sjc proto.SuspendedJobChain
 	if err := c.Bind(&sjc); err != nil {
 		return err
 	}
 
-	if err := api.rr.Suspend(reqId, sjc); err != nil {
+	if err := api.rr.Suspend(sjc); err != nil {
 		return handleError(err)
 	}
 

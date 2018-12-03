@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/square/spincycle/proto"
 )
@@ -26,9 +27,10 @@ type Client interface {
 	// (by sending it to the job runner).
 	StartRequest(string) error
 
-	// FinishRequest takes a request id and a state, and marks the
-	// corresponding request as being finished with the provided state.
-	FinishRequest(string, byte) error
+	// FinishRequest takes a request id, a state, and a finish time, and marks the
+	// corresponding request as being finished with the provided state, at the
+	// provided time.
+	FinishRequest(string, byte, time.Time) error
 
 	// StopRequest takes a request id and stops the corresponding request.
 	// If the request is not running, it returns an error.
@@ -106,13 +108,14 @@ func (c *client) StartRequest(requestId string) error {
 	return c.makeRequest("PUT", url, nil, http.StatusOK, nil)
 }
 
-func (c *client) FinishRequest(requestId string, state byte) error {
+func (c *client) FinishRequest(requestId string, state byte, finishedAt time.Time) error {
 	// PUT /api/v1/requests/${requestId}/finish
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/finish"
 
 	// Create the payload struct.
 	finishParams := proto.FinishRequestParams{
-		State: state,
+		State:      state,
+		FinishedAt: finishedAt,
 	}
 
 	return c.makeRequest("PUT", url, finishParams, http.StatusOK, nil)

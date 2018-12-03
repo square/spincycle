@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/proto"
@@ -196,7 +197,7 @@ func TestFinishRequestError(t *testing.T) {
 	defer cleanup()
 	c := rm.NewClient(&http.Client{}, ts.URL)
 
-	err := c.FinishRequest(reqId, proto.STATE_COMPLETE)
+	err := c.FinishRequest(reqId, proto.STATE_COMPLETE, time.Now())
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -210,13 +211,15 @@ func TestFinishRequestSuccess(t *testing.T) {
 	defer cleanup()
 	c := rm.NewClient(&http.Client{}, ts.URL)
 
-	err := c.FinishRequest(reqId, proto.STATE_COMPLETE)
+	finishTime := time.Now()
+	err := c.FinishRequest(reqId, proto.STATE_COMPLETE, finishTime)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
 	expectedPayload := proto.FinishRequestParams{
-		State: proto.STATE_COMPLETE,
+		State:      proto.STATE_COMPLETE,
+		FinishedAt: finishTime,
 	}
 	if diff := deep.Equal(payload, expectedPayload); diff != nil {
 		t.Error(diff)

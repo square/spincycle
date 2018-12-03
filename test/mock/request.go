@@ -5,6 +5,7 @@ package mock
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/auth"
@@ -93,20 +94,36 @@ func (r *RequestManager) JobChain(reqId string) (proto.JobChain, error) {
 // --------------------------------------------------------------------------
 
 type RequestResumer struct {
-	RunFunc     func()
-	SuspendFunc func(string, proto.SuspendedJobChain) error
+	ResumeAllFunc func()
+	CleanupFunc   func(time.Duration)
+	ResumeFunc    func(string) error
+	SuspendFunc   func(proto.SuspendedJobChain) error
 }
 
-func (r *RequestResumer) Run() {
-	if r.RunFunc != nil {
-		r.RunFunc()
+func (r *RequestResumer) ResumeAll() {
+	if r.ResumeAllFunc != nil {
+		r.ResumeAllFunc()
 	}
 	return
 }
 
-func (r *RequestResumer) Suspend(reqId string, sjc proto.SuspendedJobChain) error {
+func (r *RequestResumer) Cleanup(ttl time.Duration) {
+	if r.CleanupFunc != nil {
+		r.CleanupFunc(ttl)
+	}
+	return
+}
+
+func (r *RequestResumer) Resume(id string) error {
+	if r.ResumeFunc != nil {
+		return r.ResumeFunc(id)
+	}
+	return nil
+}
+
+func (r *RequestResumer) Suspend(sjc proto.SuspendedJobChain) error {
 	if r.SuspendFunc != nil {
-		return r.SuspendFunc(reqId, sjc)
+		return r.SuspendFunc(sjc)
 	}
 	return nil
 }

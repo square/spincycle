@@ -116,7 +116,7 @@ func init() {
 			State: proto.STATE_RUNNING,
 		},
 		FinishedJobs:  4,
-		JobRunnerHost: &jrHost,
+		JobRunnerHost: jrHost,
 	}
 
 	// //////////////////////////////////////////////////////////////////////////
@@ -360,9 +360,9 @@ func init() {
 	}
 
 	// //////////////////////////////////////////////////////////////////////////
-	// Suspended Request with no SJC
+	// Suspended Request + Old SJC (CLAIMED by an RM + suspended long ago)
 	// //////////////////////////////////////////////////////////////////////////
-	reqId = "no_sjc"
+	reqId = "abandoned_old_sjc___"
 	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:00:00Z")
 	startTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:01:00Z")
 	SavedRequests[reqId] = proto.Request{
@@ -384,6 +384,26 @@ func init() {
 				},
 			},
 			State: proto.STATE_PENDING, // jc in request is never updated
+		},
+	}
+	SavedSJCs[reqId] = proto.SuspendedJobChain{
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
 		},
 	}
 

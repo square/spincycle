@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/app"
@@ -36,20 +37,34 @@ func (s *Server) Run() error {
 		panic("Server.Run called before Server.Boot")
 	}
 
-	go s.waitForShutdown()
-
-	// Start running the request resumer.
+	// Run the request resumer.
 	resumerDone := make(chan struct{})
 	go func() {
-		s.appCtx.RR.Run()
-		close(resumerDone)
+		defer close(resumerDone)
+
+		// Every 10 seconds until shutdown, resume all SJCs and clean up any
+		// SJCs in a bad state.
+		ticker := time.NewTicker(10 * time.Second)
+	RESUMER:
+		for {
+			select {
+			case <-s.appCtx.ShutdownChan:
+				break RESUMER
+			case <-ticker.C:
+				s.appCtx.RR.ResumeAll()
+				s.appCtx.RR.Cleanup(1 * time.Hour)
+			}
+		}
+		ticker.Stop()
 	}()
+
+	go s.waitForShutdown()
 
 	// Run the RM API.
 	err := s.api.Run()
 
 	// If api returned because the RM is shutting down, wait for the resumer to
-	// return as well.
+	// stop running as well.
 	select {
 	case <-s.appCtx.ShutdownChan:
 		<-resumerDone
@@ -116,7 +131,6 @@ func (s *Server) Boot() error {
 		JRClient:       jrc,
 		RMHost:         hostname,
 		ShutdownChan:   s.appCtx.ShutdownChan,
-		ResumeInterval: request.ResumeInterval,
 	}
 	s.appCtx.RR = request.NewResumer(resumerConfig)
 

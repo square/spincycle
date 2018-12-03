@@ -285,7 +285,7 @@ func TestSuspendRequestHandlerSuccess(t *testing.T) {
 	// Create a mock request manager that will record the finish params it receives.
 	var rrSJC proto.SuspendedJobChain
 	rr := &mock.RequestResumer{
-		SuspendFunc: func(r string, sjc proto.SuspendedJobChain) error {
+		SuspendFunc: func(sjc proto.SuspendedJobChain) error {
 			rrSJC = sjc
 			return nil
 		},
@@ -357,7 +357,7 @@ func TestSuspendRequestHandlerRMError(t *testing.T) {
 	// sjc it receives.
 	var rrSJC proto.SuspendedJobChain
 	rr := &mock.RequestResumer{
-		SuspendFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
+		SuspendFunc: func(sjc proto.SuspendedJobChain) error {
 			rrSJC = sjc
 			return mock.ErrRequestResumer
 		},
@@ -653,7 +653,6 @@ func TestAuth(t *testing.T) {
 	var authenErr, authorErr error
 	var authenticateCalled, authorizeCalled, createCalled, startCalled bool
 	var authOp string
-	var authReq proto.Request
 	reset := func() {
 		authenticateCalled = false
 		authorizeCalled = false
@@ -662,7 +661,6 @@ func TestAuth(t *testing.T) {
 		authenErr = nil
 		authorErr = nil
 		authOp = ""
-		authReq = proto.Request{}
 		caller = auth.Caller{
 			Name:  "dn",
 			Roles: []string{"role1", "role2"}, // matches roles in auth-001.yaml (see below)
@@ -677,7 +675,6 @@ func TestAuth(t *testing.T) {
 		AuthorizeFunc: func(c auth.Caller, op string, req proto.Request) error {
 			authorizeCalled = true
 			authOp = op
-			authReq = req
 			return authorErr
 		},
 	}

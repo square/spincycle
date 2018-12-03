@@ -196,12 +196,13 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 
 	// Nullable columns.
 	var user sql.NullString
+	var jrHost sql.NullString
 	startedAt := mysql.NullTime{}
 	finishedAt := mysql.NullTime{}
 
 	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
 		"finished_jobs, jr_host FROM requests WHERE request_id = ?"
-	if err := conn.QueryRowContext(ctx, q, requestId).Scan(
+	err = conn.QueryRowContext(ctx, q, requestId).Scan(
 		&req.Id,
 		&req.Type,
 		&req.State,
@@ -211,7 +212,8 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 		&finishedAt,
 		&req.TotalJobs,
 		&req.FinishedJobs,
-		&req.JobRunnerHost); err != nil {
+		&jrHost)
+	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return req, db.NewErrNotFound("request")
@@ -222,6 +224,9 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 
 	if user.Valid {
 		req.User = user.String
+	}
+	if jrHost.Valid {
+		req.JobRunnerHost = jrHost.String
 	}
 	if startedAt.Valid {
 		req.StartedAt = &startedAt.Time
@@ -255,7 +260,7 @@ func (m *manager) Start(requestId string) error {
 
 	req.StartedAt = &now
 	req.State = proto.STATE_RUNNING
-	req.JobRunnerHost = &host
+	req.JobRunnerHost = host
 
 	// This will only update the request if the current state is PENDING. The
 	// state should be PENDING since we checked this earlier, but it's possible
@@ -400,15 +405,16 @@ func (m *manager) Finish(requestId string, finishParams proto.FinishRequestParam
 		return err
 	}
 
-	now := time.Now()
-	req.FinishedAt = &now
+	req.FinishedAt = &finishParams.FinishedAt
 	prevState := req.State
 	req.State = finishParams.State
+	req.JobRunnerHost = ""
 
 	// This will only update the request if the current state is RUNNING.
 	err = m.updateRequest(req, proto.STATE_RUNNING)
 	if err != nil {
 		if prevState != proto.STATE_RUNNING {
+			// This should never happen - we never finish a request that isn't running.
 			return NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[prevState])
 		}
 		return err
@@ -580,13 +586,19 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 	}
 	defer m.dbc.Close(conn) // don't leak conn
 
+	// If JobRunnerHost is empty, we want to set the db field to NULL (not an empty string).
+	var jrHost interface{}
+	if req.JobRunnerHost != "" {
+		jrHost = req.JobRunnerHost
+	}
+
 	// Fields that should never be updated by this package are not listed in this query.
 	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_host = ? WHERE request_id = ? AND state = ?"
 	res, err := conn.ExecContext(ctx, q,
 		req.State,
 		req.StartedAt,
 		req.FinishedAt,
-		req.JobRunnerHost,
+		jrHost,
 		req.Id,
 		curState)
 	if err != nil {

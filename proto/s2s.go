@@ -50,9 +50,7 @@ type Request struct {
 	TotalJobs    int       `json:"totalJobs"`    // the number of jobs in the request's job chain
 	FinishedJobs int       `json:"finishedJobs"` // the number of finished jobs in the request
 
-	// The Job Runner running this request. This is a pointer so it can have a nil
-	// value when the request isn't running.
-	JobRunnerHost *string `json:"jrHost,omitempty"`
+	JobRunnerHost string `json:"jrHost,omitempty"` // job runner running the request
 }
 
 // SuspendedJobChain (SJC) represents the data required to reconstruct and resume a
@@ -152,7 +150,8 @@ type CreateRequestParams struct {
 // FinishRequestParams represents the payload that is required to tell the RM
 // that a request has finished.
 type FinishRequestParams struct {
-	State byte // the final state of the chain
+	State      byte      // the final state of the chain
+	FinishedAt time.Time // when the Job Runner finished the request
 }
 
 // JobStatuses are a list of job status sorted by job id.
