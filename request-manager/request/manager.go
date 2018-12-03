@@ -296,7 +296,7 @@ func (m *manager) Stop(requestId string) error {
 	}
 
 	// Tell the JR to stop running the job chain for the request.
-	err = m.jrc.StopRequest(requestId)
+	err = m.jrc.StopRequest(requestId, req.JobRunnerHost)
 	if err != nil {
 		return fmt.Errorf("error stopping request in Job Runner: %s", err)
 	}
@@ -320,8 +320,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	// If the request is running, get the chain's live status from the job runner.
 	var liveS proto.JobStatuses
 	if req.State == proto.STATE_RUNNING {
-		// TODO update to query the specific JR host that is running this request
-		s, err := m.jrc.RequestStatus(req.Id)
+		s, err := m.jrc.RequestStatus(req.Id, req.JobRunnerHost)
 		if err != nil {
 			return reqStatus, err
 		}

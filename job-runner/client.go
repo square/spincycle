@@ -21,10 +21,12 @@ type Client interface {
 	// ResumeJobChain takes a suspended job chain and sends it to the JR to be
 	// resumed. It returns the JR host that is running the chain.
 	ResumeJobChain(proto.SuspendedJobChain) (string, error)
-	// StopRequest stops the job chain that corresponds to a given request Id.
-	StopRequest(string) error
-	// RequestStatus gets the status of the job chain that corresponds to a given request Id.
-	RequestStatus(string) (proto.JobChainStatus, error)
+	// StopRequest stops the job chain that corresponds to a given request Id
+	// running on a given Job Runner host.
+	StopRequest(requestId string, jrHost string) error
+	// RequestStatus gets the status of the job chain that corresponds to a given
+	// request Id running on a given Job Runner host.
+	RequestStatus(requestId string, jrHost string) (proto.JobChainStatus, error)
 
 	// SysStatRunning reports all running jobs.
 	SysStatRunning() ([]proto.JobStatus, error)
@@ -32,14 +34,16 @@ type Client interface {
 
 type client struct {
 	*http.Client
-	baseUrl string
+	baseUrl       string
+	hostURLFormat string
 }
 
 // NewClient takes an http.Client and base API URL and creates a Client.
-func NewClient(c *http.Client, baseUrl string) Client {
+func NewClient(c *http.Client, baseUrl string, hostURLFormat string) Client {
 	return &client{
-		Client:  c,
-		baseUrl: baseUrl,
+		Client:        c,
+		baseUrl:       baseUrl,
+		hostURLFormat: hostURLFormat,
 	}
 }
 
@@ -103,9 +107,12 @@ func (c *client) ResumeJobChain(sjc proto.SuspendedJobChain) (string, error) {
 	return location.Hostname(), nil
 }
 
-func (c *client) StopRequest(requestId string) error {
+func (c *client) StopRequest(requestId string, jrHost string) error {
+	// We need to talk to the specific JR host running this request,
+	// so use its hostname instead of the client's base URL.
 	// PUT /api/v1/job-chains/${requestId}/stop
-	url := fmt.Sprintf(c.baseUrl+"/api/v1/job-chains/%s/stop", requestId)
+	hostURL := fmt.Sprintf(c.hostURLFormat, jrHost)
+	url := fmt.Sprintf(hostURL+"/api/v1/job-chains/%s/stop", requestId)
 
 	// Make the request.
 	resp, body, err := c.put(url)
@@ -120,10 +127,13 @@ func (c *client) StopRequest(requestId string) error {
 	return nil
 }
 
-func (c *client) RequestStatus(requestId string) (proto.JobChainStatus, error) {
+func (c *client) RequestStatus(requestId string, jrHost string) (proto.JobChainStatus, error) {
 	status := proto.JobChainStatus{}
+	// We need to talk to the specific JR host running this request,
+	// so use its hostname instead of the client's base URL.
 	// GET /api/v1/job-chains/${requestId}/status
-	url := fmt.Sprintf(c.baseUrl+"/api/v1/job-chains/%s/status", requestId)
+	hostURL := fmt.Sprintf(c.hostURLFormat, jrHost)
+	url := fmt.Sprintf(hostURL+"/api/v1/job-chains/%s/status", requestId)
 
 	// Make the request.
 	resp, body, err := c.get(url)

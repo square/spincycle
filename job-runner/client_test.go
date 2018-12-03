@@ -37,7 +37,7 @@ func TestNewJobChain(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}))
-	c := jr.NewClient(&http.Client{}, ts.URL)
+	c := jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
 	_, err := c.NewJobChain(jc)
 	if err == nil {
@@ -66,7 +66,7 @@ func TestNewJobChain(t *testing.T) {
 		w.Header().Add("Location", "location")
 		w.WriteHeader(http.StatusOK)
 	}))
-	c = jr.NewClient(&http.Client{}, ts.URL)
+	c = jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
 	_, err = c.NewJobChain(jc)
 	if err != nil {
@@ -122,7 +122,7 @@ func TestResumeJobChain(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}))
-	c := jr.NewClient(&http.Client{}, ts.URL)
+	c := jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
 	_, err := c.ResumeJobChain(sjc)
 	if err == nil {
@@ -151,7 +151,7 @@ func TestResumeJobChain(t *testing.T) {
 		w.Header().Add("Location", "location")
 		w.WriteHeader(http.StatusOK)
 	}))
-	c = jr.NewClient(&http.Client{}, ts.URL)
+	c = jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
 	_, err = c.ResumeJobChain(sjc)
 	if err != nil {
@@ -178,9 +178,9 @@ func TestStopRequest(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}))
-	c := jr.NewClient(&http.Client{}, ts.URL)
+	c := jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
-	err := c.StopRequest("2")
+	err := c.StopRequest("2", ts.URL[7:])
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -194,9 +194,9 @@ func TestStopRequest(t *testing.T) {
 		method = r.Method
 		w.WriteHeader(http.StatusOK)
 	}))
-	c = jr.NewClient(&http.Client{}, ts.URL)
+	c = jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
-	err = c.StopRequest("2")
+	err = c.StopRequest("2", ts.URL[7:])
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -217,9 +217,9 @@ func TestRequestStatus(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 	}))
-	c := jr.NewClient(&http.Client{}, ts.URL)
+	c := jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
-	_, err := c.RequestStatus("3")
+	_, err := c.RequestStatus("3", ts.URL[7:])
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -231,9 +231,9 @@ func TestRequestStatus(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "baD{json")
 	}))
-	c = jr.NewClient(&http.Client{}, ts.URL)
+	c = jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
-	_, err = c.RequestStatus("3")
+	_, err = c.RequestStatus("3", ts.URL[7:])
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -249,9 +249,9 @@ func TestRequestStatus(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "{\"requestId\":\"3\",\"jobStatuses\":[{\"JobId\":\"job1\",\"status\":\"job is running...\",\"state\":5}]}")
 	}))
-	c = jr.NewClient(&http.Client{}, ts.URL)
+	c = jr.NewClient(&http.Client{}, ts.URL, "http://%s")
 
-	status, err := c.RequestStatus("3")
+	status, err := c.RequestStatus("3", ts.URL[7:])
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}

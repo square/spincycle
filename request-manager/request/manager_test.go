@@ -350,13 +350,13 @@ func TestStopComplete(t *testing.T) {
 	// be hit.
 	var recvdId string
 	mockJRc := &mock.JRClient{
-		StopRequestFunc: func(reqId string) error {
+		StopRequestFunc: func(reqId string, jrHost string) error {
 			recvdId = reqId
 			return nil
 		},
 	}
 
-	reqId := "93ec156e204ety45sgf0" // request is running
+	reqId := "93ec156e204ety45sgf0" // request is complete
 	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
 	err := m.Stop(reqId)
 	if err != nil {
@@ -366,6 +366,7 @@ func TestStopComplete(t *testing.T) {
 	if recvdId != "" {
 		t.Errorf("request id = %s, expected an empty string", recvdId)
 	}
+
 }
 
 func TestStop(t *testing.T) {
@@ -374,9 +375,11 @@ func TestStop(t *testing.T) {
 
 	// Create a mock JR client that records the requestId it receives.
 	var recvdId string
+	var recvdHost string
 	mockJRc := &mock.JRClient{
-		StopRequestFunc: func(reqId string) error {
+		StopRequestFunc: func(reqId string, jrHost string) error {
 			recvdId = reqId
+			recvdHost = jrHost
 			return nil
 		},
 	}
@@ -390,6 +393,10 @@ func TestStop(t *testing.T) {
 
 	if recvdId != reqId {
 		t.Errorf("request id = %s, expected %s", recvdId, reqId)
+	}
+	req := testdb.SavedRequests[reqId]
+	if recvdHost != req.JobRunnerHost {
+		t.Errorf("JR host = %s, expected %s", recvdHost, req.JobRunnerHost)
 	}
 }
 
@@ -442,8 +449,10 @@ func TestStatusRunning(t *testing.T) {
 	reqId := "454ae2f98a05cv16sdwt" // request is running and has JLs
 
 	// Create a mock JR client that returns live status for some jobs.
+	var recvdHost string
 	mockJRc := &mock.JRClient{
-		RequestStatusFunc: func(reqId string) (proto.JobChainStatus, error) {
+		RequestStatusFunc: func(reqId string, jrHost string) (proto.JobChainStatus, error) {
+			recvdHost = jrHost
 			return proto.JobChainStatus{
 				RequestId: reqId,
 				JobStatuses: proto.JobStatuses{
@@ -516,6 +525,11 @@ func TestStatusRunning(t *testing.T) {
 
 	if diff := deep.Equal(actual, expected); diff != nil {
 		t.Error(diff)
+	}
+
+	req := testdb.SavedRequests[reqId]
+	if recvdHost != req.JobRunnerHost {
+		t.Errorf("JR host = %s, expected %s", recvdHost, req.JobRunnerHost)
 	}
 }
 
