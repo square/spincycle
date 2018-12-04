@@ -9,8 +9,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
-	"os"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
@@ -43,6 +41,7 @@ type API struct {
 	traverserRepo    cmap.ConcurrentMap
 	stat             status.Manager
 	shutdownChan     chan struct{}
+	baseURL          string
 	// --
 	echo *echo.Echo
 }
@@ -53,6 +52,7 @@ type Config struct {
 	TraverserRepo    cmap.ConcurrentMap
 	StatusManager    status.Manager
 	ShutdownChan     chan struct{}
+	BaseURL          string // returned in location header when starting/resuming job chains
 }
 
 // NewAPI creates a new API struct. It initializes an echo web server within the
@@ -64,6 +64,7 @@ func NewAPI(cfg Config) *API {
 		traverserRepo:    cfg.TraverserRepo,
 		stat:             cfg.StatusManager,
 		shutdownChan:     cfg.ShutdownChan,
+		baseURL:          cfg.BaseURL,
 		// --
 		echo: echo.New(),
 	}
@@ -184,7 +185,7 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 	}
 
 	// Set the location in the response header to point to this server.
-	c.Response().Header().Set("Location", chainLocation(jc.RequestId, os.Hostname))
+	c.Response().Header().Set("Location", api.baseURL)
 
 	// Start the traverser, and remove it from the repo when it's
 	// done running. This could take a very long time to return,
@@ -228,7 +229,7 @@ func (api *API) resumeJobChainHandler(c echo.Context) error {
 	}
 
 	// Set the location in the response header to point to this server.
-	c.Response().Header().Set("Location", chainLocation(sjc.RequestId, os.Hostname))
+	c.Response().Header().Set("Location", api.baseURL)
 
 	// Start the traverser, and remove it from the repo when it's
 	// done running. This could take a very long time to return,
@@ -320,11 +321,4 @@ func handleError(err error) *echo.HTTPError {
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}
 	}
-}
-
-// chainLocation returns the URL location of a job chain
-func chainLocation(requestId string, hostname func() (string, error)) string {
-	h, _ := hostname()
-	url, _ := url.Parse(h + API_ROOT + "job-chains/" + requestId)
-	return url.EscapedPath()
 }

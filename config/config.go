@@ -71,7 +71,9 @@ type Server struct {
 // Configuration for an HTTP client.
 type HTTPClient struct {
 	// The base URL of the service that this client communicates with
-	// (ex: https://127.0.0.1:9340)
+	// (ex: https://127.0.0.1:9340). If running multiple instances of the
+	// service (Job Runner or Request Manager), this URL should point to a
+	// load balancer.
 	ServerURL string `yaml:"server_url"`
 
 	// The TLS config used by the client.

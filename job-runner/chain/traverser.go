@@ -50,11 +50,11 @@ type Traverser interface {
 	// It returns an error if it fails to stop all running jobs.
 	Stop() error
 
-	// Status gets the status of all running jobs. Since a job can only run when
-	// all of its ancestors have completed, the state of the entire chain can be
-	// inferred from this information - every job in the chain before a running job
-	// must be complete, and every job in the chain after a running job must be
-	// pending.
+	// Status gets the status of all running and failed jobs. Since a job can only
+	// run when all of its ancestors have completed, the state of the entire chain
+	// can be inferred from this information - every job in the chain before a
+	// running or failed job must be complete, and every job in the chain after a
+	// running or failed job must be pending.
 	//
 	// It returns an error if it fails to get the status of all running jobs.
 	Status() (proto.JobChainStatus, error)

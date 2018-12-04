@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/go-test/deep"
@@ -30,14 +29,32 @@ func setup(traverserFactory *mock.TraverserFactory) {
 	traverserRepo = cmap.New()
 	shutdownChan = make(chan struct{})
 	appCtx := app.Defaults()
+	baseURL, _ := appCtx.Hooks.ServerURL(appCtx)
 	apiCfg := api.Config{
 		AppCtx:           appCtx,
 		TraverserFactory: traverserFactory,
 		TraverserRepo:    traverserRepo,
 		StatusManager:    &mock.JRStatus{},
 		ShutdownChan:     shutdownChan,
+		BaseURL:          baseURL,
 	}
 	api := api.NewAPI(apiCfg)
+	server = httptest.NewServer(api)
+}
+
+func setupWithCtx(traverserFactory *mock.TraverserFactory, ctx app.Context) {
+	traverserRepo = cmap.New()
+	shutdownChan = make(chan struct{})
+	baseURL, _ := ctx.Hooks.ServerURL(ctx)
+	cfg := api.Config{
+		AppCtx:           ctx,
+		TraverserFactory: traverserFactory,
+		TraverserRepo:    traverserRepo,
+		StatusManager:    &mock.JRStatus{},
+		ShutdownChan:     shutdownChan,
+		BaseURL:          baseURL,
+	}
+	api := api.NewAPI(cfg)
 	server = httptest.NewServer(api)
 }
 
@@ -154,7 +171,9 @@ func TestNewJobChainShutdown(t *testing.T) {
 
 func TestNewJobChainSuccess(t *testing.T) {
 	requestId := "abc"
-	setup(&mock.TraverserFactory{})
+	ctx := app.Defaults()
+	ctx.Config.Server.ListenAddress = "host:port"
+	setupWithCtx(&mock.TraverserFactory{}, ctx)
 	defer cleanup()
 
 	jobChain := proto.JobChain{
@@ -179,8 +198,7 @@ func TestNewJobChainSuccess(t *testing.T) {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
 	}
 
-	h, _ := os.Hostname()
-	expectedLocation := h + api.API_ROOT + "job-chains/" + requestId
+	expectedLocation := "http://" + ctx.Config.Server.ListenAddress
 	if len(headers["Location"]) < 1 {
 		t.Errorf("location header not set at all")
 	} else {
@@ -193,7 +211,9 @@ func TestNewJobChainSuccess(t *testing.T) {
 // Test successfully resuming a job chain.
 func TestResumeJobChainSuccess(t *testing.T) {
 	requestId := "abc"
-	setup(&mock.TraverserFactory{})
+	ctx := app.Defaults()
+	ctx.Config.Server.ListenAddress = "host:port"
+	setupWithCtx(&mock.TraverserFactory{}, ctx)
 	defer cleanup()
 
 	jobChain := proto.JobChain{
@@ -225,8 +245,7 @@ func TestResumeJobChainSuccess(t *testing.T) {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
 	}
 
-	h, _ := os.Hostname()
-	expectedLocation := h + api.API_ROOT + "job-chains/" + requestId
+	expectedLocation := "http://" + ctx.Config.Server.ListenAddress
 	if len(headers["Location"]) < 1 {
 		t.Errorf("location header not set at all")
 	} else {

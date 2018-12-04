@@ -395,8 +395,8 @@ func TestStop(t *testing.T) {
 		t.Errorf("request id = %s, expected %s", recvdId, reqId)
 	}
 	req := testdb.SavedRequests[reqId]
-	if recvdHost != req.JobRunnerHost {
-		t.Errorf("JR host = %s, expected %s", recvdHost, req.JobRunnerHost)
+	if recvdHost != req.JobRunnerURL {
+		t.Errorf("JR url = %s, expected %s", recvdHost, req.JobRunnerURL)
 	}
 }
 
@@ -528,8 +528,8 @@ func TestStatusRunning(t *testing.T) {
 	}
 
 	req := testdb.SavedRequests[reqId]
-	if recvdHost != req.JobRunnerHost {
-		t.Errorf("JR host = %s, expected %s", recvdHost, req.JobRunnerHost)
+	if recvdHost != req.JobRunnerURL {
+		t.Errorf("JR url = %s, expected %s", recvdHost, req.JobRunnerURL)
 	}
 }
 

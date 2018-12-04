@@ -57,29 +57,30 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 	}
 	defer m.dbc.Close(conn) // don't leak conn
 
-	// Make a list of all the JR hosts currently running any requests.
-	q := "SELECT jr_host FROM requests WHERE state = ? AND jr_host IS NOT NULL"
+	// Make a list of the URLs of all JR hosts currently running any requests.
+	q := "SELECT jr_url FROM requests WHERE state = ? AND jr_url IS NOT NULL"
 	rows, err := conn.QueryContext(ctx, q, proto.STATE_RUNNING)
 	if err != nil {
 		return status, err
 	}
 	defer rows.Close()
 
-	jrHosts := map[string]struct{}{}
+	jrURLs := map[string]struct{}{}
 	for rows.Next() {
-		var jrHost string
-		err := rows.Scan(&jrHost)
+		var jrURL string
+		err := rows.Scan(&jrURL)
 		if err != nil {
 			return status, err
 		}
 
-		jrHosts[jrHost] = struct{}{}
+		// We only care about the presence of the key in the map, not the value.
+		jrURLs[jrURL] = struct{}{}
 	}
 
 	// Get the status of all running jobs from each JR host.
 	var running []proto.JobStatus
-	for host := range jrHosts {
-		runningFromHost, err := m.jrc.SysStatRunning(host)
+	for url := range jrURLs {
+		runningFromHost, err := m.jrc.SysStatRunning(url)
 		if err != nil {
 			return status, err
 		}

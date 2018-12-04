@@ -224,8 +224,8 @@ func TestResume(t *testing.T) {
 		t.Errorf("request %s state = %s, expected %s", req.Id, proto.StateName[req.State], "RUNNING")
 	}
 
-	if req.JobRunnerHost != "returned_by_jr" {
-		t.Errorf("request %s JR host = %s, expected %s", req.Id, req.JobRunnerHost, "returned_by_jr")
+	if req.JobRunnerURL != "returned_by_jr" {
+		t.Errorf("request %s JR url = %s, expected %s", req.Id, req.JobRunnerURL, "returned_by_jr")
 	}
 
 	// 2: Test resuming an SJC whose request state != Suspended. This should delete
@@ -414,8 +414,8 @@ func TestResumeAll(t *testing.T) {
 		}
 
 		if req.Id == "suspended___________" || req.Id == "old_sjc_____________" {
-			if req.JobRunnerHost != "returned_by_jr" {
-				t.Errorf("request %s JR host = %s, expected %s", req.Id, req.JobRunnerHost, "returned_by_jr")
+			if req.JobRunnerURL != "returned_by_jr" {
+				t.Errorf("request %s JR url = %s, expected %s", req.Id, req.JobRunnerURL, "returned_by_jr")
 			}
 		}
 	}

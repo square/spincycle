@@ -56,9 +56,9 @@ func (c *JRClient) RequestStatus(requestId string, jrURL string) (proto.JobChain
 	return proto.JobChainStatus{}, nil
 }
 
-func (c *JRClient) SysStatRunning(jrHost string) ([]proto.JobStatus, error) {
+func (c *JRClient) SysStatRunning(jrURL string) ([]proto.JobStatus, error) {
 	if c.SysStatRunningFunc != nil {
-		return c.SysStatRunningFunc(jrHost)
+		return c.SysStatRunningFunc(jrURL)
 	}
 	return []proto.JobStatus{}, nil
 }

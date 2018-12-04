@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -193,18 +192,7 @@ func MakeJobRunnerClient(ctx Context) (jr.Client, error) {
 			Transport: &http.Transport{TLSClientConfig: tlsConfig},
 		}
 	}
-
-	serverURL, err := url.Parse(jrcfg.ServerURL)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing JR server URL: %s", err)
-	}
-	hostURLFormat := serverURL.Scheme + "://%s"
-	if serverURL.Port() != "" {
-		hostURLFormat += ":" + serverURL.Port()
-	}
-	fmt.Println(hostURLFormat)
-
-	jrc := jr.NewClient(httpClient, jrcfg.ServerURL, hostURLFormat)
+	jrc := jr.NewClient(httpClient, jrcfg.ServerURL)
 	return jrc, nil
 }
 

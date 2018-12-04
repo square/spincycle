@@ -202,12 +202,12 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 
 	// Nullable columns.
 	var user sql.NullString
-	var jrHost sql.NullString
+	var jrURL sql.NullString
 	startedAt := mysql.NullTime{}
 	finishedAt := mysql.NullTime{}
 
 	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
-		"finished_jobs, jr_host FROM requests WHERE request_id = ?"
+		"finished_jobs, jr_url FROM requests WHERE request_id = ?"
 	err = conn.QueryRowContext(ctx, q, requestId).Scan(
 		&req.Id,
 		&req.Type,
@@ -218,7 +218,7 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 		&finishedAt,
 		&req.TotalJobs,
 		&req.FinishedJobs,
-		&jrHost)
+		&jrURL)
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
@@ -231,8 +231,8 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 	if user.Valid {
 		req.User = user.String
 	}
-	if jrHost.Valid {
-		req.JobRunnerHost = jrHost.String
+	if jrURL.Valid {
+		req.JobRunnerURL = jrURL.String
 	}
 	if startedAt.Valid {
 		req.StartedAt = &startedAt.Time
@@ -259,14 +259,14 @@ func (m *manager) Start(requestId string) error {
 
 	// TODO(felixp): add retries to this call to the JR to start the job chain
 	// Send the request's job chain to the job runner, which will start running it.
-	host, err := m.jrc.NewJobChain(*req.JobChain)
+	jrURL, err := m.jrc.NewJobChain(*req.JobChain)
 	if err != nil {
 		return err
 	}
 
 	req.StartedAt = &now
 	req.State = proto.STATE_RUNNING
-	req.JobRunnerHost = host
+	req.JobRunnerURL = jrURL
 
 	// This will only update the request if the current state is PENDING. The
 	// state should be PENDING since we checked this earlier, but it's possible
@@ -296,7 +296,7 @@ func (m *manager) Stop(requestId string) error {
 	}
 
 	// Tell the JR to stop running the job chain for the request.
-	err = m.jrc.StopRequest(requestId, req.JobRunnerHost)
+	err = m.jrc.StopRequest(requestId, req.JobRunnerURL)
 	if err != nil {
 		return fmt.Errorf("error stopping request in Job Runner: %s", err)
 	}
@@ -320,7 +320,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	// If the request is running, get the chain's live status from the job runner.
 	var liveS proto.JobStatuses
 	if req.State == proto.STATE_RUNNING {
-		s, err := m.jrc.RequestStatus(req.Id, req.JobRunnerHost)
+		s, err := m.jrc.RequestStatus(req.Id, req.JobRunnerURL)
 		if err != nil {
 			return reqStatus, err
 		}
@@ -413,7 +413,7 @@ func (m *manager) Finish(requestId string, finishParams proto.FinishRequestParam
 	req.FinishedAt = &finishParams.FinishedAt
 	prevState := req.State
 	req.State = finishParams.State
-	req.JobRunnerHost = ""
+	req.JobRunnerURL = ""
 
 	// This will only update the request if the current state is RUNNING.
 	err = m.updateRequest(req, proto.STATE_RUNNING)
@@ -580,7 +580,7 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 	return req, nil
 }
 
-// Updates the state, started/finished timestamps, and JR host of the provided
+// Updates the state, started/finished timestamps, and JR url of the provided
 // request. The request is updated only if its current state (in the db) matches
 // the state provided.
 func (m *manager) updateRequest(req proto.Request, curState byte) error {
@@ -591,19 +591,19 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 	}
 	defer m.dbc.Close(conn) // don't leak conn
 
-	// If JobRunnerHost is empty, we want to set the db field to NULL (not an empty string).
-	var jrHost interface{}
-	if req.JobRunnerHost != "" {
-		jrHost = req.JobRunnerHost
+	// If JobRunnerURL is empty, we want to set the db field to NULL (not an empty string).
+	var jrURL interface{}
+	if req.JobRunnerURL != "" {
+		jrURL = req.JobRunnerURL
 	}
 
 	// Fields that should never be updated by this package are not listed in this query.
-	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_host = ? WHERE request_id = ? AND state = ?"
+	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_url = ? WHERE request_id = ? AND state = ?"
 	res, err := conn.ExecContext(ctx, q,
 		req.State,
 		req.StartedAt,
 		req.FinishedAt,
-		jrHost,
+		jrURL,
 		req.Id,
 		curState)
 	if err != nil {
