@@ -18,7 +18,7 @@ type JRClient struct {
 	StartRequestFunc   func(string) error
 	StopRequestFunc    func(string, string) error
 	RequestStatusFunc  func(string, string) (proto.JobChainStatus, error)
-	SysStatRunningFunc func() ([]proto.JobStatus, error)
+	SysStatRunningFunc func(string) ([]proto.JobStatus, error)
 }
 
 func (c *JRClient) NewJobChain(jc proto.JobChain) (string, error) {
@@ -56,9 +56,9 @@ func (c *JRClient) RequestStatus(requestId string, jrURL string) (proto.JobChain
 	return proto.JobChainStatus{}, nil
 }
 
-func (c *JRClient) SysStatRunning() ([]proto.JobStatus, error) {
+func (c *JRClient) SysStatRunning(jrHost string) ([]proto.JobStatus, error) {
 	if c.SysStatRunningFunc != nil {
-		return c.SysStatRunningFunc()
+		return c.SysStatRunningFunc(jrHost)
 	}
 	return []proto.JobStatus{}, nil
 }
