@@ -27,7 +27,8 @@ type Manager interface {
 	// Create creates a proto.Request and saves it to the db.
 	Create(proto.CreateRequestParams) (proto.Request, error)
 
-	// Get retreives the request corresponding to the provided id.
+	// Get retrieves the request corresponding to the provided id,
+	// without its job chain.
 	Get(requestId string) (proto.Request, error)
 
 	// Start starts a request (sends it to the JR).
@@ -58,18 +59,20 @@ type Manager interface {
 
 // manager implements the Manager interface.
 type manager struct {
-	grf grapher.GrapherFactory
-	dbc myconn.Connector
-	jrc jr.Client
+	grf          grapher.GrapherFactory
+	dbc          myconn.Connector
+	jrc          jr.Client
+	shutdownChan chan struct{}
 	*sync.Mutex
 }
 
-func NewManager(grf grapher.GrapherFactory, dbc myconn.Connector, jrClient jr.Client) Manager {
+func NewManager(grf grapher.GrapherFactory, dbc myconn.Connector, jrClient jr.Client, shutdownChan chan struct{}) Manager {
 	return &manager{
-		grf:   grf,
-		dbc:   dbc,
-		jrc:   jrClient,
-		Mutex: &sync.Mutex{},
+		grf:          grf,
+		dbc:          dbc,
+		jrc:          jrClient,
+		shutdownChan: shutdownChan,
+		Mutex:        &sync.Mutex{},
 	}
 }
 
@@ -180,8 +183,59 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 	return req, txn.Commit()
 }
 
+// Retrieve the request without its corresponding Job Chain.
 func (m *manager) Get(requestId string) (proto.Request, error) {
-	return m.getWithJc(requestId)
+	var req proto.Request
+
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
+	if err != nil {
+		return req, err
+	}
+	defer m.dbc.Close(conn) // don't leak conn
+
+	// Nullable columns.
+	var user sql.NullString
+	var jrHost sql.NullString
+	startedAt := mysql.NullTime{}
+	finishedAt := mysql.NullTime{}
+
+	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
+		"finished_jobs, jr_host FROM requests WHERE request_id = ?"
+	err = conn.QueryRowContext(ctx, q, requestId).Scan(
+		&req.Id,
+		&req.Type,
+		&req.State,
+		&user,
+		&req.CreatedAt,
+		&startedAt,
+		&finishedAt,
+		&req.TotalJobs,
+		&req.FinishedJobs,
+		&jrHost)
+	if err != nil {
+		switch err {
+		case sql.ErrNoRows:
+			return req, db.NewErrNotFound("request")
+		default:
+			return req, err
+		}
+	}
+
+	if user.Valid {
+		req.User = user.String
+	}
+	if jrHost.Valid {
+		req.JobRunnerHost = jrHost.String
+	}
+	if startedAt.Valid {
+		req.StartedAt = &startedAt.Time
+	}
+	if finishedAt.Valid {
+		req.FinishedAt = &finishedAt.Time
+	}
+
+	return req, nil
 }
 
 func (m *manager) Start(requestId string) error {
@@ -191,17 +245,27 @@ func (m *manager) Start(requestId string) error {
 	}
 
 	now := time.Now()
-	req.StartedAt = &now
-	req.State = proto.STATE_RUNNING
 
-	// This will only update the request if the current state is PENDING.
-	err = m.updateRequest(req, proto.STATE_PENDING)
+	// Only start the request if it's currently Pending.
+	if req.State != proto.STATE_PENDING {
+		return NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[req.State])
+	}
+
+	// TODO(felixp): add retries to this call to the JR to start the job chain
+	// Send the request's job chain to the job runner, which will start running it.
+	host, err := m.jrc.NewJobChain(*req.JobChain)
 	if err != nil {
 		return err
 	}
 
-	// Send the request's job chain to the job runner, which will start running it.
-	err = m.jrc.NewJobChain(*req.JobChain)
+	req.StartedAt = &now
+	req.State = proto.STATE_RUNNING
+	req.JobRunnerHost = host
+
+	// This will only update the request if the current state is PENDING. The
+	// state should be PENDING since we checked this earlier, but it's possible
+	// something else has changed the state since then.
+	err = m.updateRequest(req, proto.STATE_PENDING)
 	if err != nil {
 		return err
 	}
@@ -210,7 +274,7 @@ func (m *manager) Start(requestId string) error {
 }
 
 func (m *manager) Stop(requestId string) error {
-	req, err := m.get(requestId)
+	req, err := m.Get(requestId)
 	if err != nil {
 		return err
 	}
@@ -234,25 +298,6 @@ func (m *manager) Stop(requestId string) error {
 	return nil
 }
 
-func (m *manager) Finish(requestId string, finishParams proto.FinishRequestParams) error {
-	req, err := m.get(requestId)
-	if err != nil {
-		return err
-	}
-
-	now := time.Now()
-	req.FinishedAt = &now
-	req.State = finishParams.State
-
-	// This will only update the request if the current state is RUNNING.
-	err = m.updateRequest(req, proto.STATE_RUNNING)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	var reqStatus proto.RequestStatus
 
@@ -269,6 +314,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	// If the request is running, get the chain's live status from the job runner.
 	var liveS proto.JobStatuses
 	if req.State == proto.STATE_RUNNING {
+		// TODO update to query the specific JR host that is running this request
 		s, err := m.jrc.RequestStatus(req.Id)
 		if err != nil {
 			return reqStatus, err
@@ -351,6 +397,30 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	}
 
 	return reqStatus, nil
+}
+
+func (m *manager) Finish(requestId string, finishParams proto.FinishRequestParams) error {
+	req, err := m.Get(requestId)
+	if err != nil {
+		return err
+	}
+
+	req.FinishedAt = &finishParams.FinishedAt
+	prevState := req.State
+	req.State = finishParams.State
+	req.JobRunnerHost = ""
+
+	// This will only update the request if the current state is RUNNING.
+	err = m.updateRequest(req, proto.STATE_RUNNING)
+	if err != nil {
+		if prevState != proto.STATE_RUNNING {
+			// This should never happen - we never finish a request that isn't running.
+			return NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[prevState])
+		}
+		return err
+	}
+
+	return nil
 }
 
 func (m *manager) IncrementFinishedJobs(requestId string) error {
@@ -465,58 +535,9 @@ func (s *manager) JobChain(requestId string) (proto.JobChain, error) {
 
 // ------------------------------------------------------------------------- //
 
-// get a request without its jc
-func (m *manager) get(requestId string) (proto.Request, error) {
-	var req proto.Request
-
-	ctx := context.TODO()
-	conn, err := m.dbc.Open(ctx)
-	if err != nil {
-		return req, err
-	}
-	defer m.dbc.Close(conn) // don't leak conn
-
-	// Nullable columns.
-	var user sql.NullString
-	startedAt := mysql.NullTime{}
-	finishedAt := mysql.NullTime{}
-
-	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
-		"finished_jobs FROM requests WHERE request_id = ?"
-	if err := conn.QueryRowContext(ctx, q, requestId).Scan(
-		&req.Id,
-		&req.Type,
-		&req.State,
-		&user,
-		&req.CreatedAt,
-		&startedAt,
-		&finishedAt,
-		&req.TotalJobs,
-		&req.FinishedJobs); err != nil {
-		switch err {
-		case sql.ErrNoRows:
-			return req, db.NewErrNotFound("request")
-		default:
-			return req, err
-		}
-	}
-
-	if user.Valid {
-		req.User = user.String
-	}
-	if startedAt.Valid {
-		req.StartedAt = &startedAt.Time
-	}
-	if finishedAt.Valid {
-		req.FinishedAt = &finishedAt.Time
-	}
-
-	return req, nil
-}
-
 // get a request with proto.Request.JobChain set
 func (m *manager) getWithJc(requestId string) (proto.Request, error) {
-	req, err := m.get(requestId)
+	req, err := m.Get(requestId)
 	if err != nil {
 		return req, err
 	}
@@ -554,6 +575,9 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 	return req, nil
 }
 
+// Updates the state, started/finished timestamps, and JR host of the provided
+// request. The request is updated only if its current state (in the db) matches
+// the state provided.
 func (m *manager) updateRequest(req proto.Request, curState byte) error {
 	ctx := context.TODO()
 	conn, err := m.dbc.Open(ctx)
@@ -562,12 +586,19 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 	}
 	defer m.dbc.Close(conn) // don't leak conn
 
+	// If JobRunnerHost is empty, we want to set the db field to NULL (not an empty string).
+	var jrHost interface{}
+	if req.JobRunnerHost != "" {
+		jrHost = req.JobRunnerHost
+	}
+
 	// Fields that should never be updated by this package are not listed in this query.
-	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ? WHERE request_id = ? AND state = ?"
+	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_host = ? WHERE request_id = ? AND state = ?"
 	res, err := conn.ExecContext(ctx, q,
 		req.State,
 		req.StartedAt,
 		req.FinishedAt,
+		jrHost,
 		req.Id,
 		curState)
 	if err != nil {

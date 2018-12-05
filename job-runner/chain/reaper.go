@@ -268,6 +268,7 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 // Finalize determines the final state of the chain and sends it to the Request
 // Manager.
 func (r *RunningChainReaper) Finalize(complete bool) {
+	finishedAt := time.Now()
 	if complete {
 		r.logger.Infof("chain is done, all jobs finished successfully")
 		r.chain.SetState(proto.STATE_COMPLETE)
@@ -276,7 +277,7 @@ func (r *RunningChainReaper) Finalize(complete bool) {
 		r.chain.SetState(proto.STATE_FAIL)
 	}
 	r.chainRepo.Set(r.chain)
-	r.sendFinalState()
+	r.sendFinalState(finishedAt)
 	r.chainRepo.Remove(r.chain.RequestId())
 }
 
@@ -392,6 +393,8 @@ func (r *SuspendedChainReaper) Reap(job proto.Job) {
 // either sends the Request Manager the chain's final state or a SuspendedJobChain
 // that can be used to resume running the chain.
 func (r *SuspendedChainReaper) Finalize() {
+	finishedAt := time.Now()
+
 	// Mark any jobs that didn't respond to Stop in time as Failed
 	for _, jobStatus := range r.chain.Running() {
 		jobId := jobStatus.JobId
@@ -407,7 +410,7 @@ func (r *SuspendedChainReaper) Finalize() {
 			r.chain.SetState(proto.STATE_FAIL)
 		}
 		r.chainRepo.Set(r.chain)
-		r.sendFinalState()
+		r.sendFinalState(finishedAt)
 		r.chainRepo.Remove(r.chain.RequestId())
 
 		return
@@ -424,8 +427,10 @@ func (r *SuspendedChainReaper) Finalize() {
 		nil,
 	)
 	if err != nil {
-		r.logger.Errorf("problem sending suspended job chain to the Request Manager: %s", err)
-		return
+		// If we couldn't suspend the request, mark it as failed instead.
+		r.logger.Errorf("problem sending suspended job chain to the Request Manager (%s). Treating chain as failed.", err)
+		r.chain.SetState(proto.STATE_FAIL)
+		r.sendFinalState(finishedAt)
 	}
 	r.chainRepo.Remove(r.chain.RequestId())
 }
@@ -513,6 +518,8 @@ func (r *StoppedChainReaper) Reap(job proto.Job) {
 // Finalize determines the final state of the chain and sends it to the Request
 // Manager.
 func (r *StoppedChainReaper) Finalize() {
+	finishedAt := time.Now()
+
 	// Mark any jobs that didn't respond to Stop in time as Failed
 	for _, jobStatus := range r.chain.Running() {
 		jobId := jobStatus.JobId
@@ -528,9 +535,8 @@ func (r *StoppedChainReaper) Finalize() {
 		r.chain.SetState(proto.STATE_FAIL)
 	}
 	r.chainRepo.Set(r.chain)
-	r.sendFinalState()
+	r.sendFinalState(finishedAt)
 	r.chainRepo.Remove(r.chain.RequestId())
-
 }
 
 // -------------------------------------------------------------------------- //
@@ -554,10 +560,10 @@ type reaper struct {
 // Sends the final state of the chain to the Request Manager, retrying a few times
 // if sending fails. It returns true if the final state was successfully sent;
 // else false.
-func (r *reaper) sendFinalState() {
+func (r *reaper) sendFinalState(finishedAt time.Time) {
 	err := retry.Do(r.finalizeTries, r.finalizeRetryWait,
 		func() error {
-			return r.rmc.FinishRequest(r.chain.RequestId(), r.chain.State())
+			return r.rmc.FinishRequest(r.chain.RequestId(), r.chain.State(), finishedAt)
 		},
 		nil,
 	)

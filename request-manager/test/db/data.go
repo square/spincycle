@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package db
 
@@ -17,15 +17,17 @@ var (
 	// IMPORTANT: if you change the structs below, you will also need
 	// to update the corresponding sql that inserts them into the
 	// database (in the request-manager/test/data directory).
-	SavedRequests map[string]proto.Request  // requestId => request
-	SavedJLs      map[string][]proto.JobLog // requestId => []jl
-	SavedJCs      map[string]proto.JobChain // requestId => jc
+	SavedRequests map[string]proto.Request           // requestId => request
+	SavedJLs      map[string][]proto.JobLog          // requestId => []jl
+	SavedJCs      map[string]proto.JobChain          // requestId => jc
+	SavedSJCs     map[string]proto.SuspendedJobChain // requestId => sjc
 )
 
 func init() {
 	SavedRequests = make(map[string]proto.Request)
 	SavedJLs = make(map[string][]proto.JobLog)
 	SavedJCs = make(map[string]proto.JobChain)
+	SavedSJCs = make(map[string]proto.SuspendedJobChain)
 
 	// //////////////////////////////////////////////////////////////////////////
 	// Pending request
@@ -56,6 +58,7 @@ func init() {
 	// //////////////////////////////////////////////////////////////////////////
 	reqId = "454ae2f98a05cv16sdwt"
 	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T01:00:00Z")
+	jrHost := "fake_jr_host"
 
 	// Graph for this chain looks like this:
 	//       -------> ldfi ------->
@@ -112,7 +115,296 @@ func init() {
 			},
 			State: proto.STATE_RUNNING,
 		},
-		FinishedJobs: 4,
+		FinishedJobs:  4,
+		JobRunnerHost: jrHost,
+	}
+
+	// //////////////////////////////////////////////////////////////////////////
+	// Suspended request with SJC
+	// //////////////////////////////////////////////////////////////////////////
+	reqId = "suspended___________"
+	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:00:00Z")
+	startTime, _ := time.Parse(time.RFC3339, "2017-09-13T03:01:00Z")
+	SavedRequests[reqId] = proto.Request{
+		Id:        reqId,
+		Type:      "do-another-thing",
+		CreatedAt: curTime,
+		StartedAt: &startTime,
+		State:     proto.STATE_SUSPENDED,
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_PENDING,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_PENDING, // jc in request is never updated
+		},
+	}
+	SavedSJCs[reqId] = proto.SuspendedJobChain{
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
+	}
+
+	// //////////////////////////////////////////////////////////////////////////
+	// Running request with an old SJC (unclaimed by an RM + suspended long ago)
+	// //////////////////////////////////////////////////////////////////////////
+	reqId = "running_with_old_sjc"
+	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:00:00Z")
+	startTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:01:00Z")
+	SavedRequests[reqId] = proto.Request{
+		Id:        reqId,
+		Type:      "do-another-thing",
+		CreatedAt: curTime,
+		StartedAt: &startTime,
+		State:     proto.STATE_RUNNING, // running
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_PENDING,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_PENDING, // jc in request is never updated
+		},
+	}
+	SavedSJCs[reqId] = proto.SuspendedJobChain{
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
+	}
+
+	// //////////////////////////////////////////////////////////////////////////
+	// Suspended Request + Abandoned SJC (claimed by an RM + not updated recently)
+	// //////////////////////////////////////////////////////////////////////////
+	reqId = "abandoned_sjc_______"
+	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:00:00Z")
+	startTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:01:00Z")
+	SavedRequests[reqId] = proto.Request{
+		Id:        reqId,
+		Type:      "do-another-thing",
+		CreatedAt: curTime,
+		StartedAt: &startTime,
+		State:     proto.STATE_SUSPENDED,
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_PENDING,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_PENDING, // jc in request is never updated
+		},
+	}
+	SavedSJCs[reqId] = proto.SuspendedJobChain{
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
+	}
+
+	// //////////////////////////////////////////////////////////////////////////
+	// Running Request + Abandoned SJC (claimed by an RM + not updated recently)
+	// //////////////////////////////////////////////////////////////////////////
+	reqId = "running_abandoned___"
+	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:00:00Z")
+	startTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:01:00Z")
+	SavedRequests[reqId] = proto.Request{
+		Id:        reqId,
+		Type:      "do-another-thing",
+		CreatedAt: curTime,
+		StartedAt: &startTime,
+		State:     proto.STATE_SUSPENDED,
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_PENDING,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_PENDING, // jc in request is never updated
+		},
+	}
+	SavedSJCs[reqId] = proto.SuspendedJobChain{
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
+	}
+
+	// //////////////////////////////////////////////////////////////////////////
+	// Suspended Request + Old SJC (unclaimed by an RM + suspended long ago)
+	// //////////////////////////////////////////////////////////////////////////
+	reqId = "old_sjc_____________"
+	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:00:00Z")
+	startTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:01:00Z")
+	SavedRequests[reqId] = proto.Request{
+		Id:        reqId,
+		Type:      "do-another-thing",
+		CreatedAt: curTime,
+		StartedAt: &startTime,
+		State:     proto.STATE_SUSPENDED,
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_PENDING,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_PENDING, // jc in request is never updated
+		},
+	}
+	SavedSJCs[reqId] = proto.SuspendedJobChain{
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
+	}
+
+	// //////////////////////////////////////////////////////////////////////////
+	// Suspended Request + Old SJC (CLAIMED by an RM + suspended long ago)
+	// //////////////////////////////////////////////////////////////////////////
+	reqId = "abandoned_old_sjc___"
+	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:00:00Z")
+	startTime, _ = time.Parse(time.RFC3339, "2017-09-13T03:01:00Z")
+	SavedRequests[reqId] = proto.Request{
+		Id:        reqId,
+		Type:      "do-another-thing",
+		CreatedAt: curTime,
+		StartedAt: &startTime,
+		State:     proto.STATE_SUSPENDED,
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_PENDING,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_PENDING, // jc in request is never updated
+		},
+	}
+	SavedSJCs[reqId] = proto.SuspendedJobChain{
+		RequestId:         reqId,
+		TotalJobTries:     map[string]uint{"hw48": 5},
+		LatestRunJobTries: map[string]uint{"hw48": 2},
+		SequenceTries:     map[string]uint{"hw48": 1},
+		JobChain: &proto.JobChain{
+			RequestId: reqId,
+			Jobs: map[string]proto.Job{
+				"hw48": proto.Job{
+					Id:            "hw48",
+					Type:          "test",
+					State:         proto.STATE_STOPPED,
+					Retry:         5,
+					SequenceId:    "hw48",
+					SequenceRetry: 1,
+				},
+			},
+			State: proto.STATE_SUSPENDED,
+		},
 	}
 
 	// //////////////////////////////////////////////////////////////////////////

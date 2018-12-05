@@ -5,6 +5,10 @@ package server
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/app"
@@ -16,14 +20,68 @@ import (
 )
 
 type Server struct {
-	appCtx app.Context
-	api    *api.API
+	appCtx  app.Context
+	api     *api.API
+	sigChan chan os.Signal
 }
 
 func NewServer(appCtx app.Context) *Server {
 	return &Server{
 		appCtx: appCtx,
 	}
+}
+
+// Run runs the Request Manager API in the foreground. It returns when the API stops.
+func (s *Server) Run() error {
+	if s.api == nil {
+		panic("Server.Run called before Server.Boot")
+	}
+
+	// Run the request resumer.
+	resumerDone := make(chan struct{})
+	go func() {
+		defer close(resumerDone)
+
+		// Every 10 seconds until shutdown, resume all SJCs and clean up any
+		// SJCs in a bad state.
+		ticker := time.NewTicker(10 * time.Second)
+	RESUMER:
+		for {
+			select {
+			case <-s.appCtx.ShutdownChan:
+				break RESUMER
+			case <-ticker.C:
+				s.appCtx.RR.ResumeAll()
+				s.appCtx.RR.Cleanup(1 * time.Hour)
+			}
+		}
+		ticker.Stop()
+	}()
+
+	go s.waitForShutdown()
+
+	// Run the RM API.
+	err := s.api.Run()
+
+	// If api returned because the RM is shutting down, wait for the resumer to
+	// stop running as well.
+	select {
+	case <-s.appCtx.ShutdownChan:
+		<-resumerDone
+	default:
+	}
+
+	return err
+}
+
+// Catch TERM and INT signals to gracefully shut down the Request Manager
+func (s *Server) waitForShutdown() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sigChan
+
+	close(s.appCtx.ShutdownChan)
 }
 
 func (s *Server) Boot() error {
@@ -60,7 +118,21 @@ func (s *Server) Boot() error {
 	}
 
 	// Request Manager: core logic and coordination
-	s.appCtx.RM = request.NewManager(grf, dbc, jrc)
+	s.appCtx.RM = request.NewManager(grf, dbc, jrc, s.appCtx.ShutdownChan)
+
+	// Request Resumer: suspend + resume requests
+	hostname, err := os.Hostname()
+	if err != nil {
+		return fmt.Errorf("error getting hostname: %s", err)
+	}
+	resumerConfig := request.ResumerConfig{
+		RequestManager: s.appCtx.RM,
+		DBConnector:    dbc,
+		JRClient:       jrc,
+		RMHost:         hostname,
+		ShutdownChan:   s.appCtx.ShutdownChan,
+	}
+	s.appCtx.RR = request.NewResumer(resumerConfig)
 
 	// Status: figure out request status using db and Job Runners (real-time)
 	s.appCtx.Status = status.NewManager(dbc, jrc)
@@ -75,13 +147,6 @@ func (s *Server) Boot() error {
 	s.api = api.NewAPI(s.appCtx)
 
 	return nil
-}
-
-func (s *Server) Run() error {
-	if s.api == nil {
-		panic("Server.Run called before Server.Boot")
-	}
-	return s.api.Run()
 }
 
 func (s *Server) API() *api.API {

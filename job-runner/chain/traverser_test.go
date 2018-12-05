@@ -547,7 +547,7 @@ func TestStopDoneRunning(t *testing.T) {
 	sentCount := 0
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte) error {
+		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
 			sentCount++
 			receivedState = state
 			return nil
@@ -596,7 +596,7 @@ func TestStopAfterSuspend(t *testing.T) {
 	}
 	sent := false
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte) error {
+		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
 			sent = true
 			return nil
 		},

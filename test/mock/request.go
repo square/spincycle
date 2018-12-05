@@ -1,10 +1,11 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2018, Square, Inc.
 
 package mock
 
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/auth"
@@ -12,6 +13,7 @@ import (
 
 var (
 	ErrRequestManager = errors.New("forced error in request manager")
+	ErrRequestResumer = errors.New("forced error in request resumer")
 )
 
 type RequestManager struct {
@@ -87,6 +89,43 @@ func (r *RequestManager) JobChain(reqId string) (proto.JobChain, error) {
 		return r.JobChainFunc(reqId)
 	}
 	return proto.JobChain{}, nil
+}
+
+// --------------------------------------------------------------------------
+
+type RequestResumer struct {
+	ResumeAllFunc func()
+	CleanupFunc   func(time.Duration)
+	ResumeFunc    func(string) error
+	SuspendFunc   func(proto.SuspendedJobChain) error
+}
+
+func (r *RequestResumer) ResumeAll() {
+	if r.ResumeAllFunc != nil {
+		r.ResumeAllFunc()
+	}
+	return
+}
+
+func (r *RequestResumer) Cleanup(ttl time.Duration) {
+	if r.CleanupFunc != nil {
+		r.CleanupFunc(ttl)
+	}
+	return
+}
+
+func (r *RequestResumer) Resume(id string) error {
+	if r.ResumeFunc != nil {
+		return r.ResumeFunc(id)
+	}
+	return nil
+}
+
+func (r *RequestResumer) Suspend(sjc proto.SuspendedJobChain) error {
+	if r.SuspendFunc != nil {
+		return r.SuspendFunc(sjc)
+	}
+	return nil
 }
 
 // --------------------------------------------------------------------------

@@ -4,6 +4,7 @@ package mock
 
 import (
 	"errors"
+	"time"
 
 	"github.com/square/spincycle/proto"
 )
@@ -16,7 +17,7 @@ type RMClient struct {
 	CreateRequestFunc  func(string, map[string]interface{}) (string, error)
 	GetRequestFunc     func(string) (proto.Request, error)
 	StartRequestFunc   func(string) error
-	FinishRequestFunc  func(string, byte) error
+	FinishRequestFunc  func(string, byte, time.Time) error
 	StopRequestFunc    func(string) error
 	SuspendRequestFunc func(string, proto.SuspendedJobChain) error
 	RequestStatusFunc  func(string) (proto.RequestStatus, error)
@@ -47,9 +48,9 @@ func (c *RMClient) StartRequest(requestId string) error {
 	return nil
 }
 
-func (c *RMClient) FinishRequest(requestId string, state byte) error {
+func (c *RMClient) FinishRequest(requestId string, state byte, finishedAt time.Time) error {
 	if c.FinishRequestFunc != nil {
-		return c.FinishRequestFunc(requestId, state)
+		return c.FinishRequestFunc(requestId, state, finishedAt)
 	}
 	return nil
 }

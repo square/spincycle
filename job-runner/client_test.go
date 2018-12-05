@@ -39,7 +39,7 @@ func TestNewJobChain(t *testing.T) {
 	}))
 	c := jr.NewClient(&http.Client{}, ts.URL)
 
-	err := c.NewJobChain(jc)
+	_, err := c.NewJobChain(jc)
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -63,11 +63,12 @@ func TestNewJobChain(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		w.Header().Add("Location", "location")
 		w.WriteHeader(http.StatusOK)
 	}))
 	c = jr.NewClient(&http.Client{}, ts.URL)
 
-	err = c.NewJobChain(jc)
+	_, err = c.NewJobChain(jc)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
@@ -123,7 +124,7 @@ func TestResumeJobChain(t *testing.T) {
 	}))
 	c := jr.NewClient(&http.Client{}, ts.URL)
 
-	err := c.ResumeJobChain(sjc)
+	_, err := c.ResumeJobChain(sjc)
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -147,11 +148,12 @@ func TestResumeJobChain(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		w.Header().Add("Location", "location")
 		w.WriteHeader(http.StatusOK)
 	}))
 	c = jr.NewClient(&http.Client{}, ts.URL)
 
-	err = c.ResumeJobChain(sjc)
+	_, err = c.ResumeJobChain(sjc)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}

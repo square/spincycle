@@ -13,26 +13,26 @@ var (
 )
 
 type JRClient struct {
-	NewJobChainFunc    func(proto.JobChain) error
-	ResumeJobChainFunc func(proto.SuspendedJobChain) error
+	NewJobChainFunc    func(proto.JobChain) (string, error)
+	ResumeJobChainFunc func(proto.SuspendedJobChain) (string, error)
 	StartRequestFunc   func(string) error
 	StopRequestFunc    func(string) error
 	RequestStatusFunc  func(string) (proto.JobChainStatus, error)
 	SysStatRunningFunc func() ([]proto.JobStatus, error)
 }
 
-func (c *JRClient) NewJobChain(jc proto.JobChain) error {
+func (c *JRClient) NewJobChain(jc proto.JobChain) (string, error) {
 	if c.NewJobChainFunc != nil {
 		return c.NewJobChainFunc(jc)
 	}
-	return nil
+	return "", nil
 }
 
-func (c *JRClient) ResumeJobChain(sjc proto.SuspendedJobChain) error {
+func (c *JRClient) ResumeJobChain(sjc proto.SuspendedJobChain) (string, error) {
 	if c.ResumeJobChainFunc != nil {
 		return c.ResumeJobChainFunc(sjc)
 	}
-	return nil
+	return "", nil
 }
 
 func (c *JRClient) StartRequest(requestId string) error {

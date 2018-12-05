@@ -26,8 +26,9 @@ var dbm testdb.Manager
 var dbc myconn.Connector
 var grf *grapher.MockGrapherFactory
 var dbSuffix string
+var shutdownChan chan struct{}
 
-func setup(t *testing.T, dataFile string) string {
+func setupManager(t *testing.T, dataFile string) string {
 	// Setup a db manager to handle databases for all tests.
 	var err error
 	if dbm == nil {
@@ -77,10 +78,15 @@ func setup(t *testing.T, dataFile string) string {
 		}
 	}
 
+	// Create a shutdown channel
+	shutdownChan = make(chan struct{})
+
 	return dbName
 }
 
-func teardown(t *testing.T, dbName string) {
+func teardownManager(t *testing.T, dbName string) {
+	close(shutdownChan)
+
 	if err := dbm.Destroy(dbName); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +98,9 @@ func teardown(t *testing.T, dbName string) {
 // //////////////////////////////////////////////////////////////////////////
 
 func TestCreateMissingType(t *testing.T) {
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	shutdownChan := make(chan struct{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	defer close(shutdownChan)
 
 	_, err := m.Create(proto.CreateRequestParams{})
 	if err != request.ErrInvalidParams {
@@ -101,10 +109,10 @@ func TestCreateMissingType(t *testing.T) {
 }
 
 func TestCreate(t *testing.T) {
-	dbName := setup(t, "")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, "")
+	defer teardownManager(t, dbName)
 
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 
 	// gr uses spec a-b-c.yaml which has reqest "three-nodes"
 	reqParams := proto.CreateRequestParams{
@@ -221,11 +229,11 @@ func TestCreate(t *testing.T) {
 }
 
 func TestGetNotFound(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "invalid"
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	_, err := m.Get(reqId)
 	if err != nil {
 		switch v := err.(type) {
@@ -240,49 +248,51 @@ func TestGetNotFound(t *testing.T) {
 }
 
 func TestGet(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "0874a524aa1edn3ysp00"
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	actual, err := m.Get(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
 	}
 
 	expected := testdb.SavedRequests[reqId]
+	expected.JobChain = nil // expect request without JC
 	if diff := deep.Equal(actual, expected); diff != nil {
 		t.Error(diff)
 	}
 }
 
 func TestStartNotPending(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	err := m.Start(reqId)
-	if err != db.ErrNotUpdated {
-		t.Errorf("error = %s, expected %s", err, db.ErrNotUpdated)
+	_, ok := err.(request.ErrInvalidState)
+	if !ok {
+		t.Errorf("error = %s, expected %s", err, request.NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[proto.STATE_RUNNING]))
 	}
 }
 
 func TestStart(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	// Create a mock JR client that records the JC it receives.
 	var recvdJc proto.JobChain
 	mockJRc := &mock.JRClient{
-		NewJobChainFunc: func(jc proto.JobChain) error {
+		NewJobChainFunc: func(jc proto.JobChain) (string, error) {
 			recvdJc = jc
-			return nil
+			return "fake_host", nil
 		},
 	}
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
-	m := request.NewManager(grf, dbc, mockJRc)
+	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
 	err := m.Start(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -304,11 +314,11 @@ func TestStart(t *testing.T) {
 }
 
 func TestStopNotRunning(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	err := m.Stop(reqId)
 	if err != nil {
 		switch v := err.(type) {
@@ -323,8 +333,8 @@ func TestStopNotRunning(t *testing.T) {
 }
 
 func TestStopComplete(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	// Create a mock JR client that records the requestId it receives. This shouldn't
 	// be hit.
@@ -337,7 +347,7 @@ func TestStopComplete(t *testing.T) {
 	}
 
 	reqId := "93ec156e204ety45sgf0" // request is running
-	m := request.NewManager(grf, dbc, mockJRc)
+	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
 	err := m.Stop(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -349,8 +359,8 @@ func TestStopComplete(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	// Create a mock JR client that records the requestId it receives.
 	var recvdId string
@@ -362,7 +372,7 @@ func TestStop(t *testing.T) {
 	}
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
-	m := request.NewManager(grf, dbc, mockJRc)
+	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
 	err := m.Stop(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -374,29 +384,31 @@ func TestStop(t *testing.T) {
 }
 
 func TestFinishNotRunning(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
 	params := proto.FinishRequestParams{
 		State: proto.STATE_COMPLETE,
 	}
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	err := m.Finish(reqId, params)
-	if err != db.ErrNotUpdated {
-		t.Errorf("error = %s, expected %s", err, db.ErrNotUpdated)
+	switch err.(type) {
+	case request.ErrInvalidState:
+	default:
+		t.Errorf("error = %s, expected %s", err, request.NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[proto.STATE_PENDING]))
 	}
 }
 
 func TestFinish(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
 	params := proto.FinishRequestParams{
 		State: proto.STATE_COMPLETE,
 	}
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	err := m.Finish(reqId, params)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -414,8 +426,8 @@ func TestFinish(t *testing.T) {
 }
 
 func TestStatusRunning(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running and has JLs
 
@@ -444,7 +456,7 @@ func TestStatusRunning(t *testing.T) {
 		},
 	}
 
-	m := request.NewManager(grf, dbc, mockJRc)
+	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
 	actual, err := m.Status(reqId)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
@@ -498,11 +510,11 @@ func TestStatusRunning(t *testing.T) {
 }
 
 func TestIncrementFinishedJobs(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/request-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	err := m.IncrementFinishedJobs(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -521,11 +533,11 @@ func TestIncrementFinishedJobs(t *testing.T) {
 }
 
 func TestJobChainNotFound(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/jc-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/jc-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "invalid"
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	_, err := m.JobChain(reqId)
 	if err != nil {
 		switch v := err.(type) {
@@ -540,11 +552,11 @@ func TestJobChainNotFound(t *testing.T) {
 }
 
 func TestJobChainInvalid(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/jc-bad.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/jc-bad.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "cd724fd12092"
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	_, err := m.JobChain(reqId)
 	if err == nil {
 		t.Errorf("expected an error unmarshaling the job chain, did not get one")
@@ -552,11 +564,11 @@ func TestJobChainInvalid(t *testing.T) {
 }
 
 func TestJobChain(t *testing.T) {
-	dbName := setup(t, rmtest.DataPath+"/jc-default.sql")
-	defer teardown(t, dbName)
+	dbName := setupManager(t, rmtest.DataPath+"/jc-default.sql")
+	defer teardownManager(t, dbName)
 
 	reqId := "8bff5def4f3fvh78skjy"
-	m := request.NewManager(grf, dbc, &mock.JRClient{})
+	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
 	actual, err := m.JobChain(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
