@@ -508,7 +508,6 @@ func (r *resumer) deleteSJC(requestId string, conn *sql.Conn) error {
 	case 0:
 		return fmt.Errorf("cannot find SJC to delete - may not be claimed by RM")
 	case 1: // Success
-		log.Infof("deleted sjc %s", requestId)
 		return txn.Commit()
 	default:
 		// This should be impossible since we specify the primary key (request id)
