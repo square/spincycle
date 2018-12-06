@@ -29,7 +29,7 @@ import (
 
 // Context represents the config, core service singletons, and 3rd-party extensions.
 // There is one immutable context shared by many packages, created in Server.Boot,
-// called appCtx.
+// called api.appCtx.
 type Context struct {
 	// User-provided config from config file
 	Config config.RequestManager
@@ -78,6 +78,17 @@ type Hooks struct {
 	// and overrides the username. The request fails and returns HTTP 500 if it
 	// returns an error.
 	SetUsername func(*http.Request) (string, error)
+
+	// RunAPI runs the Request Manager API. It should block until the API is
+	// stopped via a call to StopAPI. If this hook is provided, it is called
+	// instead of api.Run(). If you provide this hook, you need to provide StopAPI
+	// as well.
+	RunAPI func() error
+
+	// StopAPI stops running the Request Manager API - it's called after RunAPI
+	// when the Request Manager is shutting down, and it should cause RunAPI to
+	// return. If you provide this hook, you need to provide RunAPI as well.
+	StopAPI func() error
 }
 
 // Plugins allow users to provide custom components. All plugins are optional;

@@ -426,15 +426,16 @@ func TestCleanup(t *testing.T) {
 	defer teardownResumer(t, dbName)
 
 	cfg := request.ResumerConfig{
-		RequestManager: rm,
-		DBConnector:    dbc,
-		JRClient:       &mock.JRClient{},
-		RMHost:         "hostname",
-		ShutdownChan:   shutdownChan,
+		RequestManager:       rm,
+		DBConnector:          dbc,
+		JRClient:             &mock.JRClient{},
+		RMHost:               "hostname",
+		ShutdownChan:         shutdownChan,
+		SuspendedJobChainTTL: time.Hour,
 	}
 	r := request.NewResumer(cfg)
 
-	r.Cleanup(time.Hour)
+	r.Cleanup()
 
 	// Expectation for each SJC:
 	//  suspended___________: nothing
@@ -507,7 +508,7 @@ func TestCleanup(t *testing.T) {
 		t.Errorf("request %s state = %s, expected %s", req.Id, proto.StateName[req.State], "FAIL")
 	}
 
-	r.Cleanup(time.Hour)
+	r.Cleanup()
 
 	// Expectation for each SJC:
 	//  suspended___________: nothing

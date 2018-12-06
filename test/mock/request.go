@@ -5,7 +5,6 @@ package mock
 import (
 	"errors"
 	"net/http"
-	"time"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/auth"
@@ -95,7 +94,7 @@ func (r *RequestManager) JobChain(reqId string) (proto.JobChain, error) {
 
 type RequestResumer struct {
 	ResumeAllFunc func()
-	CleanupFunc   func(time.Duration)
+	CleanupFunc   func()
 	ResumeFunc    func(string) error
 	SuspendFunc   func(proto.SuspendedJobChain) error
 }
@@ -107,9 +106,9 @@ func (r *RequestResumer) ResumeAll() {
 	return
 }
 
-func (r *RequestResumer) Cleanup(ttl time.Duration) {
+func (r *RequestResumer) Cleanup() {
 	if r.CleanupFunc != nil {
-		r.CleanupFunc(ttl)
+		r.CleanupFunc()
 	}
 	return
 }

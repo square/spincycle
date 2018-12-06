@@ -11,9 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 	"github.com/orcaman/concurrent-map"
@@ -49,15 +47,23 @@ type API struct {
 	echo *echo.Echo
 }
 
+type Config struct {
+	AppCtx           app.Context
+	TraverserFactory chain.TraverserFactory
+	TraverserRepo    cmap.ConcurrentMap
+	StatusManager    status.Manager
+	ShutdownChan     chan struct{}
+}
+
 // NewAPI creates a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
-func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, traverserRepo cmap.ConcurrentMap, stat status.Manager, shutdownChan chan struct{}) *API {
+func NewAPI(cfg Config) *API {
 	api := &API{
-		appCtx:           appCtx,
-		traverserFactory: traverserFactory,
-		traverserRepo:    traverserRepo,
-		stat:             stat,
-		shutdownChan:     shutdownChan,
+		appCtx:           cfg.AppCtx,
+		traverserFactory: cfg.TraverserFactory,
+		traverserRepo:    cfg.TraverserRepo,
+		stat:             cfg.StatusManager,
+		shutdownChan:     cfg.ShutdownChan,
 		// --
 		echo: echo.New(),
 	}
@@ -85,10 +91,10 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 	// Auth hook
 	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if appCtx.Hooks.Auth == nil {
+			if cfg.AppCtx.Hooks.Auth == nil {
 				return next(c) // no auth
 			}
-			ok, err := appCtx.Hooks.Auth(c.Request())
+			ok, err := cfg.AppCtx.Hooks.Auth(c.Request())
 			if err != nil {
 				return err
 			}
@@ -103,10 +109,10 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 	// SetUsername hook
 	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if appCtx.Hooks.SetUsername == nil {
+			if cfg.AppCtx.Hooks.SetUsername == nil {
 				return next(c) // no auth
 			}
-			username, err := appCtx.Hooks.SetUsername(c.Request())
+			username, err := cfg.AppCtx.Hooks.SetUsername(c.Request())
 			if err != nil {
 				return err
 			}
@@ -118,68 +124,31 @@ func NewAPI(appCtx app.Context, traverserFactory chain.TraverserFactory, travers
 	return api
 }
 
+// Run API server.
 func (api *API) Run() error {
-	// Shut down the API when the Job Runner shuts down.
-	doneChan := make(chan struct{})
-	doneShuttingDown := make(chan struct{})
-	go func() {
-		select {
-		case <-api.shutdownChan:
-			api.shutdown()
-			close(doneShuttingDown)
-		case <-doneChan:
-			return
-		}
-	}()
-
-	// Run API server.
 	var err error
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
 		err = api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
 	} else {
 		err = api.echo.Start(api.appCtx.Config.Server.ListenAddress)
 	}
+	return err
+}
 
-	// If API was shut down, wait to make sure it's done shutting down.
-	select {
-	case <-api.shutdownChan:
-		<-doneShuttingDown
-	default:
-		close(doneChan) // stop the shutdown goroutine
+// Stop stops the API when it's running. When Stop is called, Run returns
+// immediately. Make sure to wait for Stop to return.
+func (api *API) Stop() error {
+	var err error
+	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
+		err = api.echo.TLSServer.Shutdown(context.TODO())
+	} else {
+		err = api.echo.Server.Shutdown(context.TODO())
 	}
 	return err
 }
 
 func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.echo.ServeHTTP(w, r)
-}
-
-func (api *API) shutdown() {
-	// Wait for all traversers to shut down. Timeout if they aren't done
-	// within 20 seconds.
-	timeout := time.After(20 * time.Second)
-WAIT_FOR_TRAVERSERS:
-	for !api.traverserRepo.IsEmpty() {
-		select {
-		case <-time.After(10 * time.Millisecond):
-			// Check again if traversers are all done.
-		case <-timeout:
-			break WAIT_FOR_TRAVERSERS
-		}
-	}
-
-	// Shut down server.
-	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
-		err := api.echo.TLSServer.Shutdown(context.TODO())
-		if err != nil {
-			log.Warnf("error when shutting down API: %s", err)
-		}
-	} else {
-		err := api.echo.Server.Shutdown(context.TODO())
-		if err != nil {
-			log.Warnf("error when shutting down API: %s", err)
-		}
-	}
 }
 
 // ============================== CONTROLLERS ============================== //

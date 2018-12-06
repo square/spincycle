@@ -14,6 +14,6 @@ func main() {
 	if err := s.Boot(); err != nil {
 		log.Fatalf("Error starting Request Manager: %s", err)
 	}
-	err := s.Run()
+	err := s.Run(true)
 	log.Fatalf("Request Manager stopped: %s", err)
 }

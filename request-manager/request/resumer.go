@@ -37,10 +37,10 @@ type Resumer interface {
 	// been claimed by an RM (`rm_host` field set) but have not been updated in a
 	// while, meaning the RM resuming them probably crashed. These SJCs are
 	// unclaimed (set `rm_host` to null) so they can be resumed in the future. Old
-	// SJCs are those which haven't been resumed within the TTL provided (rounded
-	// to the nearest second). They're deleted and their requests' states set to
-	// FAILED.
-	Cleanup(ttl time.Duration)
+	// SJCs are those which haven't been resumed within the TTL provided when
+	// creating the Resumer (rounded to the nearest second). They're deleted and
+	// their requests' states set to FAILED.
+	Cleanup()
 }
 
 // TODO(felixp): This kind of comment can probably be moved out of the code
@@ -81,14 +81,16 @@ type resumer struct {
 	host         string // the host this request manager is currently running on
 	shutdownChan chan struct{}
 	logger       *log.Entry
+	sjcTTL       time.Duration // how long after being suspended do we keep an SJC
 }
 
 type ResumerConfig struct {
-	RequestManager Manager
-	DBConnector    myconn.Connector
-	JRClient       jr.Client
-	RMHost         string
-	ShutdownChan   chan struct{}
+	RequestManager       Manager
+	DBConnector          myconn.Connector
+	JRClient             jr.Client
+	RMHost               string
+	ShutdownChan         chan struct{}
+	SuspendedJobChainTTL time.Duration
 }
 
 func NewResumer(cfg ResumerConfig) Resumer {
@@ -98,6 +100,7 @@ func NewResumer(cfg ResumerConfig) Resumer {
 		jrc:          cfg.JRClient,
 		host:         cfg.RMHost,
 		shutdownChan: cfg.ShutdownChan,
+		sjcTTL:       cfg.SuspendedJobChainTTL,
 	}
 }
 
@@ -313,7 +316,7 @@ func (r *resumer) Resume(id string) error {
 // Old SJCs were suspended a long time ago but never resumed, and they've exceeded
 // the SJC TTL. Mark their requests as FAILED (if they're currently SUSPENDED) and
 // remove the SJCs from the db.
-func (r *resumer) Cleanup(ttl time.Duration) {
+func (r *resumer) Cleanup() {
 	// Connect to database
 	ctx := context.TODO()
 	conn, err := r.dbc.Open(ctx)
@@ -361,7 +364,7 @@ func (r *resumer) Cleanup(ttl time.Duration) {
 	// Clean up old SJCs:
 
 	// Retrieve Request IDs of all unclaimed SJCs suspended more than 1 hour ago.
-	ttlSeconds := fmt.Sprintf("%.0f", ttl.Round(time.Second).Seconds())
+	ttlSeconds := fmt.Sprintf("%.0f", r.sjcTTL.Round(time.Second).Seconds())
 	q = "SELECT request_id FROM suspended_job_chains WHERE rm_host IS NULL AND suspended_at < NOW() - INTERVAL ? SECOND"
 	rows, err = conn.QueryContext(ctx, q, ttlSeconds)
 	if err != nil {

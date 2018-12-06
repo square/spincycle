@@ -29,7 +29,15 @@ var (
 func setup(traverserFactory *mock.TraverserFactory) {
 	traverserRepo = cmap.New()
 	shutdownChan = make(chan struct{})
-	api := api.NewAPI(app.Defaults(), traverserFactory, traverserRepo, &mock.JRStatus{}, shutdownChan)
+	appCtx := app.Defaults()
+	apiCfg := api.Config{
+		AppCtx:           appCtx,
+		TraverserFactory: traverserFactory,
+		TraverserRepo:    traverserRepo,
+		StatusManager:    &mock.JRStatus{},
+		ShutdownChan:     shutdownChan,
+	}
+	api := api.NewAPI(apiCfg)
 	server = httptest.NewServer(api)
 }
 
