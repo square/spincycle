@@ -1341,3 +1341,100 @@ func TestAuthSpec(t *testing.T) {
 		t.Error(diff)
 	}
 }
+
+func TestConditionalIfOptionalArg(t *testing.T) {
+	// This spec has "if: foo" where "foo" is an optional arg with no value,
+	// so grapher should use "default: defaultSeq", which we can see below in
+	// "sequence_defaultSeq_start/end" nodes.
+	cfg, err := ReadConfig("../test/specs/cond-args-001.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Mock ID gen so we get known numbering
+	idNo := 0
+	idgen := mock.IDGenerator{
+		UIDFunc: func() (string, error) {
+			idNo++
+			return fmt.Sprintf("id%d", idNo), nil
+		},
+	}
+
+	gr := NewGrapher(req, &testFactory{}, cfg, idgen)
+	args := map[string]interface{}{
+		"cmd": "cmd-val",
+	}
+	got, err := gr.CreateGraph("request-name", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Partial nodes from the spec. Just want to verify the name and sequence IDs
+	// are what we expect, and the order expressed by Edges. This let's us see/verify
+	// that defaultSeq is created.
+	id2 := &Node{
+		Name:       "sequence_request-name_end",
+		SequenceId: "id1",
+	}
+	id7 := &Node{
+		Name:       "conditional_job1name_end",
+		SequenceId: "id1",
+	}
+	id4 := &Node{
+		Name:       "sequence_defaultSeq_end",
+		SequenceId: "id3",
+	}
+	id5 := &Node{ // category: job, type: job1
+		Name:       "job1name",
+		SequenceId: "id3",
+	}
+	id3 := &Node{
+		Name:       "sequence_defaultSeq_start",
+		SequenceId: "id3",
+	}
+	id6 := &Node{
+		Name:       "conditional_job1name_start",
+		SequenceId: "id1",
+	}
+	id1 := &Node{
+		Name:       "sequence_request-name_start",
+		SequenceId: "id1",
+	}
+	verticies := map[string]*Node{
+		"id1": id1,
+		"id2": id2,
+		"id3": id3,
+		"id4": id4,
+		"id5": id5,
+		"id6": id6,
+		"id7": id7,
+	}
+	expect := &Graph{
+		//Name:     "sequence_request-name",
+		//First:    verticies["id1"],
+		//Last:     verticies["id7"],
+		//Vertices: verticies,
+		Edges: map[string][]string{
+			"id1": []string{"id6"},
+			"id6": []string{"id3"},
+			"id3": []string{"id5"},
+			"id5": []string{"id4"},
+			"id4": []string{"id7"},
+			"id7": []string{"id2"},
+		},
+	}
+	if diff := deep.Equal(got.Edges, expect.Edges); diff != nil {
+		t.Logf("   got: %#v", got.Edges)
+		t.Logf("expect: %#v", expect.Edges)
+		t.Error(diff)
+	}
+	for k, v := range got.Vertices {
+		t.Logf("vertex: %+v", v)
+		if v.Name != verticies[k].Name {
+			t.Errorf("node '%s'.Name = %s, expected %s", k, v.Name, verticies[k].Name)
+		}
+		if v.SequenceId != verticies[k].SequenceId {
+			t.Errorf("node '%s'.SequenceId = %s, expected %s", k, v.SequenceId, verticies[k].SequenceId)
+		}
+	}
+}
