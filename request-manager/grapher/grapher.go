@@ -608,7 +608,7 @@ func (o *Grapher) newNoopNode(name string, nodeArgs map[string]interface{}) (*No
 	if err != nil {
 		return nil, fmt.Errorf("Error making id for no-op node %s: %s", name, err)
 	}
-	jid := job.NewId("noop", "noop", id, o.req.Id)
+	jid := job.NewIdWithRequestId("noop", "noop", id, o.req.Id)
 	rj, err := o.JobFactory.Make(jid)
 	if err != nil {
 		switch err {
@@ -651,7 +651,7 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 	}
 
 	// Create the job
-	rj, err := o.JobFactory.Make(job.NewId(j.NodeType, j.Name, id, o.req.Id))
+	rj, err := o.JobFactory.Make(job.NewIdWithRequestId(j.NodeType, j.Name, id, o.req.Id))
 	if err != nil {
 		return nil, fmt.Errorf("Error making '%s %s' job: %s", j.NodeType, j.Name, err)
 	}

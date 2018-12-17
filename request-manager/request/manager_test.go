@@ -69,7 +69,7 @@ func setupManager(t *testing.T, dataFile string) string {
 		for i, c := range []string{"a", "b", "c"} {
 			jobType := c + "JobType"
 			testJobFactory.MockJobs[jobType] = &mock.Job{
-				IdResp: job.NewId(jobType, c, fmt.Sprintf("id%d", i), req.Id),
+				IdResp: job.NewIdWithRequestId(jobType, c, fmt.Sprintf("id%d", i), req.Id),
 			}
 		}
 		testJobFactory.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{

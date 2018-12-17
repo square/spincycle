@@ -110,6 +110,14 @@ type Id struct {
 // It's used by job-runner/runner/Factory.Make to create an Id from a proto.Job.
 func NewId(jobType, jobName, jobId, reqId string) Id {
 	return Id{
+		Type: jobType,
+		Name: jobName,
+		Id:   jobId,
+	}
+}
+
+func NewIdWithRequestId(jobType, jobName, jobId, reqId string) Id {
+	return Id{
 		Type:      jobType,
 		Name:      jobName,
 		Id:        jobId,
