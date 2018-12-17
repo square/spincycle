@@ -100,15 +100,20 @@ type Id struct {
 	// Spin Cycle-defined job ID unique per request. Job IDs distinguish named
 	// jobs in expanded sequences.
 	Id string
+
+	// RequestId of the request that created the job. This is only informational
+	// for reporting/loggging/tracing.
+	RequestId string
 }
 
 // NewId is a convenience function for creating a new Id with the given values.
 // It's used by job-runner/runner/Factory.Make to create an Id from a proto.Job.
-func NewId(jobType, jobName, jobId string) Id {
+func NewId(jobType, jobName, jobId, reqId string) Id {
 	return Id{
-		Type: jobType,
-		Name: jobName,
-		Id:   jobId,
+		Type:      jobType,
+		Name:      jobName,
+		Id:        jobId,
+		RequestId: reqId,
 	}
 }
 
