@@ -774,9 +774,9 @@ func createEndNode(args map[string]interface{}) error {
 // three nodes in a straight line
 func g1() *Graph {
 	tf := &testFactory{}
-	n1, _ := tf.Make(job.NewId("g1n1", "g1n1", "g1n1", "reqId1"))
-	n2, _ := tf.Make(job.NewId("g1n2", "g1n2", "g1n2", "reqId1"))
-	n3, _ := tf.Make(job.NewId("g1n3", "g1n3", "g1n3", "reqId1"))
+	n1, _ := tf.Make(job.NewIdWithRequestId("g1n1", "g1n1", "g1n1", "reqId1"))
+	n2, _ := tf.Make(job.NewIdWithRequestId("g1n2", "g1n2", "g1n2", "reqId1"))
+	n3, _ := tf.Make(job.NewIdWithRequestId("g1n3", "g1n3", "g1n3", "reqId1"))
 	g1n1 := &Node{Datum: n1}
 	g1n2 := &Node{Datum: n2}
 	g1n3 := &Node{Datum: n3}
@@ -814,10 +814,10 @@ func g1() *Graph {
 //
 func g3() *Graph {
 	tf := &testFactory{}
-	n1, _ := tf.Make(job.NewId("g3n1", "g3n1", "g3n1", "reqId1"))
-	n2, _ := tf.Make(job.NewId("g3n2", "g3n2", "g3n2", "reqId1"))
-	n3, _ := tf.Make(job.NewId("g3n3", "g3n3", "g3n3", "reqId1"))
-	n4, _ := tf.Make(job.NewId("g3n4", "g3n4", "g3n4", "reqId1"))
+	n1, _ := tf.Make(job.NewIdWithRequestId("g3n1", "g3n1", "g3n1", "reqId1"))
+	n2, _ := tf.Make(job.NewIdWithRequestId("g3n2", "g3n2", "g3n2", "reqId1"))
+	n3, _ := tf.Make(job.NewIdWithRequestId("g3n3", "g3n3", "g3n3", "reqId1"))
+	n4, _ := tf.Make(job.NewIdWithRequestId("g3n4", "g3n4", "g3n4", "reqId1"))
 	g3n1 := &Node{Datum: n1}
 	g3n2 := &Node{Datum: n2}
 	g3n3 := &Node{Datum: n3}
@@ -856,7 +856,7 @@ func g2() *Graph {
 	n := [20]*Node{}
 	for i := 0; i < 20; i++ {
 		m := fmt.Sprintf("g2n%d", i)
-		p, _ := tf.Make(job.NewId(m, m, m, "reqId1"))
+		p, _ := tf.Make(job.NewIdWithRequestId(m, m, m, "reqId1"))
 		n[i] = &Node{
 			Datum: p,
 			Next:  map[string]*Node{},

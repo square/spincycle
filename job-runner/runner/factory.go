@@ -34,7 +34,7 @@ func (f *factory) Make(pJob proto.Job, requestId string, prevTries uint, prevSeq
 	pJob.Retry -= prevSeqTries
 
 	// Instantiate a "blank" job of the given type.
-	realJob, err := f.jf.Make(job.NewId(pJob.Type, pJob.Name, pJob.Id, requestId))
+	realJob, err := f.jf.Make(job.NewIdWithRequestId(pJob.Type, pJob.Name, pJob.Id, requestId))
 	if err != nil {
 		return nil, err
 	}
