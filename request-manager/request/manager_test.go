@@ -27,6 +27,7 @@ var dbc myconn.Connector
 var grf *grapher.MockGrapherFactory
 var dbSuffix string
 var shutdownChan chan struct{}
+var req proto.Request
 
 func setupManager(t *testing.T, dataFile string) string {
 	// Setup a db manager to handle databases for all tests.
@@ -61,18 +62,22 @@ func setupManager(t *testing.T, dataFile string) string {
 		testJobFactory := &mock.JobFactory{
 			MockJobs: map[string]*mock.Job{},
 		}
+		req := proto.Request{
+			Id:   "reqId1",
+			Type: "reqType",
+		}
 		for i, c := range []string{"a", "b", "c"} {
 			jobType := c + "JobType"
 			testJobFactory.MockJobs[jobType] = &mock.Job{
-				IdResp: job.NewId(jobType, c, fmt.Sprintf("id%d", i)),
+				IdResp: job.NewId(jobType, c, fmt.Sprintf("id%d", i), req.Id),
 			}
 		}
 		testJobFactory.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
 			"aArg": "aValue",
 		}
-		gr := grapher.NewGrapher(testJobFactory, spec, id.NewGenerator(4, 100))
+		gr := grapher.NewGrapher(req, testJobFactory, spec, id.NewGenerator(4, 100))
 		grf = &grapher.MockGrapherFactory{
-			MakeFunc: func() *grapher.Grapher {
+			MakeFunc: func(req proto.Request) *grapher.Grapher {
 				return gr
 			},
 		}

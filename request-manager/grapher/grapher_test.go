@@ -7,15 +7,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-test/deep"
 	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/id"
 	"github.com/square/spincycle/test/mock"
-
-	"github.com/go-test/deep"
 )
 
-type testFactory struct {
-}
+type testFactory struct{}
 
 func (f *testFactory) Make(id job.Id) (job.Job, error) {
 	j := testJob{
@@ -77,18 +76,20 @@ func (tj testJob) Run(map[string]interface{}) (job.Return, error) {
 	return job.Return{}, nil
 }
 
+var req = proto.Request{Id: "reqABC"}
+
 func testGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm.yaml"
 	cfg, _ := ReadConfig(sequencesFile)
-	return NewGrapher(tf, cfg, id.NewGenerator(4, 100))
+	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
 }
 
 func testConditionalGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/destroy-conditional.yaml"
 	cfg, _ := ReadConfig(sequencesFile)
-	return NewGrapher(tf, cfg, id.NewGenerator(4, 100))
+	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
 }
 
 func TestNodeArgs(t *testing.T) {
@@ -304,7 +305,7 @@ func TestCreateDecomGraphNoNodes(t *testing.T) {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/empty-cluster.yaml"
 	cfg, _ := ReadConfig(sequencesFile)
-	omg := NewGrapher(tf, cfg, id.NewGenerator(4, 100))
+	omg := NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
 
 	args := map[string]interface{}{
 		"cluster": "empty-cluster-001",
@@ -773,9 +774,9 @@ func createEndNode(args map[string]interface{}) error {
 // three nodes in a straight line
 func g1() *Graph {
 	tf := &testFactory{}
-	n1, _ := tf.Make(job.NewId("g1n1", "g1n1", "g1n1"))
-	n2, _ := tf.Make(job.NewId("g1n2", "g1n2", "g1n2"))
-	n3, _ := tf.Make(job.NewId("g1n3", "g1n3", "g1n3"))
+	n1, _ := tf.Make(job.NewId("g1n1", "g1n1", "g1n1", "reqId1"))
+	n2, _ := tf.Make(job.NewId("g1n2", "g1n2", "g1n2", "reqId1"))
+	n3, _ := tf.Make(job.NewId("g1n3", "g1n3", "g1n3", "reqId1"))
 	g1n1 := &Node{Datum: n1}
 	g1n2 := &Node{Datum: n2}
 	g1n3 := &Node{Datum: n3}
@@ -813,10 +814,10 @@ func g1() *Graph {
 //
 func g3() *Graph {
 	tf := &testFactory{}
-	n1, _ := tf.Make(job.NewId("g3n1", "g3n1", "g3n1"))
-	n2, _ := tf.Make(job.NewId("g3n2", "g3n2", "g3n2"))
-	n3, _ := tf.Make(job.NewId("g3n3", "g3n3", "g3n3"))
-	n4, _ := tf.Make(job.NewId("g3n4", "g3n4", "g3n4"))
+	n1, _ := tf.Make(job.NewId("g3n1", "g3n1", "g3n1", "reqId1"))
+	n2, _ := tf.Make(job.NewId("g3n2", "g3n2", "g3n2", "reqId1"))
+	n3, _ := tf.Make(job.NewId("g3n3", "g3n3", "g3n3", "reqId1"))
+	n4, _ := tf.Make(job.NewId("g3n4", "g3n4", "g3n4", "reqId1"))
 	g3n1 := &Node{Datum: n1}
 	g3n2 := &Node{Datum: n2}
 	g3n3 := &Node{Datum: n3}
@@ -855,7 +856,7 @@ func g2() *Graph {
 	n := [20]*Node{}
 	for i := 0; i < 20; i++ {
 		m := fmt.Sprintf("g2n%d", i)
-		p, _ := tf.Make(job.NewId(m, m, m))
+		p, _ := tf.Make(job.NewId(m, m, m, "reqId1"))
 		n[i] = &Node{
 			Datum: p,
 			Next:  map[string]*Node{},
@@ -1200,7 +1201,7 @@ func TestOptArgs001(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := NewGrapher(tf, s, id.NewGenerator(4, 100))
+	g := NewGrapher(req, tf, s, id.NewGenerator(4, 100))
 
 	args := map[string]interface{}{
 		"cmd":  "sleep",
@@ -1244,7 +1245,7 @@ func TestOptArgs001(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g = NewGrapher(tf, s, id.NewGenerator(4, 100))
+	g = NewGrapher(req, tf, s, id.NewGenerator(4, 100))
 
 	got, err = g.CreateGraph("req", args)
 	if err != nil {
@@ -1294,7 +1295,7 @@ func TestBadEach001(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := NewGrapher(tf, s, id.NewGenerator(4, 100))
+	g := NewGrapher(req, tf, s, id.NewGenerator(4, 100))
 
 	args := map[string]interface{}{
 		"host": "foo",

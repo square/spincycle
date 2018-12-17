@@ -99,7 +99,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 	}
 
 	// Resolve the request into a graph, and convert to a proto.JobChain.
-	gr := m.grf.Make()
+	gr := m.grf.Make(req)
 	g, err := gr.CreateGraph(reqParams.Type, args)
 	if err != nil {
 		return req, err
@@ -464,7 +464,7 @@ func (m *manager) Specs() []proto.RequestSpec {
 		return requestList
 	}
 
-	gr := m.grf.Make()
+	gr := m.grf.Make(proto.Request{})
 	req := gr.Sequences()
 	sortedReqNames := make([]string, 0, len(req))
 	for name := range req {
