@@ -210,6 +210,11 @@ func TestCreate(t *testing.T) {
 		User:      reqParams.User,
 		JobChain:  nil,
 		TotalJobs: 5,
+		Params: map[string]interface{}{
+			"foo":  "foo-value",
+			"bar":  "175",
+			"aArg": "aValue",
+		},
 	}
 	if diff := deep.Equal(actualReq, expectedReq); diff != nil {
 		test.Dump(actualReq)
