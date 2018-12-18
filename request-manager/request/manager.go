@@ -105,6 +105,12 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 		return req, err
 	}
 
+	// Request.Params are not persisted yet. They're used at creation time by
+	// the auth pluign to let Authorize() do fine-grain auth for the request based
+	// on the args.
+	// @todo: should this be reqParams.Args? i.e. initial args or final post-processing args?
+	req.Params = args
+
 	jc := &proto.JobChain{
 		Jobs:          map[string]proto.Job{},
 		AdjacencyList: g.Edges,
