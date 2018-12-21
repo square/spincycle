@@ -8,7 +8,7 @@ Presuming,
 1. The `jobs` symlink points to the jobs repo you want (default: `dev/jobs`)
 1. MySQL is running on localhost:3306 with root user having no password
 1. Have not run the script before
-1. The specs symlink points to the specs you want (default: dev/specs)
+1. The `dev/specs` directory contains the request specs you want.
 
 then running `run-spincycle` should "Just Work" and "Do the Right Thing", like:
 

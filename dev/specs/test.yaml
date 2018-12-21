@@ -1,0 +1,48 @@
+---
+sequences:
+  test:
+    request: true
+    args:
+      required:
+      optional:
+        - name: sleepTime
+          desc: "How long to sleep (milliseconds) during the request. Useful to verify how RM and JR respond before request has finished."
+          default: "1000"
+    nodes:
+      noop:
+        category: job
+        type: noop
+        args:
+        sets: []
+        deps: []
+
+      # Both wait sequences happen simultaneously
+      wait-1:
+        category: sequence
+        type: wait
+        args:
+          - expected: sleepTime
+            given: sleepTime
+        sets: []
+        deps: [noop]
+      wait-2:
+        category: sequence
+        type: wait
+        args:
+          - expected: sleepTime
+            given: sleepTime
+        sets: []
+        deps: [noop]
+  wait:
+    args:
+      required:
+        - name: sleepTime
+    nodes:
+      wait:
+        category: job
+        type: sleep
+        args:
+          - expected: duration
+            given: sleepTime
+        sets: []
+        deps: []

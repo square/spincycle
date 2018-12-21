@@ -206,6 +206,13 @@ build() {
     echo "Using development sandbox jobs"
   fi
 
+  if [[ ! -d "$SANDBOX_DIR/specs" ]]; then
+    echo "Installing development sandbox specs..."
+    cp -r $DEV_DIR/specs $SANDBOX_DIR
+  else
+    echo "Using development sandbox specs"
+  fi
+
   if [[ ! -x "$RM_BIN" ]] || [[ "$BUILD" ]]; then
     echo "Building request manager..."
     cd "$REPO_ROOT_DIR/request-manager/bin"
