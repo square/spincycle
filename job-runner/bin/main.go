@@ -11,6 +11,9 @@ import (
 
 func main() {
 	s := server.NewServer(app.Defaults())
-	err := s.Run()
+	if err := s.Boot(); err != nil {
+		log.Fatalf("Error starting Job Runner: %s", err)
+	}
+	err := s.Run(true)
 	log.Fatalf("Job Runner stopped: %s", err)
 }

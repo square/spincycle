@@ -8,10 +8,10 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 
@@ -26,6 +26,11 @@ import (
 
 const (
 	API_ROOT = "/api/v1/"
+)
+
+var (
+	// Error when Request Manager is shutting down and not starting new requests
+	ErrShuttingDown = errors.New("Request Manager is shutting down - no new requests are being started")
 )
 
 // API provides controllers for endpoints it registers with a router.
@@ -116,32 +121,23 @@ func NewAPI(appCtx app.Context) *API {
 
 // Run makes the API listen on the configured address.
 func (api *API) Run() error {
-	// Shut down the API when the Request Manager shuts down.
-	doneChan := make(chan struct{})
-	doneShuttingDown := make(chan struct{})
-	go func() {
-		select {
-		case <-api.shutdownChan:
-			api.shutdown()
-			close(doneShuttingDown)
-		case <-doneChan:
-			return
-		}
-	}()
-
 	var err error
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
 		err = api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
 	} else {
 		err = api.echo.Start(api.appCtx.Config.Server.ListenAddress)
 	}
+	return err
+}
 
-	// If API is being shut down, wait to make sure it's done.
-	select {
-	case <-api.shutdownChan:
-		<-doneShuttingDown
-	default:
-		close(doneChan) // stop the shutdown goroutine
+// Stop stops the API when it's running. When Stop is called, Run returns
+// immediately. Make sure to wait for Stop to return.
+func (api *API) Stop() error {
+	var err error
+	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
+		err = api.echo.TLSServer.Shutdown(context.TODO())
+	} else {
+		err = api.echo.Server.Shutdown(context.TODO())
 	}
 	return err
 }
@@ -151,24 +147,16 @@ func (api *API) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	api.echo.ServeHTTP(w, r)
 }
 
-func (api *API) shutdown() {
-	// Shut down server.
-	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
-		err := api.echo.TLSServer.Shutdown(context.TODO())
-		if err != nil {
-			log.Warnf("error when shutting down API: %s", err)
-		}
-	} else {
-		err := api.echo.Server.Shutdown(context.TODO())
-		if err != nil {
-			log.Warnf("error when shutting down API: %s", err)
-		}
-	}
-}
-
 // POST <API_ROOT>/requests
 // Create a new request and start it.
 func (api *API) createRequestHandler(c echo.Context) error {
+	// If Request Manager is shutting down, don't start running any new requests.
+	select {
+	case <-api.shutdownChan:
+		return handleError(ErrShuttingDown)
+	default:
+	}
+
 	// ----------------------------------------------------------------------
 	// Make and validate request
 
@@ -238,6 +226,13 @@ func (api *API) getRequestHandler(c echo.Context) error {
 // PUT <API_ROOT>/requests/{reqId}/start
 // Start a request by sending it to the Job Runner.
 func (api *API) startRequestHandler(c echo.Context) error {
+	// If Request Manager is shutting down, don't start running any new requests.
+	select {
+	case <-api.shutdownChan:
+		return handleError(ErrShuttingDown)
+	default:
+	}
+
 	reqId := c.Param("reqId")
 
 	if err := api.rm.Start(reqId); err != nil {
@@ -424,6 +419,8 @@ func handleError(err error) *echo.HTTPError {
 		switch err {
 		case request.ErrInvalidParams, db.ErrNotUpdated, db.ErrMultipleUpdated:
 			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		case ErrShuttingDown:
+			return echo.NewHTTPError(http.StatusServiceUnavailable, err.Error())
 		default:
 			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
 		}

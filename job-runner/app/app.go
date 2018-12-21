@@ -30,6 +30,16 @@ type Hooks struct {
 	LoadConfig  func(Context) (config.JobRunner, error)
 	Auth        func(*http.Request) (bool, error)
 	SetUsername func(*http.Request) (string, error)
+
+	// RunAPI runs the Job Runner API. It should block until the API is stopped
+	// via a call to StopAPI. If this hook is provided, it is called instead of
+	// api.Run, and StopAPI must be provided as well.
+	RunAPI func() error
+
+	// StopAPI stops running the Job Runner API. It's called when the server is
+	// stopped, and it should cause RunAPI to return. If this hook is provided, it
+	// is called instead of api.Stop, and RunAPI must be provided as well.
+	StopAPI func() error
 }
 
 func Defaults() Context {
