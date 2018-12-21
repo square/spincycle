@@ -24,7 +24,7 @@ import (
 
 var (
 	// How often the request resumer is run.
-	ResumerCadence = 10 * time.Second
+	ResumerInterval = 10 * time.Second
 
 	// How long Suspended Job Chains have to be resumed before they're deleted.
 	SJCTTL = 1 * time.Hour
@@ -56,10 +56,10 @@ func NewServer(appCtx app.Context) *Server {
 // hook has been provided, it will be called to run the API instead of the default
 // api.Run.
 //
-// If autoShutdown = true, the server will listen for TERM and INT signals from the
+// If stopOnSignal = true, the server will listen for TERM and INT signals from the
 // OS and call Stop to shut itself down when those signals are received. Else, the
 // caller must call Stop to shut down the server.
-func (s *Server) Run(autoShutdown bool) error {
+func (s *Server) Run(stopOnSignal bool) error {
 	if s.api == nil {
 		panic("Server.Run called before Server.Boot")
 	}
@@ -73,7 +73,7 @@ func (s *Server) Run(autoShutdown bool) error {
 
 		// Every 10 seconds until the server is stopped, resume all Suspended Job
 		// Chains and clean up any that are in a bad state.
-		ticker := time.NewTicker(ResumerCadence)
+		ticker := time.NewTicker(ResumerInterval)
 	RESUMER:
 		for {
 			select {
@@ -87,9 +87,9 @@ func (s *Server) Run(autoShutdown bool) error {
 		ticker.Stop()
 	}()
 
-	// If autoShutdown = true, watch for TERM + INT signals from the OS and shut
+	// If stopOnSignal = true, watch for TERM + INT signals from the OS and shut
 	// down the Request Manager when we receive them.
-	if autoShutdown {
+	if stopOnSignal {
 		go s.waitForShutdown()
 	}
 
@@ -121,7 +121,7 @@ func (s *Server) Run(autoShutdown bool) error {
 // hook if provided). Once Stop has been called, the server cannot be reused -
 // future calls to Run will return an error.
 //
-// If autoShutdown was set when calling Run, Stop will automatically be called by
+// If stopOnSignal was set when calling Run, Stop will automatically be called by
 // the server on receiving a TERM or INT signal from the OS. Otherwise, you must
 // call Stop when you want to shut down the Request Manager.
 func (s *Server) Stop() error {

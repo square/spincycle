@@ -48,10 +48,10 @@ func NewServer(appCtx app.Context) *Server {
 // hook has been provided, it will be called to run the API instead of the default
 // api.Run.
 //
-// If autoShutdown = true, the server will listen for TERM and INT signals from the
-// OS and call Stop to shut itself down when those signals are received. Else, the \
+// If stopOnSignal = true, the server will listen for TERM and INT signals from the
+// OS and call Stop to shut itself down when those signals are received. Else, the
 // caller must call Stop to shut down the server.
-func (s *Server) Run(autoShutdown bool) error {
+func (s *Server) Run(stopOnSignal bool) error {
 	if s.api == nil {
 		panic("Server.Run called before Server.Boot")
 	}
@@ -59,9 +59,9 @@ func (s *Server) Run(autoShutdown bool) error {
 		return fmt.Errorf("server stopped")
 	}
 
-	// If autoShutdown = true, watch for TERM + INT signals from the OS and shut
+	// If stopOnSignal = true, watch for TERM + INT signals from the OS and shut
 	// down the Job Runner when we receive them.
-	if autoShutdown {
+	if stopOnSignal {
 		go s.waitForShutdown()
 	}
 
@@ -113,7 +113,7 @@ func (s *Server) Boot() error {
 // provided). Once Stop has been called, the server cannot be reused - future calls
 // to Run will return an error.
 //
-// If autoShutdown was set when calling Run, Stop will automatically be called by
+// If stopOnSignal was set when calling Run, Stop will automatically be called by
 // the server on receiving a TERM or INT signal from the OS. Otherwise, you must
 // call Stop when you want to shut down the Job Runner.
 func (s *Server) Stop() error {
