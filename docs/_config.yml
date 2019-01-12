@@ -1,0 +1,12 @@
+title: Spin Cycle
+description: >-
+  Spin Cycle enables platform automation at scale.
+url: https://square.github.io/spincycle
+twitter_username: square
+github_username: square
+markdown: kramdown
+plugins:
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - README.md
