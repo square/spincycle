@@ -11,7 +11,7 @@ Spin Cycle was purpose-built for platform automation at scale:
 Spin Cycle can do anything you can program. The database team at [Square](https://squareup.com/) uses it to provision and decommission databases, safely stop and start hosts, upgrade MySQL and Docker images, reconfigure services, and more.
 
 ### Learn More
-* Basic Concepts
+* [Basic Concepts](basic-concepts)
 
 ### Operate
 * Deploy
