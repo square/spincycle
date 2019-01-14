@@ -10,21 +10,21 @@ Spin Cycle was purpose-built for platform automation at scale:
 
 Spin Cycle can do anything you can program. The database team at [Square](https://squareup.com/) uses it to provision and decommission databases, safely stop and start hosts, upgrade MySQL and Docker images, reconfigure services, and more.
 
-### Learn More
-* [Basic Concepts](basic-concepts)
+## Learn More
+* **[Basic Concepts](basic-concepts)**&nbsp;&#x2728;
+* [Support](support)
 
-### Operate
-* Deploy
-* Configure
-* spinc (CLI)
-* Auth
-* Troubleshoot
+## Operate
+* [Deploy](v1.0/operate/deploy)
+* [Configure](v1.0/operate/configure)
+* [spinc (CLI)](v1.0/operate/spinc)
+* [Auth](v1.0/operate/auth)
 
-### Develop
-* Jobs
-* Request Specs
-* Clients
-* Extensions (Hooks, Factories, and Plugins)
+## Develop
+* [Jobs](v1.0/develop/jobs)
+* [Requests](v1.0/develop/requests)
+* [Clients](v1.0/develop/clients)
+* [Extensions](v1.0/develop/extensions)
 
-### API
-* API Endpoints
+## API
+* [API Endpoints](v1.0/api/)
