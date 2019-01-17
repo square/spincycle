@@ -185,7 +185,7 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 	}
 
 	// Set the location in the response header to point to this server.
-	c.Response().Header().Set("Location", api.baseURL)
+	c.Response().Header().Set("Location", api.chainLocation(jc.RequestId))
 
 	// Start the traverser, and remove it from the repo when it's
 	// done running. This could take a very long time to return,
@@ -229,7 +229,7 @@ func (api *API) resumeJobChainHandler(c echo.Context) error {
 	}
 
 	// Set the location in the response header to point to this server.
-	c.Response().Header().Set("Location", api.baseURL)
+	c.Response().Header().Set("Location", api.chainLocation(sjc.RequestId))
 
 	// Start the traverser, and remove it from the repo when it's
 	// done running. This could take a very long time to return,
@@ -304,6 +304,10 @@ func (api *API) statusRunningHandler(c echo.Context) error {
 }
 
 // ------------------------------------------------------------------------- //
+
+func (api *API) chainLocation(requestId string) string {
+	return api.baseURL + API_ROOT + "job-chains/" + requestId
+}
 
 func handleError(err error) *echo.HTTPError {
 	switch err.(type) {

@@ -192,7 +192,7 @@ func MakeJobRunnerClient(ctx Context) (jr.Client, error) {
 			Transport: &http.Transport{TLSClientConfig: tlsConfig},
 		}
 	}
-	jrc := jr.NewClient(httpClient, jrcfg.ServerURL)
+	jrc := jr.NewClient(httpClient)
 	return jrc, nil
 }
 

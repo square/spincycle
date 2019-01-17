@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 
 	"github.com/square/spincycle/proto"
 )
@@ -16,100 +17,100 @@ import (
 // A Client is an HTTP client used for interacting with the JR API.
 type Client interface {
 	// NewJobChain takes a job chain, and sends it to the JR to be run immediately.
-	// It returns the JR host that is running the chain.
-	NewJobChain(proto.JobChain) (string, error)
+	// It returns the URL of the running job chain.
+	NewJobChain(baseURL string, jobChain proto.JobChain) (*url.URL, error)
 	// ResumeJobChain takes a suspended job chain and sends it to the JR to be
-	// resumed. It returns the JR host that is running the chain.
-	ResumeJobChain(proto.SuspendedJobChain) (string, error)
-	// StopRequest stops the job chain that corresponds to a given request Id
-	// running on a Job Runner reachable via the given URL.
-	StopRequest(requestId string, jrURL string) error
+	// resumed. It returns the URL of the running job chain.
+	ResumeJobChain(baseURL string, sjc proto.SuspendedJobChain) (*url.URL, error)
+	// StopRequest stops the job chain that corresponds to a given request Id. The
+	// baseURL should point to the Job Runner running this request.
+	StopRequest(baseURL string, requestId string) error
 	// RequestStatus gets the status of the job chain that corresponds to a given
-	// request Id running on a Job Runner reachable via the given URL.
-	RequestStatus(requestId string, jrURL string) (proto.JobChainStatus, error)
+	// request Id. The baseURL should point to the Job Runner running this request.
+	RequestStatus(baseURL string, requestId string) (proto.JobChainStatus, error)
 
 	// SysStatRunning reports all running jobs.
-	SysStatRunning(jrURL string) ([]proto.JobStatus, error)
+	SysStatRunning(baseURL string) ([]proto.JobStatus, error)
 }
 
 type client struct {
 	*http.Client
-	baseUrl string
 }
 
 // NewClient takes an http.Client and base API URL and creates a Client.
-func NewClient(c *http.Client, baseUrl string) Client {
+func NewClient(c *http.Client) Client {
 	return &client{
-		Client:  c,
-		baseUrl: baseUrl,
+		Client: c,
 	}
 }
 
-func (c *client) NewJobChain(jobChain proto.JobChain) (string, error) {
+func (c *client) NewJobChain(baseURL string, jobChain proto.JobChain) (*url.URL, error) {
+	var chainURL *url.URL
+
 	// POST /api/v1/job-chains
-	url := c.baseUrl + "/api/v1/job-chains"
+	url := baseURL + "/api/v1/job-chains"
 
 	// Create the payload.
 	payload, err := json.Marshal(jobChain)
 	if err != nil {
-		return "", err
+		return chainURL, err
 	}
 
 	// Make the request.
 	resp, body, err := c.post(url, payload)
 	if err != nil {
-		return "", err
+		return chainURL, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("jr.Client.NewJobChain - unsuccessful status code: %d (response body: %s)",
+		return chainURL, fmt.Errorf("jr.Client.NewJobChain - unsuccessful status code: %d (response body: %s)",
 			resp.StatusCode, string(body))
 	}
 
 	// Retrieve the URL of the JR host that's running the job chain.
-	location, err := resp.Location()
+	chainURL, err = resp.Location()
 	if err != nil {
-		return "", err
+		return chainURL, err
 	}
 
-	return location.String(), nil
+	return chainURL, nil
 }
 
-func (c *client) ResumeJobChain(sjc proto.SuspendedJobChain) (string, error) {
+func (c *client) ResumeJobChain(baseURL string, sjc proto.SuspendedJobChain) (*url.URL, error) {
+	var chainURL *url.URL
+
 	// POST /api/v1/job-chains/resume
-	url := c.baseUrl + "/api/v1/job-chains/resume"
+	url := baseURL + "/api/v1/job-chains/resume"
 
 	// Create the payload.
 	payload, err := json.Marshal(sjc)
 	if err != nil {
-		return "", err
+		return chainURL, err
 	}
 
 	// Make the request.
 	resp, body, err := c.post(url, payload)
 	if err != nil {
-		return "", err
+		return chainURL, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("jr.Client.ResumeJobChain - unsuccessful status code: %d (response body: %s)",
+		return chainURL, fmt.Errorf("jr.Client.ResumeJobChain - unsuccessful status code: %d (response body: %s)",
 			resp.StatusCode, string(body))
 	}
 
 	// Retrieve the URL of the JR host that's running the job chain.
-	location, err := resp.Location()
+	chainURL, err = resp.Location()
 	if err != nil {
-		return "", err
+		return chainURL, err
 	}
 
-	return location.String(), nil
+	return chainURL, nil
 }
 
-func (c *client) StopRequest(requestId string, jrURL string) error {
-	// We need to talk to the specific JR host running this request, so we
-	// use a base URL for that specific host instead of the client's baseURL.
+func (c *client) StopRequest(baseURL string, requestId string) error {
 	// PUT /api/v1/job-chains/${requestId}/stop
-	url := fmt.Sprintf(jrURL+"/api/v1/job-chains/%s/stop", requestId)
+	url := fmt.Sprintf(baseURL+"/api/v1/job-chains/%s/stop", requestId)
 
 	// Make the request.
 	resp, body, err := c.put(url)
@@ -124,11 +125,9 @@ func (c *client) StopRequest(requestId string, jrURL string) error {
 	return nil
 }
 
-func (c *client) RequestStatus(requestId string, jrURL string) (proto.JobChainStatus, error) {
-	// We need to talk to the specific JR host running this request, so we use
-	// a base URL for that specific host instead of the client's baseURL.
+func (c *client) RequestStatus(baseURL string, requestId string) (proto.JobChainStatus, error) {
 	// GET /api/v1/job-chains/${requestId}/status
-	url := fmt.Sprintf(jrURL+"/api/v1/job-chains/%s/status", requestId)
+	url := fmt.Sprintf(baseURL+"/api/v1/job-chains/%s/status", requestId)
 
 	// Make the request.
 	status := proto.JobChainStatus{}
@@ -151,11 +150,9 @@ func (c *client) RequestStatus(requestId string, jrURL string) (proto.JobChainSt
 	return status, nil
 }
 
-func (c *client) SysStatRunning(jrURL string) ([]proto.JobStatus, error) {
-	// We need want all the jobs running on a specific JR host,
-	// so use a base URL for that specific host instead of the client's baseURL.
+func (c *client) SysStatRunning(baseURL string) ([]proto.JobStatus, error) {
 	// GET /api/v1/job-chains/${requestId}/status
-	url := fmt.Sprintf(jrURL + "/api/v1/status/running")
+	url := baseURL + "/api/v1/status/running"
 	resp, body, err := c.get(url)
 	if err != nil {
 		return nil, err

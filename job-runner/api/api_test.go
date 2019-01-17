@@ -198,7 +198,7 @@ func TestNewJobChainSuccess(t *testing.T) {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
 	}
 
-	expectedLocation := "http://" + ctx.Config.Server.ListenAddress
+	expectedLocation := "http://" + ctx.Config.Server.ListenAddress + "/api/v1/job-chains/" + requestId
 	if len(headers["Location"]) < 1 {
 		t.Errorf("location header not set at all")
 	} else {
@@ -245,7 +245,7 @@ func TestResumeJobChainSuccess(t *testing.T) {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
 	}
 
-	expectedLocation := "http://" + ctx.Config.Server.ListenAddress
+	expectedLocation := "http://" + ctx.Config.Server.ListenAddress + "/api/v1/job-chains/" + requestId
 	if len(headers["Location"]) < 1 {
 		t.Errorf("location header not set at all")
 	} else {

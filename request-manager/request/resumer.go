@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -78,6 +79,7 @@ type resumer struct {
 	rm           Manager
 	dbc          myconn.Connector
 	jrc          jr.Client
+	defaultJRURL string
 	host         string // the host this request manager is currently running on
 	shutdownChan chan struct{}
 	logger       *log.Entry
@@ -88,6 +90,7 @@ type ResumerConfig struct {
 	RequestManager       Manager
 	DBConnector          myconn.Connector
 	JRClient             jr.Client
+	DefaultJRURL         string
 	RMHost               string
 	ShutdownChan         chan struct{}
 	SuspendedJobChainTTL time.Duration
@@ -98,6 +101,7 @@ func NewResumer(cfg ResumerConfig) Resumer {
 		rm:           cfg.RequestManager,
 		dbc:          cfg.DBConnector,
 		jrc:          cfg.JRClient,
+		defaultJRURL: cfg.DefaultJRURL,
 		host:         cfg.RMHost,
 		shutdownChan: cfg.ShutdownChan,
 		sjcTTL:       cfg.SuspendedJobChainTTL,
@@ -280,7 +284,7 @@ func (r *resumer) Resume(id string) error {
 	}
 
 	// Send suspended job chain to JR, which will resume running it.
-	jrURL, err := r.jrc.ResumeJobChain(sjc)
+	chainURL, err := r.jrc.ResumeJobChain(r.defaultJRURL, sjc)
 	if err != nil {
 		return fmt.Errorf("error sending SJC to Job Runner: %s", err)
 	}
@@ -291,7 +295,7 @@ func (r *resumer) Resume(id string) error {
 	req := proto.Request{
 		Id:           id,
 		State:        proto.STATE_RUNNING,
-		JobRunnerURL: jrURL,
+		JobRunnerURL: strings.TrimSuffix(chainURL.String(), chainURL.RequestURI()),
 	}
 	if err = r.updateRequest(req, proto.STATE_SUSPENDED, conn); err != nil {
 		return fmt.Errorf("error setting request state to STATE_RUNNING and saving job runner url: %s", err)

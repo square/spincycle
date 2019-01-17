@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -62,16 +63,26 @@ type manager struct {
 	grf          grapher.GrapherFactory
 	dbc          myconn.Connector
 	jrc          jr.Client
+	defaultJRURL string
 	shutdownChan chan struct{}
 	*sync.Mutex
 }
 
-func NewManager(grf grapher.GrapherFactory, dbc myconn.Connector, jrClient jr.Client, shutdownChan chan struct{}) Manager {
+type ManagerConfig struct {
+	GrapherFactory grapher.GrapherFactory
+	DBConnector    myconn.Connector
+	JRClient       jr.Client
+	DefaultJRURL   string
+	ShutdownChan   chan struct{}
+}
+
+func NewManager(config ManagerConfig) Manager {
 	return &manager{
-		grf:          grf,
-		dbc:          dbc,
-		jrc:          jrClient,
-		shutdownChan: shutdownChan,
+		grf:          config.GrapherFactory,
+		dbc:          config.DBConnector,
+		jrc:          config.JRClient,
+		defaultJRURL: config.DefaultJRURL,
+		shutdownChan: config.ShutdownChan,
 		Mutex:        &sync.Mutex{},
 	}
 }
@@ -259,14 +270,15 @@ func (m *manager) Start(requestId string) error {
 
 	// TODO(felixp): add retries to this call to the JR to start the job chain
 	// Send the request's job chain to the job runner, which will start running it.
-	jrURL, err := m.jrc.NewJobChain(*req.JobChain)
+	chainURL, err := m.jrc.NewJobChain(m.defaultJRURL, *req.JobChain)
 	if err != nil {
 		return err
 	}
 
 	req.StartedAt = &now
 	req.State = proto.STATE_RUNNING
-	req.JobRunnerURL = jrURL
+
+	req.JobRunnerURL = strings.TrimSuffix(chainURL.String(), chainURL.RequestURI())
 
 	// This will only update the request if the current state is PENDING. The
 	// state should be PENDING since we checked this earlier, but it's possible
@@ -296,7 +308,7 @@ func (m *manager) Stop(requestId string) error {
 	}
 
 	// Tell the JR to stop running the job chain for the request.
-	err = m.jrc.StopRequest(requestId, req.JobRunnerURL)
+	err = m.jrc.StopRequest(req.JobRunnerURL, requestId)
 	if err != nil {
 		return fmt.Errorf("error stopping request in Job Runner: %s", err)
 	}
@@ -320,7 +332,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	// If the request is running, get the chain's live status from the job runner.
 	var liveS proto.JobStatuses
 	if req.State == proto.STATE_RUNNING {
-		s, err := m.jrc.RequestStatus(req.Id, req.JobRunnerURL)
+		s, err := m.jrc.RequestStatus(req.JobRunnerURL, req.Id)
 		if err != nil {
 			return reqStatus, err
 		}

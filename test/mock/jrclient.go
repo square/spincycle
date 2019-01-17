@@ -4,6 +4,7 @@ package mock
 
 import (
 	"errors"
+	"net/url"
 
 	"github.com/square/spincycle/proto"
 )
@@ -13,52 +14,52 @@ var (
 )
 
 type JRClient struct {
-	NewJobChainFunc    func(proto.JobChain) (string, error)
-	ResumeJobChainFunc func(proto.SuspendedJobChain) (string, error)
-	StartRequestFunc   func(string) error
+	NewJobChainFunc    func(string, proto.JobChain) (*url.URL, error)
+	ResumeJobChainFunc func(string, proto.SuspendedJobChain) (*url.URL, error)
+	StartRequestFunc   func(string, string) error
 	StopRequestFunc    func(string, string) error
 	RequestStatusFunc  func(string, string) (proto.JobChainStatus, error)
 	SysStatRunningFunc func(string) ([]proto.JobStatus, error)
 }
 
-func (c *JRClient) NewJobChain(jc proto.JobChain) (string, error) {
+func (c *JRClient) NewJobChain(baseURL string, jc proto.JobChain) (*url.URL, error) {
 	if c.NewJobChainFunc != nil {
-		return c.NewJobChainFunc(jc)
+		return c.NewJobChainFunc(baseURL, jc)
 	}
-	return "", nil
+	return nil, nil
 }
 
-func (c *JRClient) ResumeJobChain(sjc proto.SuspendedJobChain) (string, error) {
+func (c *JRClient) ResumeJobChain(baseURL string, sjc proto.SuspendedJobChain) (*url.URL, error) {
 	if c.ResumeJobChainFunc != nil {
-		return c.ResumeJobChainFunc(sjc)
+		return c.ResumeJobChainFunc(baseURL, sjc)
 	}
-	return "", nil
+	return nil, nil
 }
 
-func (c *JRClient) StartRequest(requestId string) error {
+func (c *JRClient) StartRequest(baseURL string, requestId string) error {
 	if c.StartRequestFunc != nil {
-		return c.StartRequestFunc(requestId)
+		return c.StartRequestFunc(baseURL, requestId)
 	}
 	return nil
 }
 
-func (c *JRClient) StopRequest(requestId string, jrURL string) error {
+func (c *JRClient) StopRequest(baseURL string, requestId string) error {
 	if c.StopRequestFunc != nil {
-		return c.StopRequestFunc(requestId, jrURL)
+		return c.StopRequestFunc(baseURL, requestId)
 	}
 	return nil
 }
 
-func (c *JRClient) RequestStatus(requestId string, jrURL string) (proto.JobChainStatus, error) {
+func (c *JRClient) RequestStatus(baseURL string, requestId string) (proto.JobChainStatus, error) {
 	if c.RequestStatusFunc != nil {
-		return c.RequestStatusFunc(requestId, jrURL)
+		return c.RequestStatusFunc(baseURL, requestId)
 	}
 	return proto.JobChainStatus{}, nil
 }
 
-func (c *JRClient) SysStatRunning(jrURL string) ([]proto.JobStatus, error) {
+func (c *JRClient) SysStatRunning(baseURL string) ([]proto.JobStatus, error) {
 	if c.SysStatRunningFunc != nil {
-		return c.SysStatRunningFunc(jrURL)
+		return c.SysStatRunningFunc(baseURL)
 	}
 	return []proto.JobStatus{}, nil
 }

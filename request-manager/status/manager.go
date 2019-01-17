@@ -117,18 +117,18 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 
 	q = "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs" +
 		" FROM requests WHERE request_id IN (" + db.IN(ids) + ")"
-	rows, err = conn.QueryContext(ctx, q)
+	rows2, err := conn.QueryContext(ctx, q)
 	if err != nil {
 		return status, err
 	}
-	defer rows.Close()
+	defer rows2.Close()
 
 	requests := map[string]proto.Request{}
-	for rows.Next() {
+	for rows2.Next() {
 		r := proto.Request{}
 		startedAt := mysql.NullTime{}
 		finishedAt := mysql.NullTime{}
-		err := rows.Scan(
+		err := rows2.Scan(
 			&r.Id,
 			&r.Type,
 			&r.State,
