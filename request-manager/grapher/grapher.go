@@ -1,10 +1,11 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package grapher
 
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/square/spincycle/job"
@@ -93,7 +94,7 @@ func (o *Grapher) buildSequence(name string, seq *SequenceSpec, args map[string]
 	// Verify all required arguments are present
 	for _, arg := range seq.Args.Required {
 		if _, ok := args[arg.Name]; !ok {
-			return nil, fmt.Errorf("sequence %s missing arg %s", name, arg.Name)
+			return nil, fmt.Errorf("required arg '%s' not set", arg.Name)
 		}
 	}
 
@@ -116,15 +117,15 @@ func (o *Grapher) buildSequence(name string, seq *SequenceSpec, args map[string]
 func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string]interface{}) (*Graph, error) {
 	// Node is a conditional, check the value of the "if" jobArg
 	if n.If == "" {
-		return nil, fmt.Errorf("No 'if' jobArg specified for conditional")
+		return nil, fmt.Errorf("no 'if: arg' specified")
 	}
 	val, ok := nodeArgs[n.If]
 	if !ok {
-		return nil, fmt.Errorf("could not find the conditional jobArg %s", n.If)
+		return nil, fmt.Errorf("'if' arg '%s' not set", n.If)
 	}
 	valstring, ok := val.(string)
 	if !ok {
-		return nil, fmt.Errorf("did not provide string type sequence name for conditional")
+		return nil, fmt.Errorf("'if' arg '%s' is not a string", n.If)
 	}
 	// Based on value of "if" jobArg, get which sequence to execute
 	seqName, ok := n.Eq[valstring]
@@ -132,13 +133,18 @@ func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string
 		// check if default sequence specified
 		seqName, ok = n.Eq[DEFAULT]
 		if !ok {
-			return nil, fmt.Errorf("the value of the conditional jobArg %s did not match any of the options", n.If)
+			values := make([]string, 0, len(n.Eq))
+			for k := range n.Eq {
+				values = append(values, k)
+			}
+			sort.Strings(values)
+			return nil, fmt.Errorf("'if: %s' value '%s' does not match any options: %s", n.If, valstring, strings.Join(values, ", "))
 		}
 	}
 	// Build the correct sequence
 	sequence, ok := o.AllSequences[seqName]
 	if !ok {
-		return nil, fmt.Errorf("could not find sequence %s", name)
+		return nil, fmt.Errorf("conditional sequence '%s' for 'if: %s' value '%s' does not exist", seqName, n.If, valstring)
 	}
 	sequence.Retry = n.Retry
 	s, err := o.buildSequence(seqName, sequence, nodeArgs)
@@ -199,16 +205,11 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 			// Find out how many times this node has to be repeated
 			iterators, iterateOvers, err := o.getIterators(n, nodeArgs)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("in seq %s, node %s: invalid 'each:' %s", name, n.Name, err) // @todo: why is it invalid?
 			}
 
 			// All the graphs that make up this component
 			componentsForThisNode := []*Graph{}
-
-			// Validate that the iterators all have variable names
-			if len(iterateOvers) != len(iterators) || len(iterators) < 1 {
-				return nil, fmt.Errorf("Error making node %s: malformed arguments given.", n.Name)
-			}
 
 			// If no repetition is needed, this loop will only execute once
 			for i, _ := range iterateOvers[0] {
@@ -240,24 +241,24 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 					// Node is a conditional
 					g, err = o.buildConditional(name, n, nodeArgsCopy)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("in seq %s, node %s: %s", name, n.Name, err)
 					}
 				} else if n.isSequence() {
 					// Node is a sequence, recursively construct its components
 					sequence, ok := o.AllSequences[n.NodeType]
 					if !ok {
-						return nil, fmt.Errorf("could not find sequence %s", name)
+						return nil, fmt.Errorf("in seq %s, node %s: sequence '%s' does not exist", name, n.Name, n.NodeType)
 					}
 					sequence.Retry = n.Retry
 					g, err = o.buildSequence(n.Name, sequence, nodeArgsCopy)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("in seq %s, node %s: cannot build sequence '%s': %s", name, n.Name, sequence.Name, err)
 					}
 				} else {
 					// Node is a job, create a graph that contains only the node
 					g, err = o.buildSingleVertexGraph(n, nodeArgsCopy)
 					if err != nil {
-						return nil, err
+						return nil, fmt.Errorf("in seq %s, node %s: cannot build job: %s", name, n.Name, err)
 					}
 				}
 				if !g.IsValidGraph() {
@@ -473,6 +474,14 @@ func (o *Grapher) getIterators(n *NodeSpec, args map[string]interface{}) ([]stri
 		iterateOvers = append(iterateOvers, iterateOver)
 	}
 
+	// Validate that the iterators all have variable names
+	// @todo: I presume this means each: x\n y  len(x)==len(y) so we have an
+	//        "even" number of iterable values?
+	// @todo: fix, it doesn't catch uneven list len
+	if len(iterateOvers) != len(iterators) || len(iterators) < 1 {
+		return nil, nil, fmt.Errorf("args have different len")
+	}
+
 	return iterators, iterateOvers, nil
 }
 
@@ -489,6 +498,7 @@ func (o *Grapher) allArgsPresent(n *NodeSpec, args map[string]interface{}) bool 
 		}
 
 		// This is malformed input.
+		// @todo: this syntax error is ignored
 		if len(strings.Split(each, ":")) != 2 {
 			return false
 		}
