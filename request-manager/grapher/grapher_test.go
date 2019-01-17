@@ -531,12 +531,7 @@ func TestFailCreateNoDefaultConditionalGraph(t *testing.T) {
 	// create the graph
 	_, err := omg.CreateGraph("no-default-fail", args)
 	if err == nil {
-		ret := fmt.Errorf("Expected error creating graph but didn't receive one.")
-		t.Fatal(ret)
-	}
-	if err.Error() != "the value of the conditional jobArg containerType did not match any of the options" {
-		ret := fmt.Errorf("Unexpected error string returned.")
-		t.Fatal(ret)
+		t.Errorf("no error creating grapher without default conditional, expected an error")
 	}
 }
 
@@ -550,12 +545,7 @@ func TestFailCreateBadIfConditionalGraph(t *testing.T) {
 	// create the graph
 	_, err := omg.CreateGraph("bad-if-fail", args)
 	if err == nil {
-		ret := fmt.Errorf("Expected error creating graph but didn't receive one.")
-		t.Fatal(ret)
-	}
-	if err.Error() != "could not find the conditional jobArg subnet" {
-		ret := fmt.Errorf("Unexpected error string returned.")
-		t.Fatal(ret)
+		t.Errorf("no error creating grapher without default conditional, expected an error")
 	}
 }
 
