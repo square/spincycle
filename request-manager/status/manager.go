@@ -50,9 +50,42 @@ func NewManager(dbc myconn.Connector, jrClient jr.Client) Manager {
 func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 	status := proto.RunningStatus{}
 
-	running, err := m.jrc.SysStatRunning()
+	ctx := context.TODO()
+	conn, err := m.dbc.Open(ctx)
 	if err != nil {
 		return status, err
+	}
+	defer m.dbc.Close(conn) // don't leak conn
+
+	// Make a list of the URLs of all JR hosts currently running any requests.
+	q := "SELECT jr_url FROM requests WHERE state = ? AND jr_url IS NOT NULL"
+	rows, err := conn.QueryContext(ctx, q, proto.STATE_RUNNING)
+	if err != nil {
+		return status, err
+	}
+	defer rows.Close()
+
+	jrURLs := map[string]struct{}{}
+	for rows.Next() {
+		var jrURL string
+		err := rows.Scan(&jrURL)
+		if err != nil {
+			return status, err
+		}
+
+		// We only care about the presence of the key in the map, not the value.
+		jrURLs[jrURL] = struct{}{}
+	}
+
+	// Get the status of all running jobs from each JR host.
+	var running []proto.JobStatus
+	for url := range jrURLs {
+		runningFromHost, err := m.jrc.SysStatRunning(url)
+		if err != nil {
+			return status, err
+		}
+
+		running = append(running, runningFromHost...)
 	}
 
 	switch f.OrderBy {
@@ -72,13 +105,6 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 		return status, nil
 	}
 
-	ctx := context.TODO()
-	conn, err := m.dbc.Open(ctx)
-	if err != nil {
-		return status, err
-	}
-	defer m.dbc.Close(conn) // don't leak conn
-
 	seen := map[string]bool{}
 	ids := []string{}
 	for _, r := range running {
@@ -89,20 +115,20 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 		seen[r.RequestId] = true
 	}
 
-	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs" +
+	q = "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs" +
 		" FROM requests WHERE request_id IN (" + db.IN(ids) + ")"
-	rows, err := conn.QueryContext(ctx, q)
+	rows2, err := conn.QueryContext(ctx, q)
 	if err != nil {
 		return status, err
 	}
-	defer rows.Close()
+	defer rows2.Close()
 
 	requests := map[string]proto.Request{}
-	for rows.Next() {
+	for rows2.Next() {
 		r := proto.Request{}
 		startedAt := mysql.NullTime{}
 		finishedAt := mysql.NullTime{}
-		err := rows.Scan(
+		err := rows2.Scan(
 			&r.Id,
 			&r.Type,
 			&r.State,

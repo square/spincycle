@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
@@ -78,6 +79,7 @@ type resumer struct {
 	rm           Manager
 	dbc          myconn.Connector
 	jrc          jr.Client
+	defaultJRURL string
 	host         string // the host this request manager is currently running on
 	shutdownChan chan struct{}
 	logger       *log.Entry
@@ -88,6 +90,7 @@ type ResumerConfig struct {
 	RequestManager       Manager
 	DBConnector          myconn.Connector
 	JRClient             jr.Client
+	DefaultJRURL         string
 	RMHost               string
 	ShutdownChan         chan struct{}
 	SuspendedJobChainTTL time.Duration
@@ -98,6 +101,7 @@ func NewResumer(cfg ResumerConfig) Resumer {
 		rm:           cfg.RequestManager,
 		dbc:          cfg.DBConnector,
 		jrc:          cfg.JRClient,
+		defaultJRURL: cfg.DefaultJRURL,
 		host:         cfg.RMHost,
 		shutdownChan: cfg.ShutdownChan,
 		sjcTTL:       cfg.SuspendedJobChainTTL,
@@ -145,10 +149,10 @@ func (r *resumer) Suspend(sjc proto.SuspendedJobChain) (err error) {
 		return err
 	}
 
-	// Mark request as suspended and set JR host to null. This will only update the
+	// Mark request as suspended and set JR url to null. This will only update the
 	// request if the current state is RUNNING (it should be, per the earlier test).
 	req.State = proto.STATE_SUSPENDED
-	req.JobRunnerHost = ""
+	req.JobRunnerURL = ""
 	err = r.updateRequestWithTxn(req, proto.STATE_RUNNING, txn)
 	if err != nil {
 		// If we couldn't update the state's request to Suspended, we don't commit
@@ -280,21 +284,21 @@ func (r *resumer) Resume(id string) error {
 	}
 
 	// Send suspended job chain to JR, which will resume running it.
-	host, err := r.jrc.ResumeJobChain(sjc)
+	chainURL, err := r.jrc.ResumeJobChain(r.defaultJRURL, sjc)
 	if err != nil {
 		return fmt.Errorf("error sending SJC to Job Runner: %s", err)
 	}
 
-	// Update the request's state and save the JR host running it. Since we
+	// Update the request's state and save the JR url running it. Since we
 	// previously checked that the request state was STATE_SUSPENDED, this
 	// should always succeed.
 	req := proto.Request{
-		Id:            id,
-		State:         proto.STATE_RUNNING,
-		JobRunnerHost: host,
+		Id:           id,
+		State:        proto.STATE_RUNNING,
+		JobRunnerURL: strings.TrimSuffix(chainURL.String(), chainURL.RequestURI()),
 	}
 	if err = r.updateRequest(req, proto.STATE_SUSPENDED, conn); err != nil {
-		return fmt.Errorf("error setting request state to STATE_RUNNING and saving job runner hostname: %s", err)
+		return fmt.Errorf("error setting request state to STATE_RUNNING and saving job runner url: %s", err)
 	}
 
 	// Now that we've resumed running the request, we can delete the SJC. We don't
@@ -406,7 +410,7 @@ func (r *resumer) Cleanup() {
 		// failed on deleting the SJC. Update will return db.ErrNotUpdated in this
 		// case - ignore this error.
 		req.State = proto.STATE_FAIL
-		req.JobRunnerHost = ""
+		req.JobRunnerURL = ""
 		err = r.updateRequest(req, proto.STATE_SUSPENDED, conn)
 		if err != nil && err != db.ErrNotUpdated {
 			reqLogger.Errorf("error changing request state from SUSPENDED to FAILED: %s", err)
@@ -432,7 +436,7 @@ func (r *resumer) Cleanup() {
 	return
 }
 
-// Update the State and JR host of a request. This is a wrapper around
+// Update the State and JR url of a request. This is a wrapper around
 // updateRequestWithTxn that creates a transaction for updating the request.
 func (r *resumer) updateRequest(request proto.Request, curState byte, conn *sql.Conn) error {
 	// Start a transaction.
@@ -450,19 +454,19 @@ func (r *resumer) updateRequest(request proto.Request, curState byte, conn *sql.
 	return txn.Commit()
 }
 
-// updateRequestWithTxn updates the State and JR host as set in the given request,
+// updateRequestWithTxn updates the State and JR url as set in the given request,
 // using the provided db transaction. The request is updated only if its current
 // state in the db matches the state provided.
 func (r *resumer) updateRequestWithTxn(request proto.Request, curState byte, txn *sql.Tx) error {
-	// If JobRunnerHost is empty, we want to set the db field to NULL (not an empty string).
-	var jrHost interface{}
-	if request.JobRunnerHost != "" {
-		jrHost = request.JobRunnerHost
+	// If JobRunnerURL is empty, we want to set the db field to NULL (not an empty string).
+	var jrURL interface{}
+	if request.JobRunnerURL != "" {
+		jrURL = request.JobRunnerURL
 	}
 
-	// Update the 'state' and 'jr_host' fields only.
-	q := "UPDATE requests SET state = ?, jr_host = ? WHERE request_id = ? AND state = ?"
-	res, err := txn.Exec(q, request.State, jrHost, request.Id, curState)
+	// Update the 'state' and 'jr_url' fields only.
+	q := "UPDATE requests SET state = ?, jr_url = ? WHERE request_id = ? AND state = ?"
+	res, err := txn.Exec(q, request.State, jrURL, request.Id, curState)
 	if err != nil {
 		return err
 	}

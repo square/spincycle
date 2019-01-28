@@ -4,6 +4,7 @@ package request_test
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 	"testing"
 
@@ -104,7 +105,14 @@ func teardownManager(t *testing.T, dbName string) {
 
 func TestCreateMissingType(t *testing.T) {
 	shutdownChan := make(chan struct{})
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	defer close(shutdownChan)
 
 	_, err := m.Create(proto.CreateRequestParams{})
@@ -117,7 +125,14 @@ func TestCreate(t *testing.T) {
 	dbName := setupManager(t, "")
 	defer teardownManager(t, dbName)
 
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 
 	// gr uses spec a-b-c.yaml which has reqest "three-nodes"
 	reqParams := proto.CreateRequestParams{
@@ -243,7 +258,14 @@ func TestGetNotFound(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "invalid"
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	_, err := m.Get(reqId)
 	if err != nil {
 		switch v := err.(type) {
@@ -262,7 +284,14 @@ func TestGet(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "0874a524aa1edn3ysp00"
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	actual, err := m.Get(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -280,7 +309,14 @@ func TestStartNotPending(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	err := m.Start(reqId)
 	_, ok := err.(request.ErrInvalidState)
 	if !ok {
@@ -295,14 +331,22 @@ func TestStart(t *testing.T) {
 	// Create a mock JR client that records the JC it receives.
 	var recvdJc proto.JobChain
 	mockJRc := &mock.JRClient{
-		NewJobChainFunc: func(jc proto.JobChain) (string, error) {
+		NewJobChainFunc: func(baseURL string, jc proto.JobChain) (*url.URL, error) {
 			recvdJc = jc
-			return "fake_host", nil
+			url, _ := url.Parse("http://fake_host:1111/api/v1/job-chains/1")
+			return url, nil
 		},
 	}
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
-	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       mockJRc,
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	err := m.Start(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -328,7 +372,14 @@ func TestStopNotRunning(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	err := m.Stop(reqId)
 	if err != nil {
 		switch v := err.(type) {
@@ -350,14 +401,21 @@ func TestStopComplete(t *testing.T) {
 	// be hit.
 	var recvdId string
 	mockJRc := &mock.JRClient{
-		StopRequestFunc: func(reqId string) error {
+		StopRequestFunc: func(baseURL string, reqId string) error {
 			recvdId = reqId
 			return nil
 		},
 	}
 
-	reqId := "93ec156e204ety45sgf0" // request is running
-	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
+	reqId := "93ec156e204ety45sgf0" // request is complete
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       mockJRc,
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	err := m.Stop(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -366,6 +424,7 @@ func TestStopComplete(t *testing.T) {
 	if recvdId != "" {
 		t.Errorf("request id = %s, expected an empty string", recvdId)
 	}
+
 }
 
 func TestStop(t *testing.T) {
@@ -374,15 +433,24 @@ func TestStop(t *testing.T) {
 
 	// Create a mock JR client that records the requestId it receives.
 	var recvdId string
+	var recvdHost string
 	mockJRc := &mock.JRClient{
-		StopRequestFunc: func(reqId string) error {
+		StopRequestFunc: func(baseURL string, reqId string) error {
 			recvdId = reqId
+			recvdHost = baseURL
 			return nil
 		},
 	}
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
-	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       mockJRc,
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	err := m.Stop(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -390,6 +458,10 @@ func TestStop(t *testing.T) {
 
 	if recvdId != reqId {
 		t.Errorf("request id = %s, expected %s", recvdId, reqId)
+	}
+	req := testdb.SavedRequests[reqId]
+	if recvdHost != req.JobRunnerURL {
+		t.Errorf("JR url = %s, expected %s", recvdHost, req.JobRunnerURL)
 	}
 }
 
@@ -401,7 +473,14 @@ func TestFinishNotRunning(t *testing.T) {
 	params := proto.FinishRequestParams{
 		State: proto.STATE_COMPLETE,
 	}
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	err := m.Finish(reqId, params)
 	switch err.(type) {
 	case request.ErrInvalidState:
@@ -418,7 +497,14 @@ func TestFinish(t *testing.T) {
 	params := proto.FinishRequestParams{
 		State: proto.STATE_COMPLETE,
 	}
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	err := m.Finish(reqId, params)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -442,8 +528,10 @@ func TestStatusRunning(t *testing.T) {
 	reqId := "454ae2f98a05cv16sdwt" // request is running and has JLs
 
 	// Create a mock JR client that returns live status for some jobs.
+	var recvdHost string
 	mockJRc := &mock.JRClient{
-		RequestStatusFunc: func(reqId string) (proto.JobChainStatus, error) {
+		RequestStatusFunc: func(baseURL string, reqId string) (proto.JobChainStatus, error) {
+			recvdHost = baseURL
 			return proto.JobChainStatus{
 				RequestId: reqId,
 				JobStatuses: proto.JobStatuses{
@@ -466,7 +554,14 @@ func TestStatusRunning(t *testing.T) {
 		},
 	}
 
-	m := request.NewManager(grf, dbc, mockJRc, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       mockJRc,
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	actual, err := m.Status(reqId)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
@@ -517,6 +612,11 @@ func TestStatusRunning(t *testing.T) {
 	if diff := deep.Equal(actual, expected); diff != nil {
 		t.Error(diff)
 	}
+
+	req := testdb.SavedRequests[reqId]
+	if recvdHost != req.JobRunnerURL {
+		t.Errorf("JR url = %s, expected %s", recvdHost, req.JobRunnerURL)
+	}
 }
 
 func TestIncrementFinishedJobs(t *testing.T) {
@@ -524,7 +624,14 @@ func TestIncrementFinishedJobs(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	err := m.IncrementFinishedJobs(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
@@ -547,7 +654,14 @@ func TestJobChainNotFound(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "invalid"
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	_, err := m.JobChain(reqId)
 	if err != nil {
 		switch v := err.(type) {
@@ -566,7 +680,14 @@ func TestJobChainInvalid(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "cd724fd12092"
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	_, err := m.JobChain(reqId)
 	if err == nil {
 		t.Errorf("expected an error unmarshaling the job chain, did not get one")
@@ -578,7 +699,14 @@ func TestJobChain(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "8bff5def4f3fvh78skjy"
-	m := request.NewManager(grf, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
 	actual, err := m.JobChain(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)

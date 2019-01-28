@@ -58,7 +58,7 @@ func init() {
 	// //////////////////////////////////////////////////////////////////////////
 	reqId = "454ae2f98a05cv16sdwt"
 	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T01:00:00Z")
-	jrHost := "fake_jr_host"
+	jrURL := "http://jr:0000"
 
 	// Graph for this chain looks like this:
 	//       -------> ldfi ------->
@@ -115,8 +115,8 @@ func init() {
 			},
 			State: proto.STATE_RUNNING,
 		},
-		FinishedJobs:  4,
-		JobRunnerHost: jrHost,
+		FinishedJobs: 4,
+		JobRunnerURL: jrURL,
 	}
 
 	// //////////////////////////////////////////////////////////////////////////

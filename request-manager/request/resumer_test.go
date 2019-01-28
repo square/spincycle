@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"net/url"
 	"testing"
 	"time"
 
@@ -50,7 +51,14 @@ func setupResumer(t *testing.T, dataFile string) string {
 	// Create a shutdown channel - this is a package var from manager_test.go
 	shutdownChan = make(chan struct{})
 
-	rm = request.NewManager(&grapher.MockGrapherFactory{}, dbc, &mock.JRClient{}, shutdownChan)
+	cfg := request.ManagerConfig{
+		GrapherFactory: &grapher.MockGrapherFactory{},
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	rm = request.NewManager(cfg)
 
 	return dbName
 }
@@ -167,9 +175,10 @@ func TestResume(t *testing.T) {
 
 	var receivedSJC proto.SuspendedJobChain
 	jrc := &mock.JRClient{
-		ResumeJobChainFunc: func(sjc proto.SuspendedJobChain) (string, error) {
+		ResumeJobChainFunc: func(baseURL string, sjc proto.SuspendedJobChain) (*url.URL, error) {
 			receivedSJC = sjc
-			return "returned_by_jr", nil
+			url, _ := url.Parse("http://fake_host:1111/api/v1/job-chains/1")
+			return url, nil
 		},
 	}
 
@@ -224,8 +233,8 @@ func TestResume(t *testing.T) {
 		t.Errorf("request %s state = %s, expected %s", req.Id, proto.StateName[req.State], "RUNNING")
 	}
 
-	if req.JobRunnerHost != "returned_by_jr" {
-		t.Errorf("request %s JR host = %s, expected %s", req.Id, req.JobRunnerHost, "returned_by_jr")
+	if req.JobRunnerURL != "http://fake_host:1111" {
+		t.Errorf("request %s JR url = %s, expected %s", req.Id, req.JobRunnerURL, "http://fake_host:1111")
 	}
 
 	// 2: Test resuming an SJC whose request state != Suspended. This should delete
@@ -264,8 +273,8 @@ func TestResume(t *testing.T) {
 	// 3: Test resuming an SJC and getting an error from the JR Client.
 	// Create a new resumer so we can force a JRC error.
 	jrc = &mock.JRClient{
-		ResumeJobChainFunc: func(sjc proto.SuspendedJobChain) (string, error) {
-			return "", mock.ErrJRClient
+		ResumeJobChainFunc: func(baseURL string, sjc proto.SuspendedJobChain) (*url.URL, error) {
+			return nil, mock.ErrJRClient
 		},
 	}
 
@@ -326,9 +335,10 @@ func TestResumeAll(t *testing.T) {
 
 	receivedSJCs := map[string]proto.SuspendedJobChain{}
 	jrc := &mock.JRClient{
-		ResumeJobChainFunc: func(sjc proto.SuspendedJobChain) (string, error) {
+		ResumeJobChainFunc: func(baseURL string, sjc proto.SuspendedJobChain) (*url.URL, error) {
 			receivedSJCs[sjc.RequestId] = sjc
-			return "returned_by_jr", nil
+			url, _ := url.Parse("http://fake_host:1111/api/v1/job-chains/1")
+			return url, nil
 		},
 	}
 
@@ -414,8 +424,8 @@ func TestResumeAll(t *testing.T) {
 		}
 
 		if req.Id == "suspended___________" || req.Id == "old_sjc_____________" {
-			if req.JobRunnerHost != "returned_by_jr" {
-				t.Errorf("request %s JR host = %s, expected %s", req.Id, req.JobRunnerHost, "returned_by_jr")
+			if req.JobRunnerURL != "http://fake_host:1111" {
+				t.Errorf("request %s JR url = %s, expected %s", req.Id, req.JobRunnerURL, "http://fake_host:1111")
 			}
 		}
 	}

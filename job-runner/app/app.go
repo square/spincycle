@@ -5,6 +5,7 @@ package app
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -40,6 +41,15 @@ type Hooks struct {
 	// stopped, and it should cause RunAPI to return. If this hook is provided, it
 	// is called instead of api.Stop, and RunAPI must be provided as well.
 	StopAPI func() error
+
+	// ServerURL returns the base URL to be used for querying this Job Runner's API.
+	// This URL is returned to the Request Manager when a job chain is run, so the
+	// Request Manager may direct status/stop queries for the request to the
+	// correct Job Runner instance. The default ServerURL hook must be overriden if
+	// a ListenAddress (and TLS config) is not provided in the Job Runner config
+	// file. This is typical if a RunAPI hook has been provided, as ListenAddress
+	// and TLS config files are used only in the default api.Run.
+	ServerURL func(Context) (string, error)
 }
 
 func Defaults() Context {
@@ -53,6 +63,7 @@ func Defaults() Context {
 			SetUsername: (func(ireq *http.Request) (string, error) {
 				return "admin", nil
 			}),
+			ServerURL: ServerURL,
 		},
 	}
 }
@@ -77,6 +88,27 @@ func LoadConfig(appCtx Context) (config.JobRunner, error) {
 		return cfg, fmt.Errorf("error loading config at %s: %s", cfgFile, err)
 	}
 	return cfg, nil
+}
+
+// Default ServerURL Hook. Uses config's ListenAddress as the host and sets scheme
+// based on the presence of a TLS config.
+func ServerURL(appCtx Context) (string, error) {
+	var serverURL url.URL
+
+	address := appCtx.Config.ListenAddress
+	if address == "" {
+		return "", fmt.Errorf("listen_address not set in config")
+	}
+	serverURL.Host = address
+
+	// If config has TLS info, use https; else http.
+	if appCtx.Config.TLS.CertFile != "" && appCtx.Config.TLS.KeyFile != "" {
+		serverURL.Scheme = "https"
+	} else {
+		serverURL.Scheme = "http"
+	}
+
+	return serverURL.String(), nil
 }
 
 func MakeRequestManagerClient(appCtx Context) (rm.Client, error) {

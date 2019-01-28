@@ -222,6 +222,10 @@ func (s *Server) makeAPI() error {
 	rf := runner.NewFactory(jobs.Factory, rmc)
 	trFactory := chain.NewTraverserFactory(chainRepo, rf, rmc, s.shutdownChan)
 	s.traverserRepo = cmap.New()
+	baseURL, err := s.appCtx.Hooks.ServerURL(s.appCtx)
+	if err != nil {
+		return fmt.Errorf("error getting base server URL: %s", err)
+	}
 
 	apiCfg := api.Config{
 		AppCtx:           s.appCtx,
@@ -229,6 +233,7 @@ func (s *Server) makeAPI() error {
 		TraverserRepo:    s.traverserRepo,
 		StatusManager:    stat,
 		ShutdownChan:     s.shutdownChan,
+		BaseURL:          baseURL,
 	}
 	s.api = api.NewAPI(apiCfg)
 	return nil

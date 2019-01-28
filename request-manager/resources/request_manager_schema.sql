@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS `requests` (
   `finished_at`    TIMESTAMP            NULL DEFAULT NULL,
   `total_jobs`     INT UNSIGNED     NOT NULL DEFAULT 0,
   `finished_jobs`  INT UNSIGNED     NOT NULL DEFAULT 0,
-  `jr_host`        VARCHAR(64)          NULL DEFAULT NULL,
+  `jr_url`        VARCHAR(64)          NULL DEFAULT NULL,
 
   PRIMARY KEY (`request_id`),
   INDEX (`created_at`),  -- recently created

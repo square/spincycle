@@ -194,7 +194,14 @@ func (s *Server) Boot() error {
 	}
 
 	// Request Manager: core logic and coordination
-	s.appCtx.RM = request.NewManager(grf, dbc, jrc, s.shutdownChan)
+	managerConfig := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       jrc,
+		DefaultJRURL:   s.appCtx.Config.JRClient.ServerURL,
+		ShutdownChan:   s.shutdownChan,
+	}
+	s.appCtx.RM = request.NewManager(managerConfig)
 
 	// Request Resumer: suspend + resume requests
 	hostname, err := os.Hostname()
@@ -205,6 +212,7 @@ func (s *Server) Boot() error {
 		RequestManager:       s.appCtx.RM,
 		DBConnector:          dbc,
 		JRClient:             jrc,
+		DefaultJRURL:         s.appCtx.Config.JRClient.ServerURL,
 		RMHost:               hostname,
 		ShutdownChan:         s.shutdownChan,
 		SuspendedJobChainTTL: SJCTTL,
