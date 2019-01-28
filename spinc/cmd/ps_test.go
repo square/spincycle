@@ -129,8 +129,9 @@ func TestPsVerbose(t *testing.T) {
 		t.Errorf("got err '%s', exepcted nil", err)
 	}
 
+	// There's a trailing space after "value "
 	expectOutput := `ID                  	   N	NJOBS	  TIME	OWNER	JOB	REQUEST
-b9uvdi8tk9kahl8ppvbg	   1	    9	   3.0	owner	jobname	requestname  key=value
+b9uvdi8tk9kahl8ppvbg	   1	    9	   3.0	owner	jobname	requestname  key=value 
 `
 	if output.String() != expectOutput {
 		fmt.Printf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)

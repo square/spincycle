@@ -50,12 +50,13 @@ func (c *Ps) Run() error {
 	w := new(tabwriter.Writer)
 	w.Init(c.ctx.Out, 0, 8, 0, '\t', 0)
 	hdr := fmt.Sprintf("%%-20s\t%%4s\t%%5s\t%%6s\t%%s\t%%s\t%%s\n")
-	line := fmt.Sprintf("%%-20s\t%%4d\t%%5d\t%%6s\t%%s\t%%s\t%%s  %%s\n")
-
+	var line string
 	if c.ctx.Options.Verbose {
 		fmt.Fprintf(w, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "REQUEST")
+		line = fmt.Sprintf("%%-20s\t%%4d\t%%5d\t%%6s\t%%s\t%%s\t%%s  %%s\n")
 	} else {
 		fmt.Fprintf(w, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "")
+		line = fmt.Sprintf("%%-20s\t%%4d\t%%5d\t%%6s\t%%s\t%%s\n")
 	}
 
 	for _, r := range status.Jobs {
@@ -92,20 +93,23 @@ func (c *Ps) Run() error {
 			r.Name = r.Name[jobNameLen-(JOB_COL_LEN-3):jobNameLen] + "..." // -3 for "..."
 		}
 
-		sort.Strings(argNames)
-		argString := ""
-		for _, k := range argNames {
-			v := args[k]
-			val, ok := v.(string)
-			if !ok {
-				val = ""
+		if c.ctx.Options.Verbose {
+			sort.Strings(argNames)
+			argString := ""
+			for _, k := range argNames {
+				v := args[k]
+				val, ok := v.(string)
+				if !ok {
+					val = ""
+				}
+				argString = argString + k + "=" + val + " "
 			}
-			argString = argString + k + "=" + val + " "
+			fmt.Fprintf(w, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name, requestName, argString)
+		} else {
+			fmt.Fprintf(w, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name)
 		}
-		fmt.Fprintf(w, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name, requestName, argString)
 	}
 
-	fmt.Fprintln(w)
 	w.Flush()
 
 	return nil
