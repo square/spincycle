@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2016-2019, Square, Inc.
 
 // Package config handles config files, -config, and env vars at startup.
 package config
@@ -6,6 +6,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -87,9 +88,9 @@ func ParseCommandLine(def Options) CommandLine {
 
 // Help prints full help or minimal request help if full is false. An rm.Client
 // is used to get the list of available requests from the Request Manager API.
-func Help(full bool, rmc rm.Client) {
+func Help(full bool, rmc rm.Client, out io.Writer) {
 	if full {
-		fmt.Printf("Usage: spinc [flags] <command> [request|id] [args|file]\n\n"+
+		fmt.Fprintf(out, "Usage: spinc [flags] <command> [request|id] [args|file]\n\n"+
 			"Flags:\n"+
 			"  --addr     Address of Request Managers (https://local.domain:8080)\n"+
 			"  --config   Config files (default: %s)\n"+
@@ -108,28 +109,28 @@ func Help(full bool, rmc rm.Client) {
 			"  running <ID>       Exit 0 if request is running, else exit 1\n"+
 			"  ps                 Show all running requests and jobs\n\n",
 			DEFAULT_CONFIG_FILES, DEFAULT_TIMEOUT)
-		printRequestList(rmc)
-		fmt.Println("\n'spinc help <request>' for request help")
+		printRequestList(rmc, out)
+		fmt.Fprintf(out, "\n'spinc help <request>' for request help\n")
 	} else {
-		fmt.Printf("spinc help  <request>\nspinc start <request>\n\n")
-		printRequestList(rmc)
-		fmt.Println("\n'spinc help' for more")
+		fmt.Fprintf(out, "spinc help  <request>\nspinc start <request>\n\n")
+		printRequestList(rmc, out)
+		fmt.Fprintf(out, "\n'spinc help' for more\n")
 	}
 }
 
-func printRequestList(rmc rm.Client) {
+func printRequestList(rmc rm.Client, out io.Writer) {
 	if rmc == nil {
-		fmt.Println("Specify --addr or ADDR environment variable to list all requests")
+		fmt.Fprintf(out, "Specify --addr or ADDR environment variable to list all requests\n")
 		return
 	}
 
-	fmt.Println("Requests:")
+	fmt.Fprintf(out, "Requests:\n")
 	req, err := rmc.RequestList()
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintf(out, "%s\n", err)
 	} else {
 		for _, r := range req {
-			fmt.Println("  " + r.Name)
+			fmt.Fprintf(out, "  "+r.Name+"\n")
 		}
 	}
 }

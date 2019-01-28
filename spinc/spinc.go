@@ -1,9 +1,10 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package spinc provides a framework for integration with other programs.
 package spinc
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,11 +15,15 @@ import (
 	"github.com/square/spincycle/spinc/config"
 )
 
+var (
+	ErrHelp = errors.New("print help")
+)
+
 // Run runs spinc and exits when done. When using a standard spinc bin, Run is
 // called by spinc/bin/main.go. When spinc is wrapped by custom code, that code
 // imports this pkg then call spinc.Run() with its custom factories. If a factory
 // is not set (nil), then the default/standard factory is used.
-func Run(ctx app.Context) {
+func Run(ctx app.Context) error {
 	// //////////////////////////////////////////////////////////////////////
 	// Config and command line
 	// //////////////////////////////////////////////////////////////////////
@@ -75,14 +80,14 @@ func Run(ctx app.Context) {
 	// spinc with no args (Args[0] = "spinc" itself). Print short request help
 	// because Ryan is very busy.
 	if len(os.Args) == 1 {
-		config.Help(false, rmc)
-		os.Exit(0)
+		config.Help(false, rmc, ctx.Out)
+		return ErrHelp
 	}
 
 	// spinc --help or spinc help (full help)
-	if o.Help || (c.Cmd == "help" && len(c.Args) == 0) {
-		config.Help(true, rmc)
-		os.Exit(0)
+	if o.Help || c.Cmd == "help" || c.Cmd == "" {
+		config.Help(true, rmc, ctx.Out)
+		return ErrHelp
 	}
 
 	// spinc help <command>
@@ -92,27 +97,25 @@ func Run(ctx app.Context) {
 			var err error
 			rmc, err = makeRMC(&ctx)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				os.Exit(1)
+				return err
 			}
 		}
 		reqName := c.Args[0]
 		if err := config.RequestHelp(reqName, rmc); err != nil {
 			switch err {
 			case config.ErrUnknownRequest:
-				fmt.Fprintf(os.Stderr, "Unknown request: %s. Run spinc (no arguments) to list all requests.\n", reqName)
+				return fmt.Errorf("Unknown request: %s. Run spinc (no arguments) to list all requests.", reqName)
 			default:
-				fmt.Fprintf(os.Stderr, "API error: %s. Use --ping to test the API connection.\n", err)
+				return fmt.Errorf("API error: %s. Use --ping to test the API connection.", err)
 			}
-			os.Exit(1)
 		}
-		os.Exit(0)
+		return nil
 	}
 
 	// spinc --version or spinc version
 	if o.Version || c.Cmd == "version" {
 		fmt.Println("spinc v0.0.0")
-		os.Exit(0)
+		return nil
 	}
 
 	// //////////////////////////////////////////////////////////////////////
@@ -122,8 +125,7 @@ func Run(ctx app.Context) {
 		var err error
 		rmc, err = makeRMC(&ctx)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return err
 		}
 	}
 
@@ -132,11 +134,10 @@ func Run(ctx app.Context) {
 	// //////////////////////////////////////////////////////////////////////
 	if o.Ping {
 		if _, err := rmc.RequestList(); err != nil {
-			fmt.Fprintf(os.Stderr, "Ping failed: %s\n", err)
-			os.Exit(1)
+			return fmt.Errorf("Ping failed: %s", err)
 		}
 		fmt.Printf("%s OK\n", o.Addr)
-		os.Exit(0)
+		return nil
 	}
 
 	// //////////////////////////////////////////////////////////////////////
@@ -155,8 +156,7 @@ func Run(ctx app.Context) {
 					app.Debug("user cmd factory cannot make a %s cmd, trying default factory", c.Cmd)
 				}
 			default:
-				fmt.Fprintf(os.Stderr, "User command factory error: %s\n", err)
-				os.Exit(1)
+				return fmt.Errorf("User command factory error: %s", err)
 			}
 		}
 	}
@@ -168,11 +168,10 @@ func Run(ctx app.Context) {
 		if err != nil {
 			switch err {
 			case cmd.ErrNotExist:
-				fmt.Fprintf(os.Stderr, "Unknown command: %s. Run 'spinc help' to list commands.\n", c.Cmd)
+				return fmt.Errorf("Unknown command: %s. Run 'spinc help' to list commands.", c.Cmd)
 			default:
-				fmt.Fprintf(os.Stderr, "Command factory error: %s\n", err)
+				return fmt.Errorf("Command factory error: %s", err)
 			}
-			os.Exit(1)
 		}
 	}
 
@@ -183,20 +182,20 @@ func Run(ctx app.Context) {
 		switch err {
 		case config.ErrUnknownRequest:
 			reqName := c.Args[0]
-			fmt.Fprintf(os.Stderr, "Unknown request: %s. Run spinc (no arguments) to list all requests.\n", reqName)
+			return fmt.Errorf("Unknown request: %s. Run spinc (no arguments) to list all requests.", reqName)
 		default:
-			fmt.Fprintln(os.Stderr, err)
+			return err
 		}
-		os.Exit(1)
 	}
 
 	if err := run.Run(); err != nil {
 		if o.Debug {
 			app.Debug("%s Run error: %s", c.Cmd, err)
 		}
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return err
 	}
+
+	return nil
 }
 
 func makeRMC(ctx *app.Context) (rm.Client, error) {

@@ -1,8 +1,9 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/square/spincycle/spinc"
@@ -16,5 +17,10 @@ func main() {
 		Hooks:     app.Hooks{},
 		Factories: app.Factories{},
 	}
-	spinc.Run(defaultContext)
+	if err := spinc.Run(defaultContext); err != nil {
+		if err != spinc.ErrHelp {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 }
