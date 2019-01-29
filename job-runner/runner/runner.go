@@ -42,9 +42,12 @@ type Runner interface {
 	// quickly because Stop blocks while waiting for the job to stop.
 	Stop() error
 
-	// Status returns the status of the job as reported by the job. The job
-	// is responsible for handling status requests asynchronously while running.
-	Status() string
+	// Status returns the status of the job as reported by the job and the current
+	// try number of the job. The job is responsible for handling status requests
+	// asynchronously while running. The try number reported is based on the total
+	// number of tries of the job, not just tries within a sequence try - it's the
+	// same as the try number reported in a job log.
+	Status() (string, uint)
 }
 
 // A runner represents all information needed to run a job.
@@ -65,6 +68,7 @@ type runner struct {
 	*sync.Mutex
 	logger    *log.Entry
 	startTime time.Time
+	tryNo     uint
 }
 
 // NewRunner takes a proto.Job struct and its corresponding job.Job interface, and
@@ -97,11 +101,11 @@ func (r *runner) Run(jobData map[string]interface{}) Return {
 
 	r.startTime = time.Now()
 
-	tryNo := uint(1)
+	r.tryNo = uint(1)
 TRY_LOOP:
-	for tryNo <= r.maxTries {
+	for r.tryNo <= r.maxTries {
 		tryLogger := r.logger.WithFields(log.Fields{
-			"try":       tryNo,
+			"try":       r.tryNo,
 			"max_tries": r.maxTries,
 		})
 		tryLogger.Infof("starting the job")
@@ -128,7 +132,7 @@ TRY_LOOP:
 			JobId:       r.jobId,
 			Name:        r.jobName,
 			Type:        r.jobType,
-			Try:         r.prevTryNo + tryNo,
+			Try:         r.prevTryNo + r.tryNo,
 			SequenceId:  r.sequenceId,
 			SequenceTry: r.sequenceTry,
 			StartedAt:   startedAt,
@@ -168,7 +172,7 @@ TRY_LOOP:
 			proto.StateName[proto.STATE_COMPLETE], proto.StateName[jl.State])
 
 		// If last try, break retry loop, don't wait
-		if tryNo == r.maxTries {
+		if r.tryNo == r.maxTries {
 			break TRY_LOOP
 		}
 
@@ -179,12 +183,12 @@ TRY_LOOP:
 			// runner has been stopped
 			break TRY_LOOP
 		}
-		tryNo++
+		r.tryNo++
 	}
 
 	return Return{
 		FinalState: finalState,
-		Tries:      tryNo,
+		Tries:      r.tryNo,
 	}
 }
 
@@ -238,7 +242,10 @@ func (r *runner) Runtime() float64 {
 	return time.Now().Sub(r.startTime).Seconds()
 }
 
-func (r *runner) Status() string {
+// Return the real-time job status and the current job try number.
+func (r *runner) Status() (status string, tryNo uint) {
 	r.logger.Infof("getting job status")
-	return r.realJob.Status() // this is a blocking operation that should return quickly
+
+	// job.Status is a blocking operation that should return quickly
+	return r.realJob.Status(), r.prevTryNo + r.tryNo
 }

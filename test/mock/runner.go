@@ -75,9 +75,9 @@ func (r *Runner) Stop() error {
 	return nil
 }
 
-func (r *Runner) Status() string {
+func (r *Runner) Status() (string, uint) {
 	if r.RunBlock != nil {
 		close(r.RunBlock)
 	}
-	return r.StatusResp
+	return r.StatusResp, 0
 }

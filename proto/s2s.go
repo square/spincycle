@@ -120,6 +120,7 @@ type JobStatus struct {
 	State     byte                   `json:"state"`     // usually proto.STATE_RUNNING
 	Status    string                 `json:"status"`    // @todo: job.Status()
 	N         uint                   `json:"n"`         // Nth job ran in chain
+	Try       uint                   `json:"try"`       // job try this status pertains to
 }
 
 // JobChainStatus represents the status of a job chain reported by the Job Runner.

@@ -181,9 +181,12 @@ func TestRunStatus(t *testing.T) {
 	rmc := &mock.RMClient{}
 	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
 
-	status := jr.Status()
+	status, try := jr.Status()
 	if status != expectedStatus {
 		t.Errorf("status = %s, expected %s", status, expectedStatus)
+	}
+	if try != 1 {
+		t.Errorf("try = %d, expected %d", try, 1)
 	}
 }
 

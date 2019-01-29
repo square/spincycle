@@ -346,7 +346,7 @@ func (t *traverser) Status() (proto.JobChainStatus, error) {
 			// so it's runner no longer exists in the runner.Repo.
 			jobStatus.Status = "(finished)"
 		} else {
-			jobStatus.Status = runner.Status()
+			jobStatus.Status, jobStatus.Try = runner.Status()
 		}
 		status[i] = jobStatus
 		i++

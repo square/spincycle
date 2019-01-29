@@ -352,7 +352,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	defer m.dbc.Close(conn) // don't leak conn
 
 	// TODO(alyssa): change query when we add support for nested sequence retries
-	q := "SELECT j1.job_id, j1.name, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
+	q := "SELECT j1.job_id, j1.name, j1.state, j1.try FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
 		"j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try) WHERE j1.request_id = ? AND j2.try IS NULL"
 	rows, err := conn.QueryContext(ctx, q, requestId)
 	if err != nil {
@@ -363,7 +363,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	var finishedS proto.JobStatuses
 	for rows.Next() {
 		var s proto.JobStatus
-		if err := rows.Scan(&s.JobId, &s.Name, &s.State); err != nil {
+		if err := rows.Scan(&s.JobId, &s.Name, &s.State, &s.Try); err != nil {
 			return reqStatus, err
 		}
 		s.RequestId = requestId
@@ -377,27 +377,40 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 
 	// Convert liveS and finishedS into maps of jobId => status so that it
 	// is easy to lookup a job's status by its id (used below).
-	liveJ := map[string]proto.JobStatus{}
+	liveJobs := map[string]proto.JobStatus{}
 	for _, s := range liveS {
-		liveJ[s.JobId] = s
+		liveJobs[s.JobId] = s
 	}
-	finishedJ := map[string]proto.JobStatus{}
+	finishedJobs := map[string]proto.JobStatus{}
 	for _, s := range finishedS {
-		finishedJ[s.JobId] = s
+		finishedJobs[s.JobId] = s
 	}
 
 	// For each job in the job chain, get the job's status from either
 	// liveJobs or finishedJobs. Since the way we collect these maps is not
 	// transactional (we get liveJobs before finishedJobs), there can
-	// potentially be outdated info in liveJobs. Therefore, statuses in
-	// finishedJobs take priority over statuses in liveJobs. If a job does
-	// not exist in either map, it must be pending.
+	// potentially be outdated info in liveJobs (i.e. a job finished after getting
+	// liveJobs but before getting finishedJobs). Therefore statuses in
+	// finishedJobs take priority over statuses in liveJobs, unless the try number
+	// of the liveJobs status is greater than that of the finishedJobs status -
+	// this indicates that the finishedJobs status is from a previous try of the
+	// job, and the job is actually still running. If a job does not exist in
+	// either liveJobs or finishedJobs, it must be pending.
 	allS := proto.JobStatuses{}
 	for _, j := range req.JobChain.Jobs {
-		if s, ok := finishedJ[j.Id]; ok {
-			allS = append(allS, s)
-		} else if s, ok := liveJ[j.Id]; ok {
-			allS = append(allS, s)
+		liveStatus, liveOK := liveJobs[j.Id]
+		finishedStatus, finishedOK := finishedJobs[j.Id]
+
+		if finishedOK && liveOK {
+			if liveStatus.Try > finishedStatus.Try {
+				allS = append(allS, liveStatus)
+			} else {
+				allS = append(allS, finishedStatus)
+			}
+		} else if finishedOK {
+			allS = append(allS, finishedStatus)
+		} else if liveOK {
+			allS = append(allS, liveStatus)
 		} else {
 			s := proto.JobStatus{
 				JobId: j.Id,
