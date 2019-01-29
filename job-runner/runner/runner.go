@@ -4,6 +4,7 @@
 package runner
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -105,12 +106,9 @@ TRY_LOOP:
 		})
 		tryLogger.Infof("starting the job")
 
-		// Run the job. Run is a blocking operation that could take a long
-		// time. Run will return when a job finishes running (either by
-		// its own accord or by being forced to finish when Stop is called).
-		startedAt := time.Now().UnixNano()
-		jobRet, runErr := r.realJob.Run(jobData)
-		finishedAt := time.Now().UnixNano()
+		// Run the job. Use a separate method so we can easily recover from a panic
+		// in job.Run.
+		startedAt, finishedAt, jobRet, runErr := r.runJob(jobData)
 
 		// Figure out what the error message in the JL should be. An
 		// error returned by Run takes precedence (because it implies
@@ -188,6 +186,33 @@ TRY_LOOP:
 		FinalState: finalState,
 		Tries:      tryNo,
 	}
+}
+
+// Actually run the job.
+func (r *runner) runJob(jobData map[string]interface{}) (startedAt, finishedAt int64, ret job.Return, err error) {
+	defer func() {
+		// Recover from a panic inside Job.Run()
+		if panicErr := recover(); panicErr != nil {
+			// Set named return values. startedAt will already be set before
+			// the panic.
+			finishedAt = time.Now().UnixNano()
+			ret = job.Return{
+				State: proto.STATE_FAIL,
+				Exit:  1,
+			}
+			// The returned error will be used in the job log entry.
+			err = fmt.Errorf("panic from job.Run: %s", panicErr)
+		}
+	}()
+
+	// Run the job. Run is a blocking operation that could take a long
+	// time. Run will return when a job finishes running (either by
+	// its own accord or by being forced to finish when Stop is called).
+	startedAt = time.Now().UnixNano()
+	jobRet, runErr := r.realJob.Run(jobData)
+	finishedAt = time.Now().UnixNano()
+
+	return startedAt, finishedAt, jobRet, runErr
 }
 
 func (r *runner) Stop() error {

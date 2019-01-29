@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-test/deep"
 	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
@@ -183,5 +184,82 @@ func TestRunStatus(t *testing.T) {
 	status := jr.Status()
 	if status != expectedStatus {
 		t.Errorf("status = %s, expected %s", status, expectedStatus)
+	}
+}
+
+func TestRunPanic(t *testing.T) {
+	attemptNum := 0
+	// Create a mock job that will panic.
+	mJob := &mock.Job{
+		RunFunc: func(jobData map[string]interface{}) (job.Return, error) {
+			attemptNum += 1
+			panic("forced job.Run panic")
+			return job.Return{State: proto.STATE_COMPLETE}, nil // shouldn't get here.
+		},
+	}
+	pJob := proto.Job{
+		Id:    "panicJob",
+		Type:  "jtype",
+		Name:  "jobName",
+		Bytes: []byte{},
+		Retry: 1,
+	}
+	// Create a mock rmClient that will keep track of how many JLs get sent through it.
+	jlsSent := 0
+	var sentJLs []proto.JobLog
+	rmc := &mock.RMClient{
+		CreateJLFunc: func(reqId string, jl proto.JobLog) error {
+			jlsSent += 1
+
+			sentJLs = append(sentJLs, jl)
+			return nil
+		},
+	}
+	jr := runner.NewRunner(pJob, mJob, "abc", 0, 1, rmc)
+
+	ret := jr.Run(noJobData)
+	if ret.FinalState != proto.STATE_FAIL {
+		t.Errorf("final state = %d, expected %d", ret.FinalState, proto.STATE_FAIL)
+	}
+	if ret.Tries != 2 {
+		t.Errorf("tries= %d, expected %d", ret.Tries, 2)
+	}
+
+	expectedJLs := []proto.JobLog{
+		proto.JobLog{
+			RequestId:   "abc",
+			JobId:       "panicJob",
+			Name:        "jobName",
+			Type:        "jtype",
+			Try:         1,
+			SequenceTry: 1,
+			StartedAt:   sentJLs[0].StartedAt,
+			FinishedAt:  sentJLs[0].FinishedAt,
+			State:       proto.STATE_FAIL,
+			Exit:        1,
+			Error:       "panic from job.Run: forced job.Run panic",
+		},
+		proto.JobLog{
+			RequestId:   "abc",
+			JobId:       "panicJob",
+			Name:        "jobName",
+			Type:        "jtype",
+			Try:         2,
+			SequenceTry: 1,
+			StartedAt:   sentJLs[1].StartedAt,
+			FinishedAt:  sentJLs[1].FinishedAt,
+			State:       proto.STATE_FAIL,
+			Exit:        1,
+			Error:       "panic from job.Run: forced job.Run panic",
+		},
+	}
+	if jlsSent != 2 {
+		t.Errorf("runner sent %d JLs, expected %d", jlsSent, 2)
+	}
+	if diff := deep.Equal(expectedJLs, sentJLs); diff != nil {
+		t.Error(diff)
+	}
+	if sentJLs[0].StartedAt == 0 {
+		t.Errorf("expected real value for job log StartedAt, got placeholder 0")
 	}
 }
