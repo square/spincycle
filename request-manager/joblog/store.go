@@ -46,13 +46,15 @@ func (s *store) Create(requestId string, jl proto.JobLog) (proto.JobLog, error) 
 	}
 	defer s.dbc.Close(conn) // don't leak conn
 
-	q := "INSERT INTO job_log (request_id, job_id, name, try, type, started_at, finished_at, state, `exit`, " +
-		"error, stdout, stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+	q := "INSERT INTO job_log (request_id, job_id, name, try, sequence_try, sequence_id, type, started_at, finished_at, state, `exit`, " +
+		"error, stdout, stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	_, err = conn.ExecContext(ctx, q,
 		&jl.RequestId,
 		&jl.JobId,
 		&jl.Name,
 		&jl.Try,
+		&jl.SequenceTry,
+		&jl.SequenceId,
 		&jl.Type,
 		&jl.StartedAt,
 		&jl.FinishedAt,
@@ -82,8 +84,8 @@ func (s *store) Get(requestId, jobId string) (proto.JobLog, error) {
 	var jErr, stdout, stderr sql.NullString // nullable columns
 	var exit sql.NullInt64
 
-	q := "SELECT request_id, job_id, name, type, state, started_at, finished_at, error, `exit`, stdout, stderr, try " +
-		"FROM job_log WHERE request_id = ? AND job_id = ? ORDER BY try DESC LIMIT 1"
+	q := "SELECT request_id, job_id, name, type, state, started_at, finished_at, error, `exit`, stdout, stderr, try, " +
+		"sequence_try, sequence_id FROM job_log WHERE request_id = ? AND job_id = ? ORDER BY try DESC LIMIT 1"
 	err = conn.QueryRowContext(ctx, q, requestId, jobId).Scan(
 		&jl.RequestId,
 		&jl.JobId,
@@ -96,7 +98,9 @@ func (s *store) Get(requestId, jobId string) (proto.JobLog, error) {
 		&exit,
 		&stdout,
 		&stderr,
-		&jl.Try)
+		&jl.Try,
+		&jl.SequenceTry,
+		&jl.SequenceId)
 	switch {
 	case err == sql.ErrNoRows:
 		return jl, db.NewErrNotFound("job log")
@@ -131,8 +135,8 @@ func (s *store) GetFull(requestId string) ([]proto.JobLog, error) {
 	var jErr, stdout, stderr sql.NullString // nullable columns
 	var exit sql.NullInt64
 
-	q := "SELECT job_id, name, try, type, state, started_at, finished_at, error, `exit`, stdout, stderr " +
-		"FROM job_log WHERE request_id = ?"
+	q := "SELECT job_id, name, try, type, state, started_at, finished_at, error, `exit`, stdout, stderr,  " +
+		"sequence_try, sequence_id FROM job_log WHERE request_id = ?"
 	rows, err := conn.QueryContext(ctx, q, requestId)
 	if err != nil {
 		return nil, err
@@ -157,6 +161,8 @@ func (s *store) GetFull(requestId string) ([]proto.JobLog, error) {
 			&exit,
 			&stdout,
 			&stderr,
+			&l.SequenceTry,
+			&l.SequenceId,
 		)
 		if err != nil {
 			return nil, err
