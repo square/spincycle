@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
 	"text/tabwriter"
 	"time"
 
@@ -63,6 +64,7 @@ func (c *Ps) Run() error {
 		requestName := ""
 		owner := ""
 		args := map[string]interface{}{}
+		var argNames []string
 		if status.Requests != nil {
 			if r, ok := status.Requests[r.RequestId]; ok {
 				nJobs = r.TotalJobs
@@ -73,8 +75,13 @@ func (c *Ps) Run() error {
 					if err != nil {
 						return err
 					}
+
+					argNames = make([]string, len(request.Params))
+					i := 0
 					for k, v := range request.Params {
 						args[k] = v
+						argNames[i] = k
+						i++
 					}
 				}
 			}
@@ -85,8 +92,10 @@ func (c *Ps) Run() error {
 			r.Name = r.Name[jobNameLen-(JOB_COL_LEN-3):jobNameLen] + "..." // -3 for "..."
 		}
 
+		sort.Strings(argNames)
 		argString := ""
-		for k, v := range args {
+		for _, k := range argNames {
+			v := args[k]
 			val, ok := v.(string)
 			if !ok {
 				val = ""
