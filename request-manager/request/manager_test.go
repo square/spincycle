@@ -304,6 +304,30 @@ func TestGet(t *testing.T) {
 	}
 }
 
+func TestGetWithJC(t *testing.T) {
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
+
+	reqId := "0874a524aa1edn3ysp00"
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
+	actual, err := m.GetWithJC(reqId)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	expected := testdb.SavedRequests[reqId]
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+}
+
 func TestStartNotPending(t *testing.T) {
 	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
 	defer teardownManager(t, dbName)

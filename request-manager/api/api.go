@@ -214,7 +214,7 @@ func (api *API) getRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
 	// Get the request from the rm.
-	req, err := api.rm.Get(reqId)
+	req, err := api.rm.GetWithJC(reqId)
 	if err != nil {
 		return handleError(err)
 	}

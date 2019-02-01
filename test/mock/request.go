@@ -18,6 +18,7 @@ var (
 type RequestManager struct {
 	CreateFunc                func(proto.CreateRequestParams) (proto.Request, error)
 	GetFunc                   func(string) (proto.Request, error)
+	GetWithJCFunc             func(string) (proto.Request, error)
 	StartFunc                 func(string) error
 	StopFunc                  func(string) error
 	FinishFunc                func(string, proto.FinishRequestParams) error
@@ -37,6 +38,13 @@ func (r *RequestManager) Create(reqParams proto.CreateRequestParams) (proto.Requ
 func (r *RequestManager) Get(reqId string) (proto.Request, error) {
 	if r.GetFunc != nil {
 		return r.GetFunc(reqId)
+	}
+	return proto.Request{}, nil
+}
+
+func (r *RequestManager) GetWithJC(reqId string) (proto.Request, error) {
+	if r.GetWithJCFunc != nil {
+		return r.GetWithJCFunc(reqId)
 	}
 	return proto.Request{}, nil
 }
