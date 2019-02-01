@@ -185,7 +185,7 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 	}
 	// Create a mock request manager that will return a request.
 	rm := &mock.RequestManager{
-		GetFunc: func(r string) (proto.Request, error) {
+		GetWithJCFunc: func(r string) (proto.Request, error) {
 			return req, nil
 		},
 	}

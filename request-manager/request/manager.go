@@ -29,8 +29,12 @@ type Manager interface {
 	Create(proto.CreateRequestParams) (proto.Request, error)
 
 	// Get retrieves the request corresponding to the provided id,
-	// without its job chain.
+	// without its job chain or parameters set.
 	Get(requestId string) (proto.Request, error)
+
+	// Get retrieves the request corresponding to the provided id,
+	// with its job chain and parameters.
+	GetWithJC(requestId string) (proto.Request, error)
 
 	// Start starts a request (sends it to the JR).
 	Start(requestId string) error
@@ -256,7 +260,7 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 }
 
 func (m *manager) Start(requestId string) error {
-	req, err := m.getWithJc(requestId)
+	req, err := m.GetWithJC(requestId)
 	if err != nil {
 		return err
 	}
@@ -319,7 +323,7 @@ func (m *manager) Stop(requestId string) error {
 func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	var reqStatus proto.RequestStatus
 
-	req, err := m.getWithJc(requestId)
+	req, err := m.GetWithJC(requestId)
 	if err != nil {
 		return reqStatus, err
 	}
@@ -550,10 +554,8 @@ func (s *manager) JobChain(requestId string) (proto.JobChain, error) {
 	return jc, nil
 }
 
-// ------------------------------------------------------------------------- //
-
-// get a request with proto.Request.JobChain set
-func (m *manager) getWithJc(requestId string) (proto.Request, error) {
+// Get a request with proto.Request.JobChain and proto.Request.Params set
+func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 	req, err := m.Get(requestId)
 	if err != nil {
 		return req, err
@@ -591,6 +593,8 @@ func (m *manager) getWithJc(requestId string) (proto.Request, error) {
 	req.Params = params.Args
 	return req, nil
 }
+
+// ------------------------------------------------------------------------- //
 
 // Updates the state, started/finished timestamps, and JR url of the provided
 // request. The request is updated only if its current state (in the db) matches
