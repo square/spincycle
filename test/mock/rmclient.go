@@ -25,6 +25,7 @@ type RMClient struct {
 	GetJLFunc          func(string) ([]proto.JobLog, error)
 	CreateJLFunc       func(string, proto.JobLog) error
 	SysStatRunningFunc func() (proto.RunningStatus, error)
+	RequestListFunc    func() ([]proto.RequestSpec, error)
 }
 
 func (c *RMClient) CreateRequest(requestId string, args map[string]interface{}) (string, error) {
@@ -98,6 +99,9 @@ func (c *RMClient) CreateJL(requestId string, jl proto.JobLog) error {
 }
 
 func (c *RMClient) RequestList() ([]proto.RequestSpec, error) {
+	if c.RequestListFunc != nil {
+		return c.RequestListFunc()
+	}
 	return []proto.RequestSpec{}, nil
 }
 
