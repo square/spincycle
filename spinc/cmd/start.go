@@ -57,7 +57,7 @@ func (c *Start) Prepare() error {
 	// Split and save request args given on cmd line
 	given := map[string]string{}
 	for _, keyval := range cmd.Args {
-		p := strings.Split(keyval, "=")
+		p := strings.SplitN(keyval, "=", 2)
 		if len(p) != 2 {
 			return fmt.Errorf("Invalid command arg: %s: split on = produced %d values, expected 2 (key=val)", keyval, len(p))
 		}
@@ -66,7 +66,6 @@ func (c *Start) Prepare() error {
 			app.Debug("given '%s'='%s'", p[0], p[1])
 		}
 	}
-
 	// If no args are given, then it'll be a full prompt: required and all
 	// optional args. But if any args are given, then we presume user knows
 	// what they're doing and we skip all optional args (let them use default
@@ -133,8 +132,10 @@ func (c *Start) Prepare() error {
 		for k := range given {
 			bad = append(bad, k)
 		}
-		return fmt.Errorf("Unknown command args: %s. Run 'spinc help %s' to list known args.",
-			strings.Join(bad, ", "), c.reqName)
+		return ErrUnknownArgs{
+			Request: c.reqName,
+			Args:    bad,
+		}
 	}
 
 	return nil

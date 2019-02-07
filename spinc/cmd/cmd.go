@@ -5,6 +5,8 @@ package cmd
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/square/spincycle/spinc/app"
 )
@@ -12,6 +14,15 @@ import (
 var (
 	ErrNotExist = errors.New("command does not exist")
 )
+
+type ErrUnknownArgs struct {
+	Request string
+	Args    []string
+}
+
+func (e ErrUnknownArgs) Error() string {
+	return fmt.Sprintf("Unknown request args: %s. Run 'spinc help %s' to list valid args.", strings.Join(e.Args, ", "), e.Request)
+}
 
 type DefaultFactory struct {
 }
