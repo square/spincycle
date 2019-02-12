@@ -21,7 +21,7 @@ type RequestManager struct {
 	GetWithJCFunc             func(string) (proto.Request, error)
 	StartFunc                 func(string) error
 	StopFunc                  func(string) error
-	FinishFunc                func(string, proto.FinishRequestParams) error
+	FinishFunc                func(string, proto.FinishRequest) error
 	StatusFunc                func(string) (proto.RequestStatus, error)
 	IncrementFinishedJobsFunc func(string) error
 	SpecsFunc                 func() []proto.RequestSpec
@@ -56,7 +56,7 @@ func (r *RequestManager) Start(reqId string) error {
 	return nil
 }
 
-func (r *RequestManager) Finish(reqId string, finishParams proto.FinishRequestParams) error {
+func (r *RequestManager) Finish(reqId string, finishParams proto.FinishRequest) error {
 	if r.FinishFunc != nil {
 		return r.FinishFunc(reqId, finishParams)
 	}

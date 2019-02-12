@@ -492,7 +492,7 @@ func TestFinishNotRunning(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
-	params := proto.FinishRequestParams{
+	params := proto.FinishRequest{
 		State: proto.STATE_COMPLETE,
 	}
 	cfg := request.ManagerConfig{
@@ -516,7 +516,7 @@ func TestFinish(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
-	params := proto.FinishRequestParams{
+	params := proto.FinishRequest{
 		State: proto.STATE_COMPLETE,
 	}
 	cfg := request.ManagerConfig{

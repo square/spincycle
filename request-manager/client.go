@@ -113,7 +113,7 @@ func (c *client) FinishRequest(requestId string, state byte, finishedAt time.Tim
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/finish"
 
 	// Create the payload struct.
-	finishParams := proto.FinishRequestParams{
+	finishParams := proto.FinishRequest{
 		State:      state,
 		FinishedAt: finishedAt,
 	}

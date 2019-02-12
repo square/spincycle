@@ -47,8 +47,8 @@ type Manager interface {
 	Status(requestId string) (proto.RequestStatus, error)
 
 	// Finish marks a request as being finished. It gets the request's final
-	// state from the proto.FinishRequestParams argument.
-	Finish(requestId string, finishParams proto.FinishRequestParams) error
+	// state from the proto.FinishRequest argument.
+	Finish(requestId string, finishParams proto.FinishRequest) error
 
 	// IncrementFinishedJobs increments the count of the FinishedJobs field
 	// on the request and saves it to the db.
@@ -402,7 +402,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	return reqStatus, nil
 }
 
-func (m *manager) Finish(requestId string, finishParams proto.FinishRequestParams) error {
+func (m *manager) Finish(requestId string, finishParams proto.FinishRequest) error {
 	req, err := m.Get(requestId)
 	if err != nil {
 		return err

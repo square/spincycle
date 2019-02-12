@@ -205,7 +205,7 @@ func TestFinishRequestError(t *testing.T) {
 
 func TestFinishRequestSuccess(t *testing.T) {
 	reqId := "abcd1234"
-	var payload proto.FinishRequestParams
+	var payload proto.FinishRequest
 
 	setup(t, &payload, http.StatusOK, "")
 	defer cleanup()
@@ -217,7 +217,7 @@ func TestFinishRequestSuccess(t *testing.T) {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
-	expectedPayload := proto.FinishRequestParams{
+	expectedPayload := proto.FinishRequest{
 		State:      proto.STATE_COMPLETE,
 		FinishedAt: finishTime,
 	}

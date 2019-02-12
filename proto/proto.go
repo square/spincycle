@@ -85,8 +85,7 @@ type Request struct {
 	User   string                 `json:"user"`       // the user who made the request
 	Params map[string]interface{} `json:",omitempty"` // the jobArgs
 
-	CreatedAt time.Time `json:"createdAt"` // when the request was created
-	// These are pointers so that they can have nil values.
+	CreatedAt  time.Time  `json:"createdAt"`  // when the request was created
 	StartedAt  *time.Time `json:"startedAt"`  // when the request was sent to the job runner
 	FinishedAt *time.Time `json:"finishedAt"` // when the job runner finished the request. doesn't indicate success/failure
 
@@ -191,9 +190,8 @@ type CreateRequestParams struct {
 	User string                 // the user making the request
 }
 
-// FinishRequestParams represents the payload that is required to tell the RM
-// that a request has finished.
-type FinishRequestParams struct {
+// FinishRequest represents the payload to tell the RM that a request has finished.
+type FinishRequest struct {
 	State      byte      // the final state of the chain
 	FinishedAt time.Time // when the Job Runner finished the request
 }

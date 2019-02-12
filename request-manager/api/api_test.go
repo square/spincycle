@@ -231,9 +231,9 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
 	payload := []byte(fmt.Sprintf("{\"state\":%d}", proto.STATE_COMPLETE))
 	// Create a mock request manager that will record the finish params it receives.
-	var rmFinishParams proto.FinishRequestParams
+	var rmFinishParams proto.FinishRequest
 	rm := &mock.RequestManager{
-		FinishFunc: func(r string, f proto.FinishRequestParams) error {
+		FinishFunc: func(r string, f proto.FinishRequest) error {
 			rmFinishParams = f
 			return nil
 		},
@@ -253,7 +253,7 @@ func TestFinishRequestHandlerSuccess(t *testing.T) {
 	}
 
 	// Check that the finish params sent to the request manager are what we expect.
-	expectedFinishParams := proto.FinishRequestParams{
+	expectedFinishParams := proto.FinishRequest{
 		State: proto.STATE_COMPLETE,
 	}
 	if diff := deep.Equal(rmFinishParams, expectedFinishParams); diff != nil {
