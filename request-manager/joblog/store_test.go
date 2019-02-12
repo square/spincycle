@@ -3,10 +3,10 @@
 package joblog_test
 
 import (
+	"database/sql"
 	"sort"
 	"testing"
 
-	myconn "github.com/go-mysql/conn"
 	"github.com/go-test/deep"
 
 	"github.com/square/spincycle/proto"
@@ -17,7 +17,7 @@ import (
 )
 
 var dbm testdb.Manager
-var dbc myconn.Connector
+var dbc *sql.DB
 
 func setup(t *testing.T, dataFile string) string {
 	// Setup a db manager to handle databases for all tests.
@@ -39,9 +39,7 @@ func setup(t *testing.T, dataFile string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Create a real myconn.Pool using the db and sql.DB created above.
-	dbc = myconn.NewPool(db)
+	dbc = db
 
 	return dbName
 }
@@ -50,7 +48,7 @@ func teardown(t *testing.T, dbName string) {
 	if err := dbm.Destroy(dbName); err != nil {
 		t.Fatal(err)
 	}
-	dbc = nil
+	dbc.Close()
 }
 
 // //////////////////////////////////////////////////////////////////////////

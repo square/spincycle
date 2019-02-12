@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package joblog provides an interface for reading and writing job logs.
 package joblog
@@ -6,8 +6,6 @@ package joblog
 import (
 	"context"
 	"database/sql"
-
-	myconn "github.com/go-mysql/conn"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
@@ -27,10 +25,10 @@ type Store interface {
 
 // store implements the Store interface
 type store struct {
-	dbc myconn.Connector
+	dbc *sql.DB
 }
 
-func NewStore(dbc myconn.Connector) Store {
+func NewStore(dbc *sql.DB) Store {
 	return &store{
 		dbc: dbc,
 	}
@@ -38,17 +36,11 @@ func NewStore(dbc myconn.Connector) Store {
 
 func (s *store) Create(requestId string, jl proto.JobLog) (proto.JobLog, error) {
 	jl.RequestId = requestId
-
 	ctx := context.TODO()
-	conn, err := s.dbc.Open(ctx)
-	if err != nil {
-		return jl, err
-	}
-	defer s.dbc.Close(conn) // don't leak conn
 
 	q := "INSERT INTO job_log (request_id, job_id, name, try, sequence_try, sequence_id, type, started_at, finished_at, state, `exit`, " +
 		"error, stdout, stderr) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-	_, err = conn.ExecContext(ctx, q,
+	_, err := s.dbc.ExecContext(ctx, q,
 		&jl.RequestId,
 		&jl.JobId,
 		&jl.Name,
@@ -73,20 +65,14 @@ func (s *store) Create(requestId string, jl proto.JobLog) (proto.JobLog, error) 
 
 func (s *store) Get(requestId, jobId string) (proto.JobLog, error) {
 	var jl proto.JobLog
-
 	ctx := context.TODO()
-	conn, err := s.dbc.Open(ctx)
-	if err != nil {
-		return jl, err
-	}
-	defer s.dbc.Close(conn) // don't leak conn
 
 	var jErr, stdout, stderr sql.NullString // nullable columns
 	var exit sql.NullInt64
 
 	q := "SELECT request_id, job_id, name, type, state, started_at, finished_at, error, `exit`, stdout, stderr, try, " +
 		"sequence_try, sequence_id FROM job_log WHERE request_id = ? AND job_id = ? ORDER BY try DESC LIMIT 1"
-	err = conn.QueryRowContext(ctx, q, requestId, jobId).Scan(
+	err := s.dbc.QueryRowContext(ctx, q, requestId, jobId).Scan(
 		&jl.RequestId,
 		&jl.JobId,
 		&jl.Name,
@@ -126,18 +112,13 @@ func (s *store) Get(requestId, jobId string) (proto.JobLog, error) {
 
 func (s *store) GetFull(requestId string) ([]proto.JobLog, error) {
 	ctx := context.TODO()
-	conn, err := s.dbc.Open(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer s.dbc.Close(conn) // don't leak conn
 
 	var jErr, stdout, stderr sql.NullString // nullable columns
 	var exit sql.NullInt64
 
 	q := "SELECT job_id, name, try, type, state, started_at, finished_at, error, `exit`, stdout, stderr,  " +
 		"sequence_try, sequence_id FROM job_log WHERE request_id = ?"
-	rows, err := conn.QueryContext(ctx, q, requestId)
+	rows, err := s.dbc.QueryContext(ctx, q, requestId)
 	if err != nil {
 		return nil, err
 	}

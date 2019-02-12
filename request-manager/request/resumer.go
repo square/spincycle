@@ -1,4 +1,4 @@
-// Copyright 2018, Square, Inc.
+// Copyright 2018-2019, Square, Inc.
 
 package request
 
@@ -13,7 +13,6 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	myconn "github.com/go-mysql/conn"
 
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
@@ -77,7 +76,7 @@ type Resumer interface {
 // resumer implements the Resumer interface.
 type resumer struct {
 	rm           Manager
-	dbc          myconn.Connector
+	dbc          *sql.DB
 	jrc          jr.Client
 	defaultJRURL string
 	host         string // the host this request manager is currently running on
@@ -88,7 +87,7 @@ type resumer struct {
 
 type ResumerConfig struct {
 	RequestManager       Manager
-	DBConnector          myconn.Connector
+	DBConnector          *sql.DB
 	JRClient             jr.Client
 	DefaultJRURL         string
 	RMHost               string
@@ -126,13 +125,7 @@ func (r *resumer) Suspend(sjc proto.SuspendedJobChain) (err error) {
 
 	// Connect to database + start transaction.
 	ctx := context.TODO()
-	conn, err := r.dbc.Open(ctx)
-	if err != nil {
-		return err
-	}
-	defer r.dbc.Close(conn)
-
-	txn, err := conn.BeginTx(ctx, nil)
+	txn, err := r.dbc.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -168,18 +161,11 @@ func (r *resumer) Suspend(sjc proto.SuspendedJobChain) (err error) {
 // logged, not returned - we want the resumer to keep running even if there's a
 // one-time problem resuming requests.
 func (r *resumer) ResumeAll() {
-	// Connect to database
 	ctx := context.TODO()
-	conn, err := r.dbc.Open(ctx)
-	if err != nil {
-		log.Errorf("could not connect to database: %s", err)
-		return
-	}
-	defer r.dbc.Close(conn)
 
 	// Retrieve IDs for all (unclaimed) SJCs.
 	q := "SELECT request_id FROM suspended_job_chains WHERE rm_host IS NULL"
-	rows, err := conn.QueryContext(ctx, q)
+	rows, err := r.dbc.QueryContext(ctx, q)
 	if err != nil {
 		log.Errorf("error querying db for SJCs: %s", err)
 		return
@@ -215,7 +201,7 @@ func (r *resumer) ResumeAll() {
 		// Try to claim the SJC, to indicate that this RM instance is attempting to
 		// resume it. If we fail to claim the SJC, another RM must have already
 		// claimed it - continue to the next SJC.
-		claimed, err := r.claimSJC(id, conn)
+		claimed, err := r.claimSJC(id)
 		if err != nil {
 			log.Errorf("error claiming SJC %s: %s", id, err)
 			continue
@@ -228,7 +214,7 @@ func (r *resumer) ResumeAll() {
 		if err != nil {
 			log.Errorf("error resuming SJC %s: %s", id, err)
 			// We didn't resume the SJC, so unclaim it.
-			err := r.unclaimSJC(id, true, conn)
+			err := r.unclaimSJC(id, true)
 			if err != nil {
 				log.Errorf("error unclaiming SJC %s: %s", id, err)
 				continue
@@ -241,16 +227,11 @@ func (r *resumer) ResumeAll() {
 func (r *resumer) Resume(id string) error {
 	// Connect to database
 	ctx := context.TODO()
-	conn, err := r.dbc.Open(ctx)
-	if err != nil {
-		return fmt.Errorf("could not connect to database: %s", err)
-	}
-	defer r.dbc.Close(conn)
 
 	// Retrieve the request state.
 	var state byte
 	q := "SELECT state FROM requests WHERE request_id = ?"
-	err = conn.QueryRowContext(ctx, q, id).Scan(&state)
+	err := r.dbc.QueryRowContext(ctx, q, id).Scan(&state)
 	if err != nil {
 		return fmt.Errorf("error querying db for request state: %s", err)
 	}
@@ -263,7 +244,7 @@ func (r *resumer) Resume(id string) error {
 		// This state can happen if an SJC has already been resumed, but
 		// the RM failed on deleting it from the db.
 		log.Errorf("cannot resume SJC %s because request is not suspended (state = %s) - deleting SJC", id, proto.StateName[state])
-		if err := r.deleteSJC(id, conn); err != nil {
+		if err := r.deleteSJC(id); err != nil {
 			return fmt.Errorf("error deleting SJC: %s", err)
 		}
 		return nil // no error - SJC was resumed earlier
@@ -272,7 +253,7 @@ func (r *resumer) Resume(id string) error {
 	// Retrieve the actual Suspended Job Chain
 	var rawSJC []byte
 	q = "SELECT suspended_job_chain FROM suspended_job_chains WHERE request_id = ? AND rm_host = ?"
-	err = conn.QueryRowContext(ctx, q, id, r.host).Scan(&rawSJC)
+	err = r.dbc.QueryRowContext(ctx, q, id, r.host).Scan(&rawSJC)
 	if err != nil {
 		return fmt.Errorf("error querying db for request state: %s", err)
 	}
@@ -297,7 +278,7 @@ func (r *resumer) Resume(id string) error {
 		State:        proto.STATE_RUNNING,
 		JobRunnerURL: strings.TrimSuffix(chainURL.String(), chainURL.RequestURI()),
 	}
-	if err = r.updateRequest(req, proto.STATE_SUSPENDED, conn); err != nil {
+	if err = r.updateRequest(req, proto.STATE_SUSPENDED); err != nil {
 		return fmt.Errorf("error setting request state to STATE_RUNNING and saving job runner url: %s", err)
 	}
 
@@ -305,7 +286,7 @@ func (r *resumer) Resume(id string) error {
 	// do this within the same transaction as updating the request, because even if
 	// deleting the SJC fails, the job chain has already been sent to the JR and we
 	// want to update the request state to Running.
-	if err := r.deleteSJC(id, conn); err != nil {
+	if err := r.deleteSJC(id); err != nil {
 		return fmt.Errorf("error deleting SJC: %s", err)
 	}
 
@@ -323,12 +304,6 @@ func (r *resumer) Resume(id string) error {
 func (r *resumer) Cleanup() {
 	// Connect to database
 	ctx := context.TODO()
-	conn, err := r.dbc.Open(ctx)
-	if err != nil {
-		log.Errorf("could not connect to database: %s", err)
-		return
-	}
-	defer r.dbc.Close(conn)
 
 	// Clean up abandoned SJCS:
 
@@ -336,7 +311,7 @@ func (r *resumer) Cleanup() {
 	// last 5 minutes. The RM that claimed them probably encountered some problem
 	// (eg. it crashed), so we want to make sure they aren't claimed forever.
 	q := "SELECT request_id FROM suspended_job_chains WHERE rm_host IS NOT NULL AND updated_at < NOW() - INTERVAL 5 MINUTE"
-	rows, err := conn.QueryContext(ctx, q)
+	rows, err := r.dbc.QueryContext(ctx, q)
 	if err != nil {
 		log.Errorf("error querying db: %s", err)
 		return
@@ -359,7 +334,7 @@ func (r *resumer) Cleanup() {
 		reqLogger := log.WithFields(log.Fields{"request": reqId})
 
 		// Unclaim SJC so another RM can resume it.
-		err = r.unclaimSJC(reqId, false, conn)
+		err = r.unclaimSJC(reqId, false)
 		if err != nil {
 			reqLogger.Errorf("error unclaiming SJC: %s", err)
 		}
@@ -370,7 +345,7 @@ func (r *resumer) Cleanup() {
 	// Retrieve Request IDs of all unclaimed SJCs suspended more than 1 hour ago.
 	ttlSeconds := fmt.Sprintf("%.0f", r.sjcTTL.Round(time.Second).Seconds())
 	q = "SELECT request_id FROM suspended_job_chains WHERE rm_host IS NULL AND suspended_at < NOW() - INTERVAL ? SECOND"
-	rows, err = conn.QueryContext(ctx, q, ttlSeconds)
+	rows, err = r.dbc.QueryContext(ctx, q, ttlSeconds)
 	if err != nil {
 		log.Errorf("error querying db: %s", err)
 		return
@@ -395,7 +370,7 @@ func (r *resumer) Cleanup() {
 		reqLogger := log.WithFields(log.Fields{"request": req.Id})
 
 		// Claim the SJC so an RM doesn't try to resume it while we're deleting it.
-		claimed, err := r.claimSJC(req.Id, conn)
+		claimed, err := r.claimSJC(req.Id)
 		if err != nil {
 			reqLogger.Errorf("error claiming SJC: %s", err)
 			continue
@@ -411,10 +386,10 @@ func (r *resumer) Cleanup() {
 		// case - ignore this error.
 		req.State = proto.STATE_FAIL
 		req.JobRunnerURL = ""
-		err = r.updateRequest(req, proto.STATE_SUSPENDED, conn)
+		err = r.updateRequest(req, proto.STATE_SUSPENDED)
 		if err != nil && err != db.ErrNotUpdated {
 			reqLogger.Errorf("error changing request state from SUSPENDED to FAILED: %s", err)
-			if err := r.unclaimSJC(req.Id, true, conn); err != nil {
+			if err := r.unclaimSJC(req.Id, true); err != nil {
 				reqLogger.Errorf("error unclaiming SJC: %s", err)
 			}
 			continue
@@ -423,10 +398,10 @@ func (r *resumer) Cleanup() {
 
 		// Delete the old SJC. If this fails, the SJC will get deleted the next time
 		// an RM tries to resume it (since the request is now marked Failed).
-		err = r.deleteSJC(req.Id, conn)
+		err = r.deleteSJC(req.Id)
 		if err != nil {
 			reqLogger.Errorf("error deleting SJC: %s", err)
-			if err := r.unclaimSJC(req.Id, true, conn); err != nil {
+			if err := r.unclaimSJC(req.Id, true); err != nil {
 				reqLogger.Errorf("error unclaiming SJC: %s", err)
 			}
 			continue
@@ -438,9 +413,9 @@ func (r *resumer) Cleanup() {
 
 // Update the State and JR url of a request. This is a wrapper around
 // updateRequestWithTxn that creates a transaction for updating the request.
-func (r *resumer) updateRequest(request proto.Request, curState byte, conn *sql.Conn) error {
+func (r *resumer) updateRequest(request proto.Request, curState byte) error {
 	// Start a transaction.
-	txn, err := conn.BeginTx(context.TODO(), nil)
+	txn, err := r.dbc.BeginTx(context.TODO(), nil)
 	if err != nil {
 		return err
 	}
@@ -492,16 +467,9 @@ func (r *resumer) updateRequestWithTxn(request proto.Request, curState byte, txn
 
 // deleteSJC removes an SJC from the db. The RM needs to have claimed the
 // SJC in order to delete it.
-func (r *resumer) deleteSJC(requestId string, conn *sql.Conn) error {
-	// Start a transaction.
-	txn, err := conn.BeginTx(context.TODO(), nil)
-	if err != nil {
-		return err
-	}
-	defer txn.Rollback()
-
+func (r *resumer) deleteSJC(requestId string) error {
 	q := "DELETE FROM suspended_job_chains WHERE request_id = ? AND rm_host = ?"
-	result, err := txn.Exec(q, requestId, r.host)
+	result, err := r.dbc.Exec(q, requestId, r.host)
 	if err != nil {
 		return err
 	}
@@ -515,12 +483,12 @@ func (r *resumer) deleteSJC(requestId string, conn *sql.Conn) error {
 	case 0:
 		return fmt.Errorf("cannot find SJC to delete - may not be claimed by RM")
 	case 1: // Success
-		return txn.Commit()
 	default:
 		// This should be impossible since we specify the primary key (request id)
 		// in the WHERE clause of the update.
 		return db.ErrMultipleUpdated
 	}
+	return nil
 }
 
 // Claim that this RM will resume the SJC corresponding to the request id.
@@ -528,11 +496,11 @@ func (r *resumer) deleteSJC(requestId string, conn *sql.Conn) error {
 // returns false if failed to claim SJC (another RM is resuming the SJC).
 // claimSJC is used to make sure that only one RM is trying to resume a specific
 // SJC at any given time.
-func (r *resumer) claimSJC(requestId string, conn *sql.Conn) (bool, error) {
+func (r *resumer) claimSJC(requestId string) (bool, error) {
 	// Claim SJC by setting rm_host to the host of this RM. Only claim if not
 	// alread claimed (rm_host = NULL).
 	q := "UPDATE suspended_job_chains SET rm_host = ? WHERE request_id = ? AND rm_host IS NULL"
-	result, err := conn.ExecContext(context.TODO(), q, r.host, requestId)
+	result, err := r.dbc.ExecContext(context.TODO(), q, r.host, requestId)
 	if err != nil {
 		return false, err
 	}
@@ -561,21 +529,16 @@ func (r *resumer) claimSJC(requestId string, conn *sql.Conn) (bool, error) {
 // strict = true requires that this RM has a claim on the SJC, or unclaimSJC
 // will return an error. Strict should always be used except when cleaning up
 // abandoned SJCs.
-func (r *resumer) unclaimSJC(requestId string, strict bool, conn *sql.Conn) error {
+func (r *resumer) unclaimSJC(requestId string, strict bool) error {
 	// Unclaim SJC by setting rm_host back to NULL.
 	var result sql.Result
 	var err error
 	if strict { // require that this RM has the SJC claimed
 		q := "UPDATE suspended_job_chains SET rm_host = NULL WHERE request_id = ? AND rm_host = ?"
-		result, err = conn.ExecContext(context.TODO(), q,
-			requestId,
-			r.host,
-		)
+		result, err = r.dbc.ExecContext(context.TODO(), q, requestId, r.host)
 	} else {
 		q := "UPDATE suspended_job_chains SET rm_host = NULL WHERE request_id = ?"
-		result, err = conn.ExecContext(context.TODO(), q,
-			requestId,
-		)
+		result, err = r.dbc.ExecContext(context.TODO(), q, requestId)
 	}
 	if err != nil {
 		return err

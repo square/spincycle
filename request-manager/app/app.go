@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package app
 
@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"time"
 
-	myconn "github.com/go-mysql/conn"
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/square/spincycle/config"
@@ -57,7 +56,7 @@ type Context struct {
 type Factories struct {
 	MakeGrapher         func(Context) (grapher.GrapherFactory, error) // @fixme
 	MakeJobRunnerClient func(Context) (jr.Client, error)
-	MakeDbConnPool      func(Context) (myconn.Connector, error)
+	MakeDbConnPool      func(Context) (*sql.DB, error)
 }
 
 // Hooks allow users to modify system behavior at certain points. All hooks are
@@ -197,7 +196,7 @@ func MakeJobRunnerClient(ctx Context) (jr.Client, error) {
 }
 
 // MakeDbConnPool is the default MakeDbConnPool factory.
-func MakeDbConnPool(ctx Context) (myconn.Connector, error) {
+func MakeDbConnPool(ctx Context) (*sql.DB, error) {
 	dbcfg := ctx.Config.Db
 	dsn := dbcfg.DSN + "?parseTime=true" // always needs to be set
 	if dbcfg.TLS.CAFile != "" && dbcfg.TLS.CertFile != "" && dbcfg.TLS.KeyFile != "" {
@@ -215,6 +214,5 @@ func MakeDbConnPool(ctx Context) (myconn.Connector, error) {
 	db.SetMaxIdleConns(10)
 	db.SetMaxOpenConns(100)
 	db.SetConnMaxLifetime(12 * time.Hour)
-	dbc := myconn.NewPool(db)
-	return dbc, nil
+	return db, nil
 }

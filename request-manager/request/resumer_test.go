@@ -1,4 +1,4 @@
-// Copyright 2018, Square, Inc.
+// Copyright 2018-2019, Square, Inc.
 
 package request_test
 
@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	myconn "github.com/go-mysql/conn"
 	"github.com/go-test/deep"
 
 	"github.com/square/spincycle/proto"
@@ -44,9 +43,7 @@ func setupResumer(t *testing.T, dataFile string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Create a real myconn.Pool using the db and sql.DB created above.
-	dbc = myconn.NewPool(db)
+	dbc = db
 
 	// Create a shutdown channel - this is a package var from manager_test.go
 	shutdownChan = make(chan struct{})
@@ -67,7 +64,7 @@ func teardownResumer(t *testing.T, dbName string) {
 	if err := dbm.Destroy(dbName); err != nil {
 		t.Fatal(err)
 	}
-	dbc = nil
+	dbc.Close()
 }
 
 // //////////////////////////////////////////////////////////////////////////
@@ -115,11 +112,11 @@ func TestSuspend(t *testing.T) {
 
 	// Make sure SJC was saved in db.
 	ctx := context.TODO()
-	conn, err := dbc.Open(ctx)
+	conn, err := dbc.Conn(ctx)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	defer dbc.Close(conn)
+	defer conn.Close()
 
 	var actualSJC proto.SuspendedJobChain
 	var rawSJC []byte
@@ -167,11 +164,11 @@ func TestResume(t *testing.T) {
 	defer teardownResumer(t, dbName)
 
 	ctx := context.TODO()
-	conn, err := dbc.Open(ctx)
+	conn, err := dbc.Conn(ctx)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	defer dbc.Close(conn)
+	defer conn.Close()
 
 	var receivedSJC proto.SuspendedJobChain
 	jrc := &mock.JRClient{
@@ -371,11 +368,11 @@ func TestResumeAll(t *testing.T) {
 
 	// Check SJCs present in db.
 	ctx := context.TODO()
-	conn, err := dbc.Open(ctx)
+	conn, err := dbc.Conn(ctx)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	defer dbc.Close(conn)
+	defer conn.Close()
 
 	q := "SELECT request_id FROM suspended_job_chains"
 	rows, err := conn.QueryContext(ctx, q)
@@ -457,11 +454,11 @@ func TestCleanup(t *testing.T) {
 
 	// Check SJCs present in db.// Check SJCs present in db.
 	ctx := context.TODO()
-	conn, err := dbc.Open(ctx)
+	conn, err := dbc.Conn(ctx)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
-	defer dbc.Close(conn)
+	defer conn.Close()
 
 	q := "SELECT request_id, rm_host FROM suspended_job_chains"
 	rows, err := conn.QueryContext(ctx, q)

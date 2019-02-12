@@ -1,14 +1,14 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package request_test
 
 import (
+	"database/sql"
 	"fmt"
 	"net/url"
 	"sort"
 	"testing"
 
-	myconn "github.com/go-mysql/conn"
 	"github.com/go-test/deep"
 
 	"github.com/square/spincycle/job"
@@ -24,7 +24,7 @@ import (
 )
 
 var dbm testdb.Manager
-var dbc myconn.Connector
+var dbc *sql.DB
 var grf *grapher.MockGrapherFactory
 var dbSuffix string
 var shutdownChan chan struct{}
@@ -50,9 +50,7 @@ func setupManager(t *testing.T, dataFile string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Create a real myconn.Pool using the db and sql.DB created above.
-	dbc = myconn.NewPool(db)
+	dbc = db
 
 	// Create a mock grapher factory.
 	if grf == nil {
@@ -96,7 +94,7 @@ func teardownManager(t *testing.T, dbName string) {
 	if err := dbm.Destroy(dbName); err != nil {
 		t.Fatal(err)
 	}
-	dbc = nil
+	dbc.Close()
 }
 
 // //////////////////////////////////////////////////////////////////////////
