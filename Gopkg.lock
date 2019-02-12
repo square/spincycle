@@ -45,20 +45,12 @@
   version = "v3.1.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:643809e74302b8da6c90eda35e26d1e83e844b045e0e72af23797aad941cacd3"
-  name = "github.com/go-mysql/conn"
-  packages = ["."]
-  pruneopts = "NUT"
-  revision = "31b26259e48439f76b8869cacbcf1b5c2f0b7aad"
-
-[[projects]]
-  digest = "1:1c9db302f5e172d283a37560842163450a1ebfd478581afa4f7bf00882c93a39"
+  digest = "1:13e9a236e56e18fecb73f5b2f2eb7f60060a1a9bc27e5a7328ab22e275ecb63e"
   name = "github.com/go-sql-driver/mysql"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "a0583e0143b1624142adab07e0e97fe106d99561"
-  version = "v1.3"
+  revision = "72cd26f257d44c1114970e19afddcd812016007e"
+  version = "v1.4.1"
 
 [[projects]]
   digest = "1:3c04690dd1d3fad9a36c492c32863fad91bcf822fd95d5c4cae97be1e9abc361"
@@ -125,7 +117,7 @@
   name = "github.com/orcaman/concurrent-map"
   packages = ["."]
   pruneopts = "NUT"
-  revision = "d4c23bd0e01134806215ffe65ba3fd22ec6721f7"
+  revision = "7ed82d9cb71768a4e3656ee8837c7af568c75459"
 
 [[projects]]
   digest = "1:e4de8e3813eed2d19c0ca12a24410bff2428dd91a3a87ac08dda22324c58fbe7"
@@ -143,12 +135,12 @@
   revision = "b2ce2384e17bbe0c6d34077efa39dbab3e09123b"
 
 [[projects]]
-  branch = "master"
   digest = "1:af354641f23332b1a8d5d361d11b5a9171589e412a67d499633706c611acc064"
   name = "github.com/valyala/bytebufferpool"
   packages = ["."]
   pruneopts = "NUT"
   revision = "e746df99fe4a3986f4d4f79e13c1e0117ce9c2f7"
+  version = "v1.0.0"
 
 [[projects]]
   branch = "master"
@@ -182,6 +174,14 @@
   revision = "8f27ce8a604014414f8dfffc25cbcde83a3f2216"
 
 [[projects]]
+  digest = "1:c25289f43ac4a68d88b02245742347c94f1e108c534dda442188015ff80669b3"
+  name = "google.golang.org/appengine"
+  packages = ["cloudsql"]
+  pruneopts = "NUT"
+  revision = "e9657d882bb81064595ca3b56cbe2546bbabf7b1"
+  version = "v1.4.0"
+
+[[projects]]
   branch = "v2"
   digest = "1:13e704c08924325be00f96e47e7efe0bfddf0913cdfc237423c83f9b183ff590"
   name = "gopkg.in/yaml.v2"
@@ -196,7 +196,6 @@
     "github.com/Sirupsen/logrus",
     "github.com/alexflint/go-arg",
     "github.com/alicebob/miniredis",
-    "github.com/go-mysql/conn",
     "github.com/go-sql-driver/mysql",
     "github.com/go-test/deep",
     "github.com/gomodule/redigo/redis",

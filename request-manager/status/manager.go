@@ -1,13 +1,13 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package status provides system-wide status.
 package status
 
 import (
 	"context"
+	"database/sql"
 	"sort"
 
-	myconn "github.com/go-mysql/conn"
 	"github.com/go-sql-driver/mysql"
 
 	jr "github.com/square/spincycle/job-runner"
@@ -36,11 +36,11 @@ const (
 )
 
 type manager struct {
-	dbc myconn.Connector
+	dbc *sql.DB
 	jrc jr.Client
 }
 
-func NewManager(dbc myconn.Connector, jrClient jr.Client) Manager {
+func NewManager(dbc *sql.DB, jrClient jr.Client) Manager {
 	return &manager{
 		dbc: dbc,
 		jrc: jrClient,
@@ -49,17 +49,11 @@ func NewManager(dbc myconn.Connector, jrClient jr.Client) Manager {
 
 func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 	status := proto.RunningStatus{}
-
 	ctx := context.TODO()
-	conn, err := m.dbc.Open(ctx)
-	if err != nil {
-		return status, err
-	}
-	defer m.dbc.Close(conn) // don't leak conn
 
 	// Make a list of the URLs of all JR hosts currently running any requests.
 	q := "SELECT jr_url FROM requests WHERE state = ? AND jr_url IS NOT NULL"
-	rows, err := conn.QueryContext(ctx, q, proto.STATE_RUNNING)
+	rows, err := m.dbc.QueryContext(ctx, q, proto.STATE_RUNNING)
 	if err != nil {
 		return status, err
 	}
@@ -117,7 +111,7 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 
 	q = "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs" +
 		" FROM requests WHERE request_id IN (" + db.IN(ids) + ")"
-	rows2, err := conn.QueryContext(ctx, q)
+	rows2, err := m.dbc.QueryContext(ctx, q)
 	if err != nil {
 		return status, err
 	}
