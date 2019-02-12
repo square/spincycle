@@ -79,11 +79,11 @@ type JobChain struct {
 
 // Request represents something that a user asks Spin Cycle to do.
 type Request struct {
-	Id     string                 `json:"id"`         // unique identifier for the request
-	Type   string                 `json:"type"`       // the type of request
-	State  byte                   `json:"state"`      // STATE_* const
-	User   string                 `json:"user"`       // the user who made the request
-	Params map[string]interface{} `json:",omitempty"` // the jobArgs
+	Id    string                 `json:"id"`         // unique identifier for the request
+	Type  string                 `json:"type"`       // the type of request
+	State byte                   `json:"state"`      // STATE_* const
+	User  string                 `json:"user"`       // the user who made the request
+	Args  map[string]interface{} `json:",omitempty"` // the jobArgs
 
 	CreatedAt  time.Time  `json:"createdAt"`  // when the request was created
 	StartedAt  *time.Time `json:"startedAt"`  // when the request was sent to the job runner
@@ -182,9 +182,8 @@ type RunningStatus struct {
 	Requests map[string]Request `json:"requests,omitempty"` // keyed on RequestId
 }
 
-// CreateRequestParams represents the payload that is required to create a new
-// request in the RM.
-type CreateRequestParams struct {
+// CreateRequest represents the payload to create and start a new request.
+type CreateRequest struct {
 	Type string                 // the type of request being made
 	Args map[string]interface{} // the arguments for the request
 	User string                 // the user making the request

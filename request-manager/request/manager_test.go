@@ -113,7 +113,7 @@ func TestCreateMissingType(t *testing.T) {
 	m := request.NewManager(cfg)
 	defer close(shutdownChan)
 
-	_, err := m.Create(proto.CreateRequestParams{})
+	_, err := m.Create(proto.CreateRequest{})
 	if err != request.ErrInvalidParams {
 		t.Errorf("err = %s, expected %s", err, request.ErrInvalidParams)
 	}
@@ -133,7 +133,7 @@ func TestCreate(t *testing.T) {
 	m := request.NewManager(cfg)
 
 	// gr uses spec a-b-c.yaml which has reqest "three-nodes"
-	reqParams := proto.CreateRequestParams{
+	reqParams := proto.CreateRequest{
 		Type: "three-nodes",
 		User: "john",
 		Args: map[string]interface{}{
@@ -223,7 +223,7 @@ func TestCreate(t *testing.T) {
 		User:      reqParams.User,
 		JobChain:  nil,
 		TotalJobs: 5,
-		Params: map[string]interface{}{
+		Args: map[string]interface{}{
 			"foo":  "foo-value",
 			"bar":  "175",
 			"aArg": "aValue",

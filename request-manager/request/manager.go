@@ -14,18 +14,18 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	"github.com/rs/xid"
 
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
-	"github.com/square/spincycle/util"
 )
 
 // A Manager is used to create and manage requests.
 type Manager interface {
 	// Create creates a proto.Request and saves it to the db.
-	Create(proto.CreateRequestParams) (proto.Request, error)
+	Create(proto.CreateRequest) (proto.Request, error)
 
 	// Get retrieves the request corresponding to the provided id,
 	// without its job chain or parameters set.
@@ -90,18 +90,18 @@ func NewManager(config ManagerConfig) Manager {
 	}
 }
 
-func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, error) {
+func (m *manager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
 	var req proto.Request
 	if reqParams.Type == "" {
 		return req, ErrInvalidParams
 	}
 
-	reqIdBytes := util.XID()
+	reqIdBytes := xid.New()
 	reqId := reqIdBytes.String()
 	req = proto.Request{
 		Id:        reqId,
 		Type:      reqParams.Type,
-		CreatedAt: time.Now(),
+		CreatedAt: time.Now().UTC(),
 		State:     proto.STATE_PENDING,
 		User:      reqParams.User,
 	}
@@ -123,7 +123,7 @@ func (m *manager) Create(reqParams proto.CreateRequestParams) (proto.Request, er
 	// the auth pluign to let Authorize() do fine-grain auth for the request based
 	// on the args.
 	// @todo: should this be reqParams.Args? i.e. initial args or final post-processing args?
-	req.Params = args
+	req.Args = args
 
 	jc := &proto.JobChain{
 		Jobs:          map[string]proto.Job{},
@@ -252,8 +252,6 @@ func (m *manager) Start(requestId string) error {
 		return err
 	}
 
-	now := time.Now()
-
 	// Only start the request if it's currently Pending.
 	if req.State != proto.STATE_PENDING {
 		return NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[req.State])
@@ -266,6 +264,7 @@ func (m *manager) Start(requestId string) error {
 		return err
 	}
 
+	now := time.Now().UTC()
 	req.StartedAt = &now
 	req.State = proto.STATE_RUNNING
 
@@ -536,7 +535,7 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 	ctx := context.TODO()
 
 	var jc proto.JobChain
-	var params proto.CreateRequestParams
+	var params proto.CreateRequest
 	var rawJc []byte     // raw job chains are stored as blobs in the db.
 	var rawParams []byte // raw params are stored as blobs in the db.
 	q := "SELECT job_chain, request FROM raw_requests WHERE request_id = ?"
@@ -557,7 +556,7 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 	}
 
 	req.JobChain = &jc
-	req.Params = params.Args
+	req.Args = params.Args
 	return req, nil
 }
 

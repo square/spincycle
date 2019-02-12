@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package api_test
 
@@ -82,9 +82,9 @@ func TestNewRequestHandlerRMError(t *testing.T) {
 	payload := `{"type":"something","args":{"first":"arg1"},"user":"mike"}`
 	// Create a mock request manager that will return an error and record the
 	// request params it receives.
-	var rmReqParams proto.CreateRequestParams
+	var rmReqParams proto.CreateRequest
 	rm := &mock.RequestManager{
-		CreateFunc: func(reqParams proto.CreateRequestParams) (proto.Request, error) {
+		CreateFunc: func(reqParams proto.CreateRequest) (proto.Request, error) {
 			rmReqParams = reqParams
 			return proto.Request{}, mock.ErrRequestManager
 		},
@@ -104,7 +104,7 @@ func TestNewRequestHandlerRMError(t *testing.T) {
 	}
 
 	// Check the request params sent to the request manager.
-	expectedReqParams := proto.CreateRequestParams{
+	expectedReqParams := proto.CreateRequest{
 		Type: "something",
 		Args: map[string]interface{}{
 			"first": "arg1",
@@ -125,9 +125,9 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 	}
 	// Create a mock request manager that will return a request and record the
 	// request params it receives.
-	var rmReqParams proto.CreateRequestParams
+	var rmReqParams proto.CreateRequest
 	rm := &mock.RequestManager{
-		CreateFunc: func(reqParams proto.CreateRequestParams) (proto.Request, error) {
+		CreateFunc: func(reqParams proto.CreateRequest) (proto.Request, error) {
 			rmReqParams = reqParams
 			return req, nil
 		},
@@ -164,7 +164,7 @@ func TestNewRequestHandlerSuccess(t *testing.T) {
 	}
 
 	// Check the request params sent to the request manager.
-	expectedReqParams := proto.CreateRequestParams{
+	expectedReqParams := proto.CreateRequest{
 		Type: "something",
 		Args: map[string]interface{}{
 			"first":  "arg1",
@@ -685,7 +685,7 @@ func TestAuth(t *testing.T) {
 		State: proto.STATE_PENDING,
 	}
 	ctx.RM = &mock.RequestManager{
-		CreateFunc: func(proto.CreateRequestParams) (proto.Request, error) {
+		CreateFunc: func(proto.CreateRequest) (proto.Request, error) {
 			createCalled = true
 			return req, nil
 		},

@@ -23,7 +23,6 @@ import (
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
-	"github.com/square/spincycle/util"
 )
 
 // Context represents the config, core service singletons, and 3rd-party extensions.
@@ -183,7 +182,7 @@ func MakeJobRunnerClient(ctx Context) (jr.Client, error) {
 	httpClient := &http.Client{}
 	jrcfg := ctx.Config.JRClient
 	if jrcfg.TLS.CertFile != "" && jrcfg.TLS.KeyFile != "" && jrcfg.TLS.CAFile != "" {
-		tlsConfig, err := util.NewTLSConfig(jrcfg.TLS.CAFile, jrcfg.TLS.CertFile, jrcfg.TLS.KeyFile)
+		tlsConfig, err := config.NewTLSConfig(jrcfg.TLS.CAFile, jrcfg.TLS.CertFile, jrcfg.TLS.KeyFile)
 		if err != nil {
 			return nil, fmt.Errorf("error loading JR client TLS config: %s", err)
 		}
@@ -200,7 +199,7 @@ func MakeDbConnPool(ctx Context) (*sql.DB, error) {
 	dbcfg := ctx.Config.Db
 	dsn := dbcfg.DSN + "?parseTime=true" // always needs to be set
 	if dbcfg.TLS.CAFile != "" && dbcfg.TLS.CertFile != "" && dbcfg.TLS.KeyFile != "" {
-		tlsConfig, err := util.NewTLSConfig(dbcfg.TLS.CAFile, dbcfg.TLS.CertFile, dbcfg.TLS.KeyFile)
+		tlsConfig, err := config.NewTLSConfig(dbcfg.TLS.CAFile, dbcfg.TLS.CertFile, dbcfg.TLS.KeyFile)
 		if err != nil {
 			log.Fatalf("error loading database TLS config: %s", err)
 		}

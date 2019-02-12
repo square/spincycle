@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package api provides controllers for each api endpoint. Controllers are
 // "dumb wiring"; there is little to no application logic in this package.
@@ -160,8 +160,8 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// ----------------------------------------------------------------------
 	// Make and validate request
 
-	// Convert the payload into a proto.CreateRequestParams.
-	var reqParams proto.CreateRequestParams
+	// Convert the payload into a proto.CreateRequest.
+	var reqParams proto.CreateRequest
 	if err := c.Bind(&reqParams); err != nil {
 		return err
 	}

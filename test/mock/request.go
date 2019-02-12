@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package mock
 
@@ -16,7 +16,7 @@ var (
 )
 
 type RequestManager struct {
-	CreateFunc                func(proto.CreateRequestParams) (proto.Request, error)
+	CreateFunc                func(proto.CreateRequest) (proto.Request, error)
 	GetFunc                   func(string) (proto.Request, error)
 	GetWithJCFunc             func(string) (proto.Request, error)
 	StartFunc                 func(string) error
@@ -28,7 +28,7 @@ type RequestManager struct {
 	JobChainFunc              func(string) (proto.JobChain, error)
 }
 
-func (r *RequestManager) Create(reqParams proto.CreateRequestParams) (proto.Request, error) {
+func (r *RequestManager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
 	if r.CreateFunc != nil {
 		return r.CreateFunc(reqParams)
 	}

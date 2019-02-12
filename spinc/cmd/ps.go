@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package cmd
 
 import (
@@ -77,9 +79,9 @@ func (c *Ps) Run() error {
 						return err
 					}
 
-					argNames = make([]string, len(request.Params))
+					argNames = make([]string, len(request.Args))
 					i := 0
-					for k, v := range request.Params {
+					for k, v := range request.Args {
 						args[k] = v
 						argNames[i] = k
 						i++

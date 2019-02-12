@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package cmd_test
 
 import (
@@ -40,8 +42,8 @@ func TestPs(t *testing.T) {
 	args := make(map[string]interface{})
 	args["key"] = "value"
 	request := proto.Request{
-		Id:     "b9uvdi8tk9kahl8ppvbg",
-		Params: args,
+		Id:   "b9uvdi8tk9kahl8ppvbg",
+		Args: args,
 	}
 	rmc := &mock.RMClient{
 		SysStatRunningFunc: func() (proto.RunningStatus, error) {
@@ -102,8 +104,8 @@ func TestPsVerbose(t *testing.T) {
 	args := make(map[string]interface{})
 	args["key"] = "value"
 	request := proto.Request{
-		Id:     "b9uvdi8tk9kahl8ppvbg",
-		Params: args,
+		Id:   "b9uvdi8tk9kahl8ppvbg",
+		Args: args,
 	}
 	rmc := &mock.RMClient{
 		SysStatRunningFunc: func() (proto.RunningStatus, error) {

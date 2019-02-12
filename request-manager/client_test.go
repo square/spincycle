@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package rm_test
 
 import (
@@ -79,7 +81,7 @@ func TestCreateRequestSuccess(t *testing.T) {
 	reqType := "something"
 	args := map[string]interface{}{"arg1": "val1"}
 	reqId := "abcd1234"
-	var payload proto.CreateRequestParams
+	var payload proto.CreateRequest
 
 	setup(t, &payload, http.StatusCreated, "{\"id\":\""+reqId+"\"}")
 	defer cleanup()
@@ -90,7 +92,7 @@ func TestCreateRequestSuccess(t *testing.T) {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
-	expectedPayload := proto.CreateRequestParams{
+	expectedPayload := proto.CreateRequest{
 		Type: reqType,
 		Args: args,
 	}
