@@ -24,7 +24,8 @@ import (
 
 // A Manager is used to create and manage requests.
 type Manager interface {
-	// Create creates a proto.Request and saves it to the db.
+	// Create creates a request and saves it to the db. The request is not
+	// started; its state is pending until Start is called.
 	Create(proto.CreateRequest) (proto.Request, error)
 
 	// Get retrieves the request corresponding to the provided id,
@@ -106,7 +107,9 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 		User:      newReq.User, // Caller.Name if not set by SetUsername
 	}
 
-	// Verify request args
+	// ----------------------------------------------------------------------
+	// Verify and finalize request args. The final request args are given
+	// (from caller) + optional + static.
 	gr := m.grf.Make(req)
 	reqArgs, err := gr.RequestArgs(req.Type, newReq.Args)
 	if err != nil {
@@ -115,20 +118,18 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	req.Args = reqArgs
 
 	// Copy requests args -> initial job args. We save the former as a record
-	// of what the caller explicitly provided when creating the request. CreateGraph
-	// modifies the latter (job args), e.g. setting default and static values.
-	//
-	// The request args are saved in raw_reqests, and the finalized job args are
-	// saved with the Request in requests. This is important because we return
-	// the Request and API.createRequestHandler passes it to auth.Authorize which
-	// expects finalized job args in order to do fine-grain auth.
+	// (request_archives.args) of every request arg that the request was started
+	// with. CreateGraph modifies and greatly expands the latter (job args).
+	// Final job args are saved with each job because the same job arg can have
+	// different values for different jobs (especially true for each: expansions).
 	jobArgs := map[string]interface{}{}
 	for k, v := range newReq.Args {
 		jobArgs[k] = v
 	}
 
-	// Create graph from request specs and jobs args. Then translate the generic
-	// graph into a job chain and save it with the Request.
+	// ----------------------------------------------------------------------
+	// Create graph from request specs and jobs args. Then translate the
+	// generic graph into a job chain and save it with the request.
 	newGraph, err := gr.CreateGraph(req.Type, jobArgs)
 	if err != nil {
 		return req, err
@@ -161,8 +162,10 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	req.JobChain = jc
 	req.TotalJobs = len(jc.Jobs)
 
-	// Begin a transaction to insert the request into the requests table, as
-	// well as the jc and raw request params into the request_archives table.
+	// ----------------------------------------------------------------------
+	// Save everything in a transaction. request_archive is immutable data,
+	// i.e. these never change now that request is fully created. requests is
+	// highly mutable, especially requests.state and requests.finished_jobs.
 	ctx := context.TODO()
 	txn, err := m.dbc.BeginTx(ctx, nil)
 	if err != nil {
@@ -170,7 +173,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	}
 	defer txn.Rollback()
 
-	// Marshal the job chain and request params.
+	// Save to request_archives
 	jcBytes, err := json.Marshal(req.JobChain)
 	if err != nil {
 		return req, fmt.Errorf("cannot marshal job chain: %s", err)
@@ -183,7 +186,6 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	if err != nil {
 		return req, fmt.Errorf("cannot marshal request args: %s", err)
 	}
-
 	q := "INSERT INTO request_archives (request_id, create_request, args, job_chain) VALUES (?, ?, ?, ?)"
 	_, err = txn.ExecContext(ctx, q,
 		reqIdBytes,
@@ -195,6 +197,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 		return req, fmt.Errorf("INSERT request_archives: %s", err)
 	}
 
+	// Save to requests
 	q = "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
 	_, err = txn.ExecContext(ctx, q,
 		reqIdBytes,
@@ -247,7 +250,7 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
-			return req, db.NewErrNotFound("request")
+			return req, db.NewErrNotFound("requests: request_id=" + requestId)
 		default:
 			return req, fmt.Errorf("SELECT requests: %s", err)
 		}
@@ -542,7 +545,7 @@ func (m *manager) JobChain(requestId string) (proto.JobChain, error) {
 	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes); err != nil {
 		switch err {
 		case sql.ErrNoRows:
-			return jc, db.NewErrNotFound("job chain")
+			return jc, db.NewErrNotFound("request_archives: request_id=" + requestId)
 		default:
 			return jc, err
 		}
@@ -570,7 +573,7 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes); err != nil {
 		switch err {
 		case sql.ErrNoRows:
-			return req, db.NewErrNotFound("raw_request")
+			return req, db.NewErrNotFound("request_archives: request_id=" + requestId)
 		default:
 			return req, err
 		}
