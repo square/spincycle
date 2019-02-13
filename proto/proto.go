@@ -1,11 +1,55 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
-// Package proto provides all API and service-to-service (s2s) message
-// structures and constants.
+// Package proto provide API message structures and constants.
 package proto
 
 import (
 	"time"
+)
+
+const (
+	STATE_UNKNOWN byte = iota
+
+	// Normal states, in order
+	STATE_PENDING  // not started
+	STATE_RUNNING  // running
+	STATE_COMPLETE // completed successfully
+
+	// Error states, no order
+	STATE_FAIL    // failed due to error or non-zero exit
+	STATE_TIMEOUT // timeout
+	STATE_STOPPED // stopped by user
+
+	// A request or chain can be suspended and then resumed at a later time.
+	// Jobs aren't suspended - they're stopped when a chain is suspended.
+	STATE_SUSPENDED
+)
+
+var StateName = map[byte]string{
+	STATE_UNKNOWN:   "UNKNOWN",
+	STATE_PENDING:   "PENDING",
+	STATE_RUNNING:   "RUNNING",
+	STATE_COMPLETE:  "COMPLETE",
+	STATE_FAIL:      "FAIL",
+	STATE_TIMEOUT:   "TIMEOUT",
+	STATE_STOPPED:   "STOPPED",
+	STATE_SUSPENDED: "SUSPENDED",
+}
+
+var StateValue = map[string]byte{
+	"UNKNOWN":   STATE_UNKNOWN,
+	"PENDING":   STATE_PENDING,
+	"RUNNING":   STATE_RUNNING,
+	"COMPLETE":  STATE_COMPLETE,
+	"FAIL":      STATE_FAIL,
+	"TIMEOUT":   STATE_TIMEOUT,
+	"STOPPED":   STATE_STOPPED,
+	"SUSPENDED": STATE_SUSPENDED,
+}
+
+const (
+	REQUEST_OP_START = "start"
+	REQUEST_OP_STOP  = "stop"
 )
 
 // Job represents one job in a job chain. Jobs are identified by Id, which
@@ -14,10 +58,10 @@ type Job struct {
 	Id            string                 `json:"id"`              // unique id
 	Name          string                 `json:"name"`            // name of the job
 	Type          string                 `json:"type"`            // user-specific job type
-	Bytes         []byte                 `json:"bytes"`           // return value of Job.Serialize method
+	Bytes         []byte                 `json:"bytes,omitempty"` // return value of Job.Serialize method
 	State         byte                   `json:"state"`           // STATE_* const
-	Args          map[string]interface{} `json:"args"`            // the jobArgs a job was created with
-	Data          map[string]interface{} `json:"data"`            // job-specific data during Job.Run
+	Args          map[string]interface{} `json:"args,omitempty"`  // the jobArgs a job was created with
+	Data          map[string]interface{} `json:"data,omitempty"`  // job-specific data during Job.Run
 	Retry         uint                   `json:"retry"`           // retry N times if first run fails
 	RetryWait     uint                   `json:"retryWait"`       // wait time (milliseconds) between retries
 	SequenceId    string                 `json:"sequenceStartId"` // ID for first job in sequence
@@ -35,18 +79,17 @@ type JobChain struct {
 
 // Request represents something that a user asks Spin Cycle to do.
 type Request struct {
-	Id     string                 `json:"id"`         // unique identifier for the request
-	Type   string                 `json:"type"`       // the type of request
-	State  byte                   `json:"state"`      // STATE_* const
-	User   string                 `json:"user"`       // the user who made the request
-	Params map[string]interface{} `json:",omitempty"` // the jobArgs
+	Id    string       `json:"id"`             // unique identifier for the request
+	Type  string       `json:"type"`           // the type of request
+	State byte         `json:"state"`          // STATE_* const
+	User  string       `json:"user"`           // the user who made the request
+	Args  []RequestArg `json:"args,omitempty"` // final request args (request_archives.args)
 
-	CreatedAt time.Time `json:"createdAt"` // when the request was created
-	// These are pointers so that they can have nil values.
+	CreatedAt  time.Time  `json:"createdAt"`  // when the request was created
 	StartedAt  *time.Time `json:"startedAt"`  // when the request was sent to the job runner
 	FinishedAt *time.Time `json:"finishedAt"` // when the job runner finished the request. doesn't indicate success/failure
 
-	JobChain     *JobChain `json:",omitempty"`   // the job chain
+	JobChain     *JobChain `json:",omitempty"`   // job chain (request_archives.job_chain)
 	TotalJobs    int       `json:"totalJobs"`    // the number of jobs in the request's job chain
 	FinishedJobs int       `json:"finishedJobs"` // the number of finished jobs in the request
 
@@ -80,13 +123,22 @@ type RequestSpec struct {
 	Args []RequestArg
 }
 
-// RequestArg represents one request arg.
+// RequestArg represents an request argument and its metadata.
 type RequestArg struct {
-	Name     string
-	Desc     string
-	Required bool
-	Default  string
+	Pos     int // position in request spec relative to required:, optional:, or static: stanza
+	Name    string
+	Desc    string
+	Type    string      // required, optional, static
+	Given   bool        // true if Required or Optional and value given
+	Default interface{} // default value if Optional or Static
+	Value   interface{} // final value
 }
+
+const (
+	ARG_TYPE_REQUIRED = "required"
+	ARG_TYPE_OPTIONAL = "optional"
+	ARG_TYPE_STATIC   = "static"
+)
 
 // JobLog represents a log entry for a finished job.
 type JobLog struct {
@@ -139,17 +191,15 @@ type RunningStatus struct {
 	Requests map[string]Request `json:"requests,omitempty"` // keyed on RequestId
 }
 
-// CreateRequestParams represents the payload that is required to create a new
-// request in the RM.
-type CreateRequestParams struct {
+// CreateRequest represents the payload to create and start a new request.
+type CreateRequest struct {
 	Type string                 // the type of request being made
 	Args map[string]interface{} // the arguments for the request
 	User string                 // the user making the request
 }
 
-// FinishRequestParams represents the payload that is required to tell the RM
-// that a request has finished.
-type FinishRequestParams struct {
+// FinishRequest represents the payload to tell the RM that a request has finished.
+type FinishRequest struct {
 	State      byte      // the final state of the chain
 	FinishedAt time.Time // when the Job Runner finished the request
 }

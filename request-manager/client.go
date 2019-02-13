@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package rm provides an HTTP client for interacting with the Request Manager (RM) API.
 package rm
@@ -79,7 +79,7 @@ func (c *client) CreateRequest(reqType string, args map[string]interface{}) (str
 	url := c.baseUrl + "/api/v1/requests"
 
 	// Create the payload struct.
-	reqParams := &proto.CreateRequestParams{
+	reqParams := &proto.CreateRequest{
 		Type: reqType,
 		Args: args,
 	}
@@ -113,7 +113,7 @@ func (c *client) FinishRequest(requestId string, state byte, finishedAt time.Tim
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/finish"
 
 	// Create the payload struct.
-	finishParams := proto.FinishRequestParams{
+	finishParams := proto.FinishRequest{
 		State:      state,
 		FinishedAt: finishedAt,
 	}

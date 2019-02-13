@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package mock
 
@@ -16,19 +16,19 @@ var (
 )
 
 type RequestManager struct {
-	CreateFunc                func(proto.CreateRequestParams) (proto.Request, error)
+	CreateFunc                func(proto.CreateRequest) (proto.Request, error)
 	GetFunc                   func(string) (proto.Request, error)
 	GetWithJCFunc             func(string) (proto.Request, error)
 	StartFunc                 func(string) error
 	StopFunc                  func(string) error
-	FinishFunc                func(string, proto.FinishRequestParams) error
+	FinishFunc                func(string, proto.FinishRequest) error
 	StatusFunc                func(string) (proto.RequestStatus, error)
 	IncrementFinishedJobsFunc func(string) error
 	SpecsFunc                 func() []proto.RequestSpec
 	JobChainFunc              func(string) (proto.JobChain, error)
 }
 
-func (r *RequestManager) Create(reqParams proto.CreateRequestParams) (proto.Request, error) {
+func (r *RequestManager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
 	if r.CreateFunc != nil {
 		return r.CreateFunc(reqParams)
 	}
@@ -56,7 +56,7 @@ func (r *RequestManager) Start(reqId string) error {
 	return nil
 }
 
-func (r *RequestManager) Finish(reqId string, finishParams proto.FinishRequestParams) error {
+func (r *RequestManager) Finish(reqId string, finishParams proto.FinishRequest) error {
 	if r.FinishFunc != nil {
 		return r.FinishFunc(reqId, finishParams)
 	}

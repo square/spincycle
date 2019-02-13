@@ -193,6 +193,9 @@ func TestGetAll(t *testing.T) {
 				State:         proto.STATE_PENDING,
 				SequenceId:    "job1",
 				SequenceRetry: 0,
+				Data: map[string]interface{}{
+					"a": "b",
+				},
 			},
 		},
 	}
@@ -211,6 +214,9 @@ func TestGetAll(t *testing.T) {
 				State:         proto.STATE_RUNNING,
 				SequenceId:    "jobA",
 				SequenceRetry: 0,
+				Data: map[string]interface{}{
+					"foo": "bar",
+				},
 			},
 		},
 	}

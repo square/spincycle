@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package cmd_test
 
 import (
@@ -13,6 +15,24 @@ import (
 	"github.com/square/spincycle/spinc/config"
 	"github.com/square/spincycle/test/mock"
 )
+
+var args []proto.RequestArg = []proto.RequestArg{
+	{
+		Name:  "key",
+		Type:  proto.ARG_TYPE_REQUIRED,
+		Value: "value",
+	},
+	{
+		Name:  "key2",
+		Type:  proto.ARG_TYPE_REQUIRED,
+		Value: "val2",
+	},
+	{
+		Name:  "opt",
+		Type:  proto.ARG_TYPE_OPTIONAL,
+		Value: "not-shown",
+	},
+}
 
 func TestPs(t *testing.T) {
 	output := &bytes.Buffer{}
@@ -37,11 +57,9 @@ func TestPs(t *testing.T) {
 			},
 		},
 	}
-	args := make(map[string]interface{})
-	args["key"] = "value"
 	request := proto.Request{
-		Id:     "b9uvdi8tk9kahl8ppvbg",
-		Params: args,
+		Id:   "b9uvdi8tk9kahl8ppvbg",
+		Args: args,
 	}
 	rmc := &mock.RMClient{
 		SysStatRunningFunc: func() (proto.RunningStatus, error) {
@@ -73,6 +91,7 @@ b9uvdi8tk9kahl8ppvbg	   1	    9	   3.0	owner	jobname
 
 	if output.String() != expectOutput {
 		fmt.Printf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)
+		t.Error("wrong output, see above")
 	}
 }
 
@@ -99,11 +118,9 @@ func TestPsVerbose(t *testing.T) {
 			},
 		},
 	}
-	args := make(map[string]interface{})
-	args["key"] = "value"
 	request := proto.Request{
-		Id:     "b9uvdi8tk9kahl8ppvbg",
-		Params: args,
+		Id:   "b9uvdi8tk9kahl8ppvbg",
+		Args: args,
 	}
 	rmc := &mock.RMClient{
 		SysStatRunningFunc: func() (proto.RunningStatus, error) {
@@ -129,11 +146,13 @@ func TestPsVerbose(t *testing.T) {
 		t.Errorf("got err '%s', exepcted nil", err)
 	}
 
-	// There's a trailing space after "value "
+	// There's a trailing space after "val2 ". Only required args in list order
+	// because that matches spec order.
 	expectOutput := `ID                  	   N	NJOBS	  TIME	OWNER	JOB	REQUEST
-b9uvdi8tk9kahl8ppvbg	   1	    9	   3.0	owner	jobname	requestname  key=value 
+b9uvdi8tk9kahl8ppvbg	   1	    9	   3.0	owner	jobname	requestname  key=value key2=val2 
 `
 	if output.String() != expectOutput {
 		fmt.Printf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)
+		t.Error("wrong output, see above")
 	}
 }

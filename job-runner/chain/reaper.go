@@ -1,4 +1,4 @@
-// Copyright 2018, Square, Inc.
+// Copyright 2018-2019, Square, Inc.
 
 package chain
 
@@ -268,7 +268,7 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 // Finalize determines the final state of the chain and sends it to the Request
 // Manager.
 func (r *RunningChainReaper) Finalize(complete bool) {
-	finishedAt := time.Now()
+	finishedAt := time.Now().UTC()
 	if complete {
 		r.logger.Infof("chain is done, all jobs finished successfully")
 		r.chain.SetState(proto.STATE_COMPLETE)
@@ -393,7 +393,7 @@ func (r *SuspendedChainReaper) Reap(job proto.Job) {
 // either sends the Request Manager the chain's final state or a SuspendedJobChain
 // that can be used to resume running the chain.
 func (r *SuspendedChainReaper) Finalize() {
-	finishedAt := time.Now()
+	finishedAt := time.Now().UTC()
 
 	// Mark any jobs that didn't respond to Stop in time as Failed
 	for _, jobStatus := range r.chain.Running() {
@@ -521,7 +521,7 @@ func (r *StoppedChainReaper) Reap(job proto.Job) {
 // Finalize determines the final state of the chain and sends it to the Request
 // Manager.
 func (r *StoppedChainReaper) Finalize() {
-	finishedAt := time.Now()
+	finishedAt := time.Now().UTC()
 
 	// Mark any jobs that didn't respond to Stop in time as Failed
 	for _, jobStatus := range r.chain.Running() {

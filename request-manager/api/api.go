@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package api provides controllers for each api endpoint. Controllers are
 // "dumb wiring"; there is little to no application logic in this package.
@@ -160,8 +160,8 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// ----------------------------------------------------------------------
 	// Make and validate request
 
-	// Convert the payload into a proto.CreateRequestParams.
-	var reqParams proto.CreateRequestParams
+	// Convert the payload into a proto.CreateRequest.
+	var reqParams proto.CreateRequest
 	if err := c.Bind(&reqParams); err != nil {
 		return err
 	}
@@ -248,8 +248,8 @@ func (api *API) startRequestHandler(c echo.Context) error {
 func (api *API) finishRequestHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 
-	// Convert the payload into a proto.FinishRequestParams.
-	var finishParams proto.FinishRequestParams
+	// Convert the payload into a proto.FinishRequest.
+	var finishParams proto.FinishRequest
 	if err := c.Bind(&finishParams); err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (api *API) stopRequestHandler(c echo.Context) error {
 // Suspend a request and save its suspended job chain. The Job Runner hits this
 // endpoint when suspending a job chain on shutdown.
 func (api *API) suspendRequestHandler(c echo.Context) error {
-	// Convert the payload into a proto.FinishRequestParams.
+	// Convert the payload into a proto.SuspendedJobChain
 	var sjc proto.SuspendedJobChain
 	if err := c.Bind(&sjc); err != nil {
 		return err

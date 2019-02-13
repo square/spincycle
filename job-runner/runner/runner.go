@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package runner implements running a job.
 package runner
@@ -95,7 +95,7 @@ func (r *runner) Run(jobData map[string]interface{}) Return {
 	// the run fails.
 	var finalState byte = proto.STATE_PENDING
 
-	r.startTime = time.Now()
+	r.startTime = time.Now().UTC()
 
 	tryNo := uint(1)
 TRY_LOOP:

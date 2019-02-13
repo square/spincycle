@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package app
 
@@ -12,7 +12,6 @@ import (
 	"github.com/square/spincycle/config"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/request-manager"
-	"github.com/square/spincycle/util"
 )
 
 type Context struct {
@@ -115,7 +114,7 @@ func MakeRequestManagerClient(appCtx Context) (rm.Client, error) {
 	cfg := appCtx.Config
 	httpClient := &http.Client{}
 	if cfg.RMClient.TLS.CertFile != "" && cfg.RMClient.TLS.KeyFile != "" && cfg.RMClient.TLS.CAFile != "" {
-		tlsConfig, err := util.NewTLSConfig(
+		tlsConfig, err := config.NewTLSConfig(
 			cfg.RMClient.TLS.CAFile,
 			cfg.RMClient.TLS.CertFile,
 			cfg.RMClient.TLS.KeyFile,

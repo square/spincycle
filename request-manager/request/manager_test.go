@@ -113,7 +113,7 @@ func TestCreateMissingType(t *testing.T) {
 	m := request.NewManager(cfg)
 	defer close(shutdownChan)
 
-	_, err := m.Create(proto.CreateRequestParams{})
+	_, err := m.Create(proto.CreateRequest{})
 	if err != request.ErrInvalidParams {
 		t.Errorf("err = %s, expected %s", err, request.ErrInvalidParams)
 	}
@@ -133,7 +133,7 @@ func TestCreate(t *testing.T) {
 	m := request.NewManager(cfg)
 
 	// gr uses spec a-b-c.yaml which has reqest "three-nodes"
-	reqParams := proto.CreateRequestParams{
+	reqParams := proto.CreateRequest{
 		Type: "three-nodes",
 		User: "john",
 		Args: map[string]interface{}{
@@ -223,10 +223,21 @@ func TestCreate(t *testing.T) {
 		User:      reqParams.User,
 		JobChain:  nil,
 		TotalJobs: 5,
-		Params: map[string]interface{}{
-			"foo":  "foo-value",
-			"bar":  "175",
-			"aArg": "aValue",
+		Args: []proto.RequestArg{
+			{
+				Name:  "foo",
+				Type:  proto.ARG_TYPE_REQUIRED,
+				Value: "foo-value",
+				Given: true,
+			},
+			{
+				Name:    "bar",
+				Type:    proto.ARG_TYPE_OPTIONAL,
+				Default: "175",
+				Value:   "175",
+				Given:   false,
+			},
+			//"aArg": "aValue", // job arg, not request arg
 		},
 	}
 	if diff := deep.Equal(actualReq, expectedReq); diff != nil {
@@ -492,7 +503,7 @@ func TestFinishNotRunning(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
-	params := proto.FinishRequestParams{
+	params := proto.FinishRequest{
 		State: proto.STATE_COMPLETE,
 	}
 	cfg := request.ManagerConfig{
@@ -516,7 +527,7 @@ func TestFinish(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
-	params := proto.FinishRequestParams{
+	params := proto.FinishRequest{
 		State: proto.STATE_COMPLETE,
 	}
 	cfg := request.ManagerConfig{
