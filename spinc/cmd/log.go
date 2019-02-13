@@ -87,3 +87,7 @@ func (c *Log) Run() error {
 
 	return nil
 }
+
+func (c *Log) Cmd() string {
+	return "log " + c.reqId
+}

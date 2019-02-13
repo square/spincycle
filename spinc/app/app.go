@@ -32,6 +32,7 @@ type Context struct {
 type Command interface {
 	Prepare() error
 	Run() error
+	Cmd() string
 }
 
 type CommandFactory interface {

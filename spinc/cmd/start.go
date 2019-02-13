@@ -17,6 +17,8 @@ type Start struct {
 	requiredArgs []prompt.Item
 	optionalArgs []prompt.Item
 	debug        bool
+	args         map[string]interface{}
+	fullCmd      string
 }
 
 func NewStart(ctx app.Context) *Start {
@@ -81,12 +83,19 @@ func (c *Start) Prepare() error {
 	c.requiredArgs = []prompt.Item{}
 	c.optionalArgs = []prompt.Item{}
 	for _, a := range req.Args {
+		defaultValue := ""
+		if a.Default != nil {
+			if s, ok := a.Default.(string); ok {
+				defaultValue = s
+			}
+		}
+
 		// Map all args to prompt items
 		i := prompt.Item{
 			Name:     a.Name,
 			Desc:     a.Desc,
 			Required: a.Type == proto.ARG_TYPE_REQUIRED,
-			Default:  a.Default.(string),
+			Default:  defaultValue,
 		}
 
 		// Always skip given vars. Presume the user knows what they're doing.
@@ -155,7 +164,39 @@ func (c *Start) Run() error {
 
 	// Print full command that user can copy-paste to re-run without prompts.
 	// Also build the request args map.
-	fullCmd := "# spinc start " + c.reqName
+	c.Cmd()
+	if c.debug {
+		app.Debug("request args: %#v", c.args)
+	}
+	fmt.Printf("\n# spinc %s\n\n", c.fullCmd)
+
+	// Prompt for 'ok' until user enters it or aborts
+	ok := prompt.NewConfirmationPrompt("Enter 'ok' to start, or ctrl-c to abort: ", "ok", c.ctx.In, c.ctx.Out)
+	for {
+		if err := ok.Prompt(); err == nil {
+			break
+		}
+	}
+
+	// //////////////////////////////////////////////////////////////////////
+	// Start request
+	// //////////////////////////////////////////////////////////////////////
+	reqId, err := c.ctx.RMClient.CreateRequest(c.reqName, c.args)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("OK, started %s request %s\n\n"+
+		"  spinc status %s\n\n", c.reqName, reqId, reqId)
+
+	return nil
+}
+
+func (c *Start) Cmd() string {
+	if c.fullCmd != "" {
+		return c.fullCmd
+	}
+	fullCmd := "start " + c.reqName
 	args := map[string]interface{}{}
 	for _, i := range c.requiredArgs {
 		fullCmd += " " + i.Name + "=" + i.Value
@@ -169,29 +210,7 @@ func (c *Start) Run() error {
 			args[i.Name] = i.Value
 		}
 	}
-	if c.debug {
-		app.Debug("request args: %#v", args)
-	}
-	fmt.Printf("\n%s\n\n", fullCmd)
-
-	// Prompt for 'ok' until user enters it or aborts
-	ok := prompt.NewConfirmationPrompt("Enter 'ok' to start, or ctrl-c to abort: ", "ok", c.ctx.In, c.ctx.Out)
-	for {
-		if err := ok.Prompt(); err == nil {
-			break
-		}
-	}
-
-	// //////////////////////////////////////////////////////////////////////
-	// Start request
-	// //////////////////////////////////////////////////////////////////////
-	reqId, err := c.ctx.RMClient.CreateRequest(c.reqName, args)
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("OK, started %s request %s\n\n"+
-		"  spinc status %s\n\n", c.reqName, reqId, reqId)
-
-	return nil
+	c.args = args
+	c.fullCmd = fullCmd
+	return c.fullCmd
 }

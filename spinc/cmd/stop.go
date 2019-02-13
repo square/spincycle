@@ -32,3 +32,7 @@ func (c *Stop) Run() error {
 	fmt.Fprintf(c.ctx.Out, "OK, stopped %s\n", c.reqId)
 	return nil
 }
+
+func (c *Stop) Cmd() string {
+	return "stop " + c.reqId
+}

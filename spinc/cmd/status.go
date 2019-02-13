@@ -71,3 +71,7 @@ func (c *Status) Run() error {
 
 	return nil
 }
+
+func (c *Status) Cmd() string {
+	return "status " + c.reqId
+}
