@@ -223,10 +223,21 @@ func TestCreate(t *testing.T) {
 		User:      reqParams.User,
 		JobChain:  nil,
 		TotalJobs: 5,
-		Args: map[string]interface{}{
-			"foo":  "foo-value",
-			"bar":  "175",
-			"aArg": "aValue",
+		Args: []proto.RequestArg{
+			{
+				Name:  "foo",
+				Type:  proto.ARG_TYPE_REQUIRED,
+				Value: "foo-value",
+				Given: true,
+			},
+			{
+				Name:    "bar",
+				Type:    proto.ARG_TYPE_OPTIONAL,
+				Default: "175",
+				Value:   "175",
+				Given:   false,
+			},
+			//"aArg": "aValue", // job arg, not request arg
 		},
 	}
 	if diff := deep.Equal(actualReq, expectedReq); diff != nil {

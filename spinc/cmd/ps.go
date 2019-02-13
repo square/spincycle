@@ -4,7 +4,6 @@ package cmd
 
 import (
 	"fmt"
-	"sort"
 	"text/tabwriter"
 	"time"
 
@@ -67,7 +66,7 @@ func (c *Ps) Run() error {
 		requestName := ""
 		owner := ""
 		args := map[string]interface{}{}
-		var argNames []string
+		argNames := []string{}
 		if status.Requests != nil {
 			if r, ok := status.Requests[r.RequestId]; ok {
 				nJobs = r.TotalJobs
@@ -79,12 +78,17 @@ func (c *Ps) Run() error {
 						return err
 					}
 
-					argNames = make([]string, len(request.Args))
-					i := 0
-					for k, v := range request.Args {
-						args[k] = v
-						argNames[i] = k
-						i++
+					// Request args list order is same as spec order, so no need to sort.
+					// E.g. if spec has args: required: foo\n bar\n then list is [foo,bar].
+					// We presume spec order is relevant because it's what the user wrote.
+					if c.ctx.Options.Verbose {
+						for _, arg := range request.Args {
+							if arg.Type != "required" {
+								continue
+							}
+							args[arg.Name] = arg.Value
+							argNames = append(argNames, arg.Name)
+						}
 					}
 				}
 			}
@@ -96,7 +100,6 @@ func (c *Ps) Run() error {
 		}
 
 		if c.ctx.Options.Verbose {
-			sort.Strings(argNames)
 			argString := ""
 			for _, k := range argNames {
 				v := args[k]

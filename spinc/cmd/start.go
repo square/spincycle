@@ -85,8 +85,8 @@ func (c *Start) Prepare() error {
 		i := prompt.Item{
 			Name:     a.Name,
 			Desc:     a.Desc,
-			Required: a.Required,
-			Default:  a.Default,
+			Required: a.Type == proto.ARG_TYPE_REQUIRED,
+			Default:  a.Default.(string),
 		}
 
 		// Always skip given vars. Presume the user knows what they're doing.
@@ -97,7 +97,7 @@ func (c *Start) Prepare() error {
 		}
 
 		// Save the arg/item
-		if a.Required {
+		if i.Required {
 			c.requiredArgs = append(c.requiredArgs, i)
 		} else {
 			// Optional arg
@@ -109,7 +109,7 @@ func (c *Start) Prepare() error {
 				// If optional arg not given, use its default value
 				if _, ok := given[a.Name]; !ok {
 					i.IsDefault = true
-					i.Value = a.Default
+					i.Value = a.Default.(string)
 					if c.debug {
 						app.Debug("optional arg %s using default value %s", a.Name, i.Value)
 					}

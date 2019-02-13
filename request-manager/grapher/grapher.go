@@ -69,6 +69,58 @@ func (gf *grapherFactory) Make(req proto.Request) *Grapher {
 	return NewGrapher(req, gf.jf, gf.config, gf.idf.Make()) // create a Grapher with a new id Generator
 }
 
+func (o *Grapher) RequestArgs(requestType string, args map[string]interface{}) ([]proto.RequestArg, error) {
+	reqArgs := []proto.RequestArg{}
+
+	seq, ok := o.AllSequences[requestType]
+	if !ok {
+		return nil, fmt.Errorf("cannot find definition for request: %s", requestType)
+	}
+	if !seq.Request {
+		return nil, fmt.Errorf("%s is not a request", requestType)
+	}
+
+	for i, arg := range seq.Args.Required {
+		val, ok := args[arg.Name]
+		if !ok {
+			return nil, fmt.Errorf("required arg '%s' not set", arg.Name)
+		}
+		reqArgs = append(reqArgs, proto.RequestArg{
+			Pos:   i,
+			Name:  arg.Name,
+			Type:  proto.ARG_TYPE_REQUIRED,
+			Value: val,
+			Given: true,
+		})
+	}
+
+	for i, arg := range seq.Args.Optional {
+		val, ok := args[arg.Name]
+		if !ok {
+			val = arg.Default
+		}
+		reqArgs = append(reqArgs, proto.RequestArg{
+			Pos:     i,
+			Name:    arg.Name,
+			Type:    proto.ARG_TYPE_OPTIONAL,
+			Default: arg.Default,
+			Value:   val,
+			Given:   ok,
+		})
+	}
+
+	for i, arg := range seq.Args.Static {
+		reqArgs = append(reqArgs, proto.RequestArg{
+			Pos:   i,
+			Name:  arg.Name,
+			Type:  proto.ARG_TYPE_STATIC,
+			Value: arg.Default,
+		})
+	}
+
+	return reqArgs, nil
+}
+
 // CreateGraph will create a graph. The user must provide a Sequence Name, to indicate
 // what graph will be created. The caller must also provide the first set of args.
 func (o *Grapher) CreateGraph(sequenceName string, args map[string]interface{}) (*Graph, error) {
@@ -84,8 +136,8 @@ func (o *Grapher) CreateGraph(sequenceName string, args map[string]interface{}) 
 	return g, nil
 }
 
-func (g *Grapher) Sequences() map[string]*SequenceSpec {
-	return g.AllSequences
+func (o *Grapher) Sequences() map[string]*SequenceSpec {
+	return o.AllSequences
 }
 
 // buildSequence will take in a sequence spec and return a Graph that represents the sequence

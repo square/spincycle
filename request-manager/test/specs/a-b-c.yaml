@@ -1,6 +1,7 @@
 ---
 sequences:
   three-nodes:
+    request: true
     args:
       required:
         - name: foo

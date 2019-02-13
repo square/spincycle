@@ -90,9 +90,9 @@ func NewManager(config ManagerConfig) Manager {
 	}
 }
 
-func (m *manager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
+func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	var req proto.Request
-	if reqParams.Type == "" {
+	if newReq.Type == "" {
 		return req, ErrInvalidParams
 	}
 
@@ -100,36 +100,46 @@ func (m *manager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
 	reqId := reqIdBytes.String()
 	req = proto.Request{
 		Id:        reqId,
-		Type:      reqParams.Type,
+		Type:      newReq.Type,
 		CreatedAt: time.Now().UTC(),
 		State:     proto.STATE_PENDING,
-		User:      reqParams.User,
+		User:      newReq.User, // Caller.Name if not set by SetUsername
 	}
 
-	// Make a copy of args so that the request resolver doesn't modify reqParams.
-	args := map[string]interface{}{}
-	for k, v := range reqParams.Args {
-		args[k] = v
-	}
-
-	// Resolve the request into a graph, and convert to a proto.JobChain.
+	// Verify request args
 	gr := m.grf.Make(req)
-	g, err := gr.CreateGraph(reqParams.Type, args)
+	reqArgs, err := gr.RequestArgs(req.Type, newReq.Args)
 	if err != nil {
 		return req, err
 	}
+	req.Args = reqArgs
 
-	// Request.Params are not persisted yet. They're used at creation time by
-	// the auth pluign to let Authorize() do fine-grain auth for the request based
-	// on the args.
-	// @todo: should this be reqParams.Args? i.e. initial args or final post-processing args?
-	req.Args = args
-
-	jc := &proto.JobChain{
-		Jobs:          map[string]proto.Job{},
-		AdjacencyList: g.Edges,
+	// Copy requests args -> initial job args. We save the former as a record
+	// of what the caller explicitly provided when creating the request. CreateGraph
+	// modifies the latter (job args), e.g. setting default and static values.
+	//
+	// The request args are saved in raw_reqests, and the finalized job args are
+	// saved with the Request in requests. This is important because we return
+	// the Request and API.createRequestHandler passes it to auth.Authorize which
+	// expects finalized job args in order to do fine-grain auth.
+	jobArgs := map[string]interface{}{}
+	for k, v := range newReq.Args {
+		jobArgs[k] = v
 	}
-	for jobId, node := range g.Vertices {
+
+	// Create graph from request specs and jobs args. Then translate the generic
+	// graph into a job chain and save it with the Request.
+	newGraph, err := gr.CreateGraph(req.Type, jobArgs)
+	if err != nil {
+		return req, err
+	}
+	jc := &proto.JobChain{
+		AdjacencyList: newGraph.Edges,
+		RequestId:     reqId,
+		State:         proto.STATE_PENDING,
+		Jobs:          map[string]proto.Job{},
+	}
+	for jobId, node := range newGraph.Vertices {
 		bytes, err := node.Datum.Serialize()
 		if err != nil {
 			return req, err
@@ -148,23 +158,11 @@ func (m *manager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
 		}
 		jc.Jobs[jobId] = job
 	}
-	jc.State = proto.STATE_PENDING
-	jc.RequestId = reqId
 	req.JobChain = jc
 	req.TotalJobs = len(jc.Jobs)
 
-	// Marshal the job chain and request params.
-	rawJc, err := json.Marshal(req.JobChain)
-	if err != nil {
-		return req, fmt.Errorf("cannot marshal job chain: %s", err)
-	}
-	rawParams, err := json.Marshal(reqParams)
-	if err != nil {
-		return req, fmt.Errorf("cannot marshal request params: %s", err)
-	}
-
 	// Begin a transaction to insert the request into the requests table, as
-	// well as the jc and raw request params into the raw_requests table.
+	// well as the jc and raw request params into the request_archives table.
 	ctx := context.TODO()
 	txn, err := m.dbc.BeginTx(ctx, nil)
 	if err != nil {
@@ -172,7 +170,32 @@ func (m *manager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
 	}
 	defer txn.Rollback()
 
-	q := "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
+	// Marshal the job chain and request params.
+	jcBytes, err := json.Marshal(req.JobChain)
+	if err != nil {
+		return req, fmt.Errorf("cannot marshal job chain: %s", err)
+	}
+	newReqBytes, err := json.Marshal(newReq)
+	if err != nil {
+		return req, fmt.Errorf("cannot marshal create request: %s", err)
+	}
+	reqArgsBytes, err := json.Marshal(reqArgs)
+	if err != nil {
+		return req, fmt.Errorf("cannot marshal request args: %s", err)
+	}
+
+	q := "INSERT INTO request_archives (request_id, create_request, args, job_chain) VALUES (?, ?, ?, ?)"
+	_, err = txn.ExecContext(ctx, q,
+		reqIdBytes,
+		string(newReqBytes),
+		string(reqArgsBytes),
+		jcBytes,
+	)
+	if err != nil {
+		return req, fmt.Errorf("INSERT request_archives: %s", err)
+	}
+
+	q = "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
 	_, err = txn.ExecContext(ctx, q,
 		reqIdBytes,
 		req.Type,
@@ -182,15 +205,7 @@ func (m *manager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
 		req.TotalJobs,
 	)
 	if err != nil {
-		return req, err
-	}
-
-	q = "INSERT INTO raw_requests (request_id, request, job_chain) VALUES (?, ?, ?)"
-	if _, err = txn.ExecContext(ctx, q,
-		reqIdBytes,
-		rawParams,
-		rawJc); err != nil {
-		return req, err
+		return req, fmt.Errorf("INSERT requests: %s", err)
 	}
 
 	return req, txn.Commit()
@@ -208,8 +223,14 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 	startedAt := mysql.NullTime{}
 	finishedAt := mysql.NullTime{}
 
-	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, " +
-		"finished_jobs, jr_url FROM requests WHERE request_id = ?"
+	var reqArgsBytes []byte
+
+	// Technically, a LEFT JOIN shouldn't be necessary, but we have tests that
+	// create a request but no corresponding request_archive which makes a plain
+	// JOIN not match any row.
+	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs, jr_url, args" +
+		" FROM requests r LEFT JOIN request_archives a USING (request_id)" +
+		" WHERE request_id = ?"
 	err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(
 		&req.Id,
 		&req.Type,
@@ -220,13 +241,15 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 		&finishedAt,
 		&req.TotalJobs,
 		&req.FinishedJobs,
-		&jrURL)
+		&jrURL,
+		&reqArgsBytes,
+	)
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return req, db.NewErrNotFound("request")
 		default:
-			return req, err
+			return req, fmt.Errorf("SELECT requests: %s", err)
 		}
 	}
 
@@ -243,6 +266,13 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 		req.FinishedAt = &finishedAt.Time
 	}
 
+	if len(reqArgsBytes) > 0 {
+		var reqArgs []proto.RequestArg
+		if err := json.Unmarshal(reqArgsBytes, &reqArgs); err != nil {
+			return req, err
+		}
+		req.Args = reqArgs
+	}
 	return req, nil
 }
 
@@ -337,8 +367,10 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	ctx := context.TODO()
 
 	// TODO(alyssa): change query when we add support for nested sequence retries
-	q := "SELECT j1.job_id, j1.name, j1.state FROM job_log j1 LEFT JOIN job_log j2 ON (j1.request_id = " +
-		"j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try) WHERE j1.request_id = ? AND j2.try IS NULL"
+	q := "SELECT j1.job_id, j1.name, j1.state" +
+		" FROM job_log j1" +
+		" LEFT JOIN job_log j2 ON (j1.request_id = j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try)" +
+		" WHERE j1.request_id = ? AND j2.try IS NULL"
 	rows, err := m.dbc.QueryContext(ctx, q, requestId)
 	if err != nil {
 		return reqStatus, err
@@ -352,7 +384,6 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 			return reqStatus, err
 		}
 		s.RequestId = requestId
-
 		finishedS = append(finishedS, s)
 	}
 
@@ -479,18 +510,18 @@ func (m *manager) Specs() []proto.RequestSpec {
 		}
 		for _, arg := range req[name].Args.Required {
 			a := proto.RequestArg{
-				Name:     arg.Name,
-				Desc:     arg.Desc,
-				Required: true,
+				Name: arg.Name,
+				Desc: arg.Desc,
+				Type: proto.ARG_TYPE_REQUIRED,
 			}
 			s.Args = append(s.Args, a)
 		}
 		for _, arg := range req[name].Args.Optional {
 			a := proto.RequestArg{
-				Name:     arg.Name,
-				Desc:     arg.Desc,
-				Required: false,
-				Default:  arg.Default,
+				Name:    arg.Name,
+				Desc:    arg.Desc,
+				Type:    proto.ARG_TYPE_OPTIONAL,
+				Default: arg.Default,
 			}
 			s.Args = append(s.Args, a)
 		}
@@ -502,13 +533,13 @@ func (m *manager) Specs() []proto.RequestSpec {
 
 func (m *manager) JobChain(requestId string) (proto.JobChain, error) {
 	var jc proto.JobChain
-	var rawJc []byte // raw job chains are stored as blobs in the db.
+	var jcBytes []byte // raw job chains are stored as blobs in the db.
 
 	ctx := context.TODO()
 
-	// Get the job chain from the raw_requests table.
-	q := "SELECT job_chain FROM raw_requests WHERE request_id = ?"
-	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&rawJc); err != nil {
+	// Get the job chain from the request_archives table.
+	q := "SELECT job_chain FROM request_archives WHERE request_id = ?"
+	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return jc, db.NewErrNotFound("job chain")
@@ -518,7 +549,7 @@ func (m *manager) JobChain(requestId string) (proto.JobChain, error) {
 	}
 
 	// Unmarshal the job chain into a proto.JobChain.
-	if err := json.Unmarshal(rawJc, &jc); err != nil {
+	if err := json.Unmarshal(jcBytes, &jc); err != nil {
 		return jc, fmt.Errorf("cannot unmarshal job chain: %s", err)
 	}
 
@@ -534,12 +565,9 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 
 	ctx := context.TODO()
 
-	var jc proto.JobChain
-	var params proto.CreateRequest
-	var rawJc []byte     // raw job chains are stored as blobs in the db.
-	var rawParams []byte // raw params are stored as blobs in the db.
-	q := "SELECT job_chain, request FROM raw_requests WHERE request_id = ?"
-	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&rawJc, &rawParams); err != nil {
+	var jcBytes []byte
+	q := "SELECT job_chain FROM request_archives WHERE request_id = ?"
+	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return req, db.NewErrNotFound("raw_request")
@@ -548,15 +576,12 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 		}
 	}
 
-	if err := json.Unmarshal(rawJc, &jc); err != nil {
+	var jc proto.JobChain
+	if err := json.Unmarshal(jcBytes, &jc); err != nil {
 		return req, fmt.Errorf("cannot unmarshal job chain: %s", err)
 	}
-	if err := json.Unmarshal(rawParams, &params); err != nil {
-		return req, fmt.Errorf("cannot unmarshal params: %s", err)
-	}
-
 	req.JobChain = &jc
-	req.Args = params.Args
+
 	return req, nil
 }
 
@@ -582,7 +607,8 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 		req.FinishedAt,
 		jrURL,
 		req.Id,
-		curState)
+		curState,
+	)
 	if err != nil {
 		return err
 	}

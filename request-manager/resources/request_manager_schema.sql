@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS `requests` (
   `finished_at`    TIMESTAMP            NULL DEFAULT NULL,
   `total_jobs`     INT UNSIGNED     NOT NULL DEFAULT 0,
   `finished_jobs`  INT UNSIGNED     NOT NULL DEFAULT 0,
-  `jr_url`        VARCHAR(64)          NULL DEFAULT NULL,
+  `jr_url`         VARCHAR(2000)        NULL DEFAULT NULL,
 
   PRIMARY KEY (`request_id`),
   INDEX (`created_at`),  -- recently created
@@ -16,10 +16,11 @@ CREATE TABLE IF NOT EXISTS `requests` (
   INDEX (`state`)        -- currently running
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS `raw_requests` (
-  `request_id` BINARY(20) NOT NULL,
-  `request`    BLOB       NOT NULL,
-  `job_chain`  LONGBLOB   NOT NULL,
+CREATE TABLE IF NOT EXISTS `request_archives` (
+  `request_id`      BINARY(20) NOT NULL,
+  `create_request`  BLOB       NOT NULL, -- proto.CreateRequest from caller
+  `args`            BLOB       NOT NULL, -- finalized request args
+  `job_chain`       LONGBLOB   NOT NULL, -- proto.JobChain
 
   PRIMARY KEY (`request_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

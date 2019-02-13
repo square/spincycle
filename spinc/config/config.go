@@ -165,10 +165,10 @@ func RequestHelp(reqName string, rmc rm.Client) error {
 	for _, a := range req.Args {
 		help := a.Desc
 		star := " "
-		if a.Required {
+		if a.Type == proto.ARG_TYPE_REQUIRED {
 			star = "*"
 		} else {
-			help += " (default: " + a.Default + ")"
+			help += " (default: " + a.Default.(string) + ")"
 		}
 		fmt.Printf(line, star, a.Name, help)
 	}
