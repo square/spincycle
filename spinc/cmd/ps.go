@@ -119,3 +119,7 @@ func (c *Ps) Run() error {
 
 	return nil
 }
+
+func (c *Ps) Cmd() string {
+	return "ps"
+}

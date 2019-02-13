@@ -49,3 +49,7 @@ func (c *Running) Run() error {
 	os.Exit(1)
 	return nil // not reached
 }
+
+func (c *Running) Cmd() string {
+	return "running " + c.reqId
+}
