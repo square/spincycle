@@ -16,10 +16,16 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/rs/xid"
 
+	serr "github.com/square/spincycle/errors"
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
+	"github.com/square/spincycle/retry"
+)
+
+const (
+	DB_TRIES      = 3
+	DB_RETRY_WAIT = time.Duration(500 * time.Millisecond)
 )
 
 // A Manager is used to create and manage requests.
@@ -94,7 +100,7 @@ func NewManager(config ManagerConfig) Manager {
 func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	var req proto.Request
 	if newReq.Type == "" {
-		return req, ErrInvalidParams
+		return req, serr.ErrInvalidCreateRequest{Message: "Type is empty, must be a request name"}
 	}
 
 	reqIdBytes := xid.New()
@@ -163,17 +169,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	req.TotalJobs = len(jc.Jobs)
 
 	// ----------------------------------------------------------------------
-	// Save everything in a transaction. request_archive is immutable data,
-	// i.e. these never change now that request is fully created. requests is
-	// highly mutable, especially requests.state and requests.finished_jobs.
-	ctx := context.TODO()
-	txn, err := m.dbc.BeginTx(ctx, nil)
-	if err != nil {
-		return req, err
-	}
-	defer txn.Rollback()
-
-	// Save to request_archives
+	// Serial data for request_archives
 	jcBytes, err := json.Marshal(req.JobChain)
 	if err != nil {
 		return req, fmt.Errorf("cannot marshal job chain: %s", err)
@@ -186,32 +182,45 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	if err != nil {
 		return req, fmt.Errorf("cannot marshal request args: %s", err)
 	}
-	q := "INSERT INTO request_archives (request_id, create_request, args, job_chain) VALUES (?, ?, ?, ?)"
-	_, err = txn.ExecContext(ctx, q,
-		reqIdBytes,
-		string(newReqBytes),
-		string(reqArgsBytes),
-		jcBytes,
-	)
-	if err != nil {
-		return req, fmt.Errorf("INSERT request_archives: %s", err)
-	}
 
-	// Save to requests
-	q = "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
-	_, err = txn.ExecContext(ctx, q,
-		reqIdBytes,
-		req.Type,
-		req.State,
-		req.User,
-		req.CreatedAt,
-		req.TotalJobs,
-	)
-	if err != nil {
-		return req, fmt.Errorf("INSERT requests: %s", err)
-	}
+	// ----------------------------------------------------------------------
+	// Save everything in a transaction. request_archive is immutable data,
+	// i.e. these never change now that request is fully created. requests is
+	// highly mutable, especially requests.state and requests.finished_jobs.
+	ctx := context.TODO()
+	err = retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		txn, err := m.dbc.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer txn.Rollback()
 
-	return req, txn.Commit()
+		q := "INSERT INTO request_archives (request_id, create_request, args, job_chain) VALUES (?, ?, ?, ?)"
+		_, err = txn.ExecContext(ctx, q,
+			reqIdBytes,
+			string(newReqBytes),
+			string(reqArgsBytes),
+			jcBytes,
+		)
+		if err != nil {
+			return serr.NewDbError(err, "INSERT request_archives")
+		}
+
+		q = "INSERT INTO requests (request_id, type, state, user, created_at, total_jobs) VALUES (?, ?, ?, ?, ?, ?)"
+		_, err = txn.ExecContext(ctx, q,
+			reqIdBytes,
+			req.Type,
+			req.State,
+			req.User,
+			req.CreatedAt,
+			req.TotalJobs,
+		)
+		if err != nil {
+			return serr.NewDbError(err, "INSERT requests")
+		}
+		return txn.Commit()
+	}, nil)
+	return req, err
 }
 
 // Retrieve the request without its corresponding Job Chain.
@@ -234,26 +243,37 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs, jr_url, args" +
 		" FROM requests r LEFT JOIN request_archives a USING (request_id)" +
 		" WHERE request_id = ?"
-	err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(
-		&req.Id,
-		&req.Type,
-		&req.State,
-		&user,
-		&req.CreatedAt,
-		&startedAt,
-		&finishedAt,
-		&req.TotalJobs,
-		&req.FinishedJobs,
-		&jrURL,
-		&reqArgsBytes,
-	)
-	if err != nil {
-		switch err {
-		case sql.ErrNoRows:
-			return req, db.NewErrNotFound("requests: request_id=" + requestId)
-		default:
-			return req, fmt.Errorf("SELECT requests: %s", err)
+	notFound := false
+	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(
+			&req.Id,
+			&req.Type,
+			&req.State,
+			&user,
+			&req.CreatedAt,
+			&startedAt,
+			&finishedAt,
+			&req.TotalJobs,
+			&req.FinishedJobs,
+			&jrURL,
+			&reqArgsBytes,
+		)
+		if err != nil {
+			switch err {
+			case sql.ErrNoRows:
+				notFound = true
+				return nil // don't try again
+			default:
+				return err
+			}
 		}
+		return nil
+	}, nil)
+	if err != nil {
+		return req, serr.NewDbError(err, "SELECT requests")
+	}
+	if notFound {
+		return req, serr.RequestNotFound{requestId}
 	}
 
 	if user.Valid {
@@ -287,7 +307,7 @@ func (m *manager) Start(requestId string) error {
 
 	// Only start the request if it's currently Pending.
 	if req.State != proto.STATE_PENDING {
-		return NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[req.State])
+		return serr.NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[req.State])
 	}
 
 	// TODO(felixp): add retries to this call to the JR to start the job chain
@@ -327,7 +347,7 @@ func (m *manager) Stop(requestId string) error {
 	// Return an error unless the request is in the running state, which prevents
 	// us from stopping a request which should not be able to be stopped.
 	if req.State != proto.STATE_RUNNING {
-		return NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[req.State])
+		return serr.NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[req.State])
 	}
 
 	// Tell the JR to stop running the job chain for the request.
@@ -374,9 +394,14 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 		" FROM job_log j1" +
 		" LEFT JOIN job_log j2 ON (j1.request_id = j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try)" +
 		" WHERE j1.request_id = ? AND j2.try IS NULL"
-	rows, err := m.dbc.QueryContext(ctx, q, requestId)
+	var rows *sql.Rows
+	err = retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		var err error
+		rows, err = m.dbc.QueryContext(ctx, q, requestId)
+		return err
+	}, nil)
 	if err != nil {
-		return reqStatus, err
+		return reqStatus, serr.NewDbError(err, "SELECT job_log")
 	}
 	defer rows.Close()
 
@@ -451,7 +476,7 @@ func (m *manager) Finish(requestId string, finishParams proto.FinishRequest) err
 	if err != nil {
 		if prevState != proto.STATE_RUNNING {
 			// This should never happen - we never finish a request that isn't running.
-			return NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[prevState])
+			return serr.NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[prevState])
 		}
 		return err
 	}
@@ -463,9 +488,14 @@ func (m *manager) IncrementFinishedJobs(requestId string) error {
 	ctx := context.TODO()
 
 	q := "UPDATE requests SET finished_jobs = finished_jobs + 1 WHERE request_id = ?"
-	res, err := m.dbc.ExecContext(ctx, q, &requestId)
-	if err != nil {
+	var res sql.Result
+	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		var err error
+		res, err = m.dbc.ExecContext(ctx, q, requestId)
 		return err
+	}, nil)
+	if err != nil {
+		return serr.NewDbError(err, "UPDATE requests")
 	}
 
 	cnt, err := res.RowsAffected()
@@ -475,13 +505,13 @@ func (m *manager) IncrementFinishedJobs(requestId string) error {
 
 	switch cnt {
 	case 0:
-		return db.ErrNotUpdated
+		return ErrNotUpdated
 	case 1:
 		return nil
 	default:
 		// This should be impossible since we specify the primary key
 		// in the WHERE clause of the update.
-		return db.ErrMultipleUpdated
+		return ErrMultipleUpdated
 	}
 }
 
@@ -545,9 +575,9 @@ func (m *manager) JobChain(requestId string) (proto.JobChain, error) {
 	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes); err != nil {
 		switch err {
 		case sql.ErrNoRows:
-			return jc, db.NewErrNotFound("request_archives: request_id=" + requestId)
+			return jc, serr.RequestNotFound{requestId}
 		default:
-			return jc, err
+			return jc, serr.NewDbError(err, "SELECT request_archives")
 		}
 	}
 
@@ -570,13 +600,25 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 
 	var jcBytes []byte
 	q := "SELECT job_chain FROM request_archives WHERE request_id = ?"
-	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes); err != nil {
-		switch err {
-		case sql.ErrNoRows:
-			return req, db.NewErrNotFound("request_archives: request_id=" + requestId)
-		default:
-			return req, err
+	notFound := false
+	err = retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes)
+		if err != nil {
+			switch err {
+			case sql.ErrNoRows:
+				notFound = true
+				return nil // don't try again
+			default:
+				return err
+			}
 		}
+		return nil
+	}, nil)
+	if err != nil {
+		return req, serr.NewDbError(err, "SELECT request_archives")
+	}
+	if notFound {
+		return req, serr.RequestNotFound{requestId}
 	}
 
 	var jc proto.JobChain
@@ -604,16 +646,21 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 
 	// Fields that should never be updated by this package are not listed in this query.
 	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_url = ? WHERE request_id = ? AND state = ?"
-	res, err := m.dbc.ExecContext(ctx, q,
-		req.State,
-		req.StartedAt,
-		req.FinishedAt,
-		jrURL,
-		req.Id,
-		curState,
-	)
-	if err != nil {
+	var res sql.Result
+	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		var err error
+		res, err = m.dbc.ExecContext(ctx, q,
+			req.State,
+			req.StartedAt,
+			req.FinishedAt,
+			jrURL,
+			req.Id,
+			curState,
+		)
 		return err
+	}, nil)
+	if err != nil {
+		return serr.NewDbError(err, "UPDATE requests")
 	}
 
 	cnt, err := res.RowsAffected()
@@ -623,13 +670,13 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 
 	switch cnt {
 	case 0:
-		return db.ErrNotUpdated
+		return ErrNotUpdated
 	case 1:
 		break
 	default:
 		// This should be impossible since we specify the primary key
 		// in the WHERE clause of the update.
-		return db.ErrMultipleUpdated
+		return ErrMultipleUpdated
 	}
 
 	return nil

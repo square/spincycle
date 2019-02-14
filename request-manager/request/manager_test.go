@@ -11,9 +11,9 @@ import (
 
 	"github.com/go-test/deep"
 
+	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/request-manager/id"
 	"github.com/square/spincycle/request-manager/request"
@@ -114,8 +114,10 @@ func TestCreateMissingType(t *testing.T) {
 	defer close(shutdownChan)
 
 	_, err := m.Create(proto.CreateRequest{})
-	if err != request.ErrInvalidParams {
-		t.Errorf("err = %s, expected %s", err, request.ErrInvalidParams)
+	switch err.(type) {
+	case serr.ErrInvalidCreateRequest:
+	default:
+		t.Errorf("err = %s, expected request.ErrInvalidCreateRequest type", err)
 	}
 }
 
@@ -278,10 +280,10 @@ func TestGetNotFound(t *testing.T) {
 	_, err := m.Get(reqId)
 	if err != nil {
 		switch v := err.(type) {
-		case db.ErrNotFound:
+		case serr.RequestNotFound:
 			break // this is what we expect
 		default:
-			t.Errorf("error is of type %s, expected db.ErrNotFound", v)
+			t.Errorf("error is of type %s, expected serr.RequestNotFound", v)
 		}
 	} else {
 		t.Error("expected an error, did not get one")
@@ -351,9 +353,9 @@ func TestStartNotPending(t *testing.T) {
 	}
 	m := request.NewManager(cfg)
 	err := m.Start(reqId)
-	_, ok := err.(request.ErrInvalidState)
+	_, ok := err.(serr.ErrInvalidState)
 	if !ok {
-		t.Errorf("error = %s, expected %s", err, request.NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[proto.STATE_RUNNING]))
+		t.Errorf("error = %s, expected %s", err, serr.NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[proto.STATE_RUNNING]))
 	}
 }
 
@@ -416,10 +418,10 @@ func TestStopNotRunning(t *testing.T) {
 	err := m.Stop(reqId)
 	if err != nil {
 		switch v := err.(type) {
-		case request.ErrInvalidState:
+		case serr.ErrInvalidState:
 			break // this is what we expect
 		default:
-			t.Errorf("error is of type %s, expected request.ErrInvalidState", v)
+			t.Errorf("error is of type %s, expected serr.ErrInvalidState", v)
 		}
 	} else {
 		t.Error("expected an error, did not get one")
@@ -516,9 +518,9 @@ func TestFinishNotRunning(t *testing.T) {
 	m := request.NewManager(cfg)
 	err := m.Finish(reqId, params)
 	switch err.(type) {
-	case request.ErrInvalidState:
+	case serr.ErrInvalidState:
 	default:
-		t.Errorf("error = %s, expected %s", err, request.NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[proto.STATE_PENDING]))
+		t.Errorf("error = %s, expected %s", err, serr.NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[proto.STATE_PENDING]))
 	}
 }
 
@@ -698,10 +700,10 @@ func TestJobChainNotFound(t *testing.T) {
 	_, err := m.JobChain(reqId)
 	if err != nil {
 		switch v := err.(type) {
-		case db.ErrNotFound:
+		case serr.RequestNotFound:
 			break // this is what we expect
 		default:
-			t.Errorf("error is of type %s, expected db.ErrNotFound", v)
+			t.Errorf("error is of type %s, expected serr.RequestNotFound", v)
 		}
 	} else {
 		t.Error("expected an error, did not get one")

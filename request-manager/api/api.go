@@ -15,10 +15,10 @@ import (
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"
 
+	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/app"
 	"github.com/square/spincycle/request-manager/auth"
-	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
@@ -153,7 +153,7 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// If Request Manager is shutting down, don't start running any new requests.
 	select {
 	case <-api.shutdownChan:
-		return handleError(ErrShuttingDown)
+		return handleError(ErrShuttingDown, c)
 	default:
 	}
 
@@ -178,7 +178,7 @@ func (api *API) createRequestHandler(c echo.Context) error {
 
 	req, err := api.rm.Create(reqParams)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// ----------------------------------------------------------------------
@@ -196,7 +196,7 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// user to Start a request that's already been created, so otherwise
 	// the request will be Pending forever.
 	if err := api.rm.Start(req.Id); err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// Set the location of the request in the response header.
@@ -216,7 +216,7 @@ func (api *API) getRequestHandler(c echo.Context) error {
 	// Get the request from the rm.
 	req, err := api.rm.GetWithJC(reqId)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// Return the request.
@@ -229,14 +229,14 @@ func (api *API) startRequestHandler(c echo.Context) error {
 	// If Request Manager is shutting down, don't start running any new requests.
 	select {
 	case <-api.shutdownChan:
-		return handleError(ErrShuttingDown)
+		return handleError(ErrShuttingDown, c)
 	default:
 	}
 
 	reqId := c.Param("reqId")
 
 	if err := api.rm.Start(reqId); err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	return nil
@@ -255,7 +255,7 @@ func (api *API) finishRequestHandler(c echo.Context) error {
 	}
 
 	if err := api.rm.Finish(reqId, finishParams); err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	return nil
@@ -270,14 +270,14 @@ func (api *API) stopRequestHandler(c echo.Context) error {
 	// Authorize caller to stop request
 	req, err := api.rm.Get(reqId)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 	if err := api.appCtx.Auth.Authorize(c.Get("caller").(auth.Caller), proto.REQUEST_OP_STOP, req); err != nil {
 		return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 	}
 
 	if err := api.rm.Stop(reqId); err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	return nil
@@ -294,7 +294,7 @@ func (api *API) suspendRequestHandler(c echo.Context) error {
 	}
 
 	if err := api.rr.Suspend(sjc); err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	return nil
@@ -308,7 +308,7 @@ func (api *API) statusRequestHandler(c echo.Context) error {
 
 	reqStatus, err := api.rm.Status(reqId)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// Return the RequestStatus struct.
@@ -323,7 +323,7 @@ func (api *API) jobChainRequestHandler(c echo.Context) error {
 	// Get the request's job chain from the rm.
 	jc, err := api.rm.JobChain(reqId)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// Return the job chain.
@@ -338,7 +338,7 @@ func (api *API) getFullJLHandler(c echo.Context) error {
 	// Get the JL from the rm.
 	jl, err := api.jls.GetFull(reqId)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// Return the JL.
@@ -354,7 +354,7 @@ func (api *API) getJLHandler(c echo.Context) error {
 	// Get the JL from the rm.
 	jl, err := api.jls.Get(reqId, jobId)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// Return the JL.
@@ -375,13 +375,13 @@ func (api *API) createJLHandler(c echo.Context) error {
 	// Create a JL in the rm.
 	jl, err := api.jls.Create(reqId, jl)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// Increment the finished jobs counter if the job completed successfully.
 	if jl.State == proto.STATE_COMPLETE {
 		if err := api.rm.IncrementFinishedJobs(reqId); err != nil {
-			return handleError(err)
+			return handleError(err, c)
 		}
 	}
 
@@ -400,7 +400,7 @@ func (api *API) requestListHandler(c echo.Context) error {
 func (api *API) statusRunningHandler(c echo.Context) error {
 	running, err := api.appCtx.Status.Running(status.NoFilter)
 	if err != nil {
-		return handleError(err)
+		return handleError(err, c)
 	}
 
 	// Return the RequestStatus struct.
@@ -409,22 +409,23 @@ func (api *API) statusRunningHandler(c echo.Context) error {
 
 // ------------------------------------------------------------------------- //
 
-func handleError(err error) *echo.HTTPError {
-	switch err.(type) {
-	case db.ErrNotFound:
-		return echo.NewHTTPError(http.StatusNotFound, err.Error())
-	case request.ErrInvalidState:
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	default:
-		switch err {
-		case request.ErrInvalidParams, db.ErrNotUpdated, db.ErrMultipleUpdated:
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-		case ErrShuttingDown:
-			return echo.NewHTTPError(http.StatusServiceUnavailable, err.Error())
-		default:
-			return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-		}
+func handleError(err error, c echo.Context) error {
+	ret := proto.Error{
+		Message:    err.Error(),
+		HTTPStatus: http.StatusInternalServerError,
 	}
 
-	return nil
+	switch err.(type) {
+	case serr.RequestNotFound, serr.JobNotFound:
+		ret.HTTPStatus = http.StatusNotFound
+	case serr.ErrInvalidCreateRequest:
+		ret.HTTPStatus = http.StatusBadRequest
+	}
+
+	switch err {
+	case ErrShuttingDown:
+		ret.HTTPStatus = http.StatusServiceUnavailable
+	}
+
+	return c.JSON(ret.HTTPStatus, ret)
 }
