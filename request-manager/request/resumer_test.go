@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-test/deep"
 
+	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/grapher"
 	"github.com/square/spincycle/request-manager/request"
@@ -153,9 +154,9 @@ func TestSuspend(t *testing.T) {
 
 	err = r.Suspend(sjc)
 	switch err.(type) {
-	case request.ErrInvalidState:
+	case serr.ErrInvalidState:
 	default:
-		t.Errorf("error = %s, expected %s", err, request.NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[proto.STATE_PENDING]))
+		t.Errorf("error = %s, expected %s", err, serr.NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[proto.STATE_PENDING]))
 	}
 }
 

@@ -4,6 +4,7 @@
 package proto
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -237,4 +238,30 @@ func (j Jobs) Less(i, k int) bool {
 }
 func (j Jobs) Swap(i, k int) {
 	j[i], j[k] = j[k], j[i]
+}
+
+// Error is the standard response for all handled errors. Client errors (HTTP 400
+// codes) and internal errors (HTTP 500 codes) are returned as an Error, if handled.
+// If not handled (API crash, panic, etc.), Spin Cycle returns an HTTP 500 code and the
+// response data is undefined; the client should print any response data as a string.
+type Error struct {
+	Message    string `json:"message"`    // human-readable and loggable error message
+	RequestId  string `json:"requestId"`  // entity ID that caused error, if any
+	HTTPStatus int    `json:"httpStatus"` // HTTP status code
+}
+
+func NewError(msgFmt string, msgArgs ...interface{}) Error {
+	e := Error{}
+	if msgFmt != "" {
+		e.Message = fmt.Sprintf(msgFmt, msgArgs...)
+	}
+	return e
+}
+
+func (e Error) String() string {
+	return e.Message
+}
+
+func (e Error) Error() string {
+	return e.Message
 }

@@ -10,9 +10,9 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
+	serr "github.com/square/spincycle/errors"
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/db"
 )
 
 type Manager interface {
@@ -55,7 +55,7 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 	q := "SELECT jr_url FROM requests WHERE state = ? AND jr_url IS NOT NULL"
 	rows, err := m.dbc.QueryContext(ctx, q, proto.STATE_RUNNING)
 	if err != nil {
-		return status, err
+		return status, serr.NewDbError(err, "SELECT requests")
 	}
 	defer rows.Close()
 
@@ -110,10 +110,10 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 	}
 
 	q = "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs" +
-		" FROM requests WHERE request_id IN (" + db.IN(ids) + ")"
+		" FROM requests WHERE request_id IN (" + inList(ids) + ")"
 	rows2, err := m.dbc.QueryContext(ctx, q)
 	if err != nil {
-		return status, err
+		return status, serr.NewDbError(err, "SELECT requests")
 	}
 	defer rows2.Close()
 
@@ -148,4 +148,17 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 	status.Requests = requests
 
 	return status, err
+}
+
+// ["a","b"] -> "'a','b'"
+func inList(vals []string) string {
+	in := ""
+	n := len(vals) - 1
+	for i, val := range vals {
+		in += "'" + val + "'"
+		if i < n {
+			in += ","
+		}
+	}
+	return in
 }

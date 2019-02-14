@@ -14,9 +14,14 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
+	serr "github.com/square/spincycle/errors"
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/db"
+)
+
+var (
+	ErrNotUpdated      = errors.New("no row updated")
+	ErrMultipleUpdated = errors.New("multiple rows updated/deleted, expected single-row update/delete")
 )
 
 type Resumer interface {
@@ -115,7 +120,7 @@ func (r *resumer) Suspend(sjc proto.SuspendedJobChain) (err error) {
 	}
 	// We can only suspend a request that is currently running.
 	if req.State != proto.STATE_RUNNING {
-		return NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[req.State])
+		return serr.NewErrInvalidState(proto.StateName[proto.STATE_RUNNING], proto.StateName[req.State])
 	}
 
 	rawSJC, err := json.Marshal(sjc)
@@ -382,18 +387,17 @@ func (r *resumer) Cleanup() {
 
 		// Change the request state to Failed if it's currently Suspended. The
 		// request might not be Suspended if an RM did resume the request, but
-		// failed on deleting the SJC. Update will return db.ErrNotUpdated in this
+		// failed on deleting the SJC. Update will return ErrNotUpdated in this
 		// case - ignore this error.
 		req.State = proto.STATE_FAIL
 		req.JobRunnerURL = ""
 		err = r.updateRequest(req, proto.STATE_SUSPENDED)
-		if err != nil && err != db.ErrNotUpdated {
+		if err != nil && err != ErrNotUpdated {
 			reqLogger.Errorf("error changing request state from SUSPENDED to FAILED: %s", err)
 			if err := r.unclaimSJC(req.Id, true); err != nil {
 				reqLogger.Errorf("error unclaiming SJC: %s", err)
 			}
 			continue
-
 		}
 
 		// Delete the old SJC. If this fails, the SJC will get deleted the next time
@@ -455,13 +459,13 @@ func (r *resumer) updateRequestWithTxn(request proto.Request, curState byte, txn
 	case 0:
 		// Either the request's current state != curState, or no request with the
 		// id given exists.
-		return db.ErrNotUpdated
+		return ErrNotUpdated
 	case 1:
 		return nil
 	default:
 		// This should be impossible since we specify the primary key (request id)
 		// in the WHERE clause of the update.
-		return db.ErrMultipleUpdated
+		return ErrMultipleUpdated
 	}
 }
 
@@ -486,7 +490,7 @@ func (r *resumer) deleteSJC(requestId string) error {
 	default:
 		// This should be impossible since we specify the primary key (request id)
 		// in the WHERE clause of the update.
-		return db.ErrMultipleUpdated
+		return ErrMultipleUpdated
 	}
 	return nil
 }
@@ -520,7 +524,7 @@ func (r *resumer) claimSJC(requestId string) (bool, error) {
 	default:
 		// This should be impossible since we specify the primary key (request id)
 		// in the WHERE clause of the update.
-		return true, db.ErrMultipleUpdated
+		return true, ErrMultipleUpdated
 	}
 }
 
@@ -557,6 +561,6 @@ func (r *resumer) unclaimSJC(requestId string, strict bool) error {
 	default:
 		// This should be impossible since we specify the primary key (request id)
 		// in the WHERE clause of the update.
-		return db.ErrMultipleUpdated
+		return ErrMultipleUpdated
 	}
 }

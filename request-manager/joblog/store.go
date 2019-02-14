@@ -7,8 +7,8 @@ import (
 	"context"
 	"database/sql"
 
+	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/db"
 )
 
 // A Store reads and writes job logs to/from a persistent datastore.
@@ -89,7 +89,7 @@ func (s *store) Get(requestId, jobId string) (proto.JobLog, error) {
 		&jl.SequenceId)
 	switch {
 	case err == sql.ErrNoRows:
-		return jl, db.NewErrNotFound("job log")
+		return jl, serr.JobNotFound{RequestId: jl.RequestId, JobId: jl.JobId}
 	case err != nil:
 		return jl, err
 	}

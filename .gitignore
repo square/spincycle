@@ -19,3 +19,4 @@ job-runner/job-runner
 job-runner/bin/bin
 request-manager/bin/bin
 dev/sandbox/
+spinc/bin/bin

@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-test/deep"
 
+	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/db"
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/test"
 	testdb "github.com/square/spincycle/request-manager/test/db"
@@ -65,10 +65,10 @@ func TestGetNotFound(t *testing.T) {
 	_, err := s.Get(reqId, jobId)
 	if err != nil {
 		switch v := err.(type) {
-		case db.ErrNotFound:
+		case serr.JobNotFound:
 			break // this is what we expect
 		default:
-			t.Errorf("error is of type %s, expected db.ErrNotFound", v)
+			t.Errorf("error is of type %s, expected serr.JobNotFound", v)
 		}
 	} else {
 		t.Error("expected an error, did not get one")

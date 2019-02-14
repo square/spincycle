@@ -85,7 +85,7 @@ func (c *client) CreateRequest(reqType string, args map[string]interface{}) (str
 	}
 
 	var req proto.Request
-	if err := c.makeRequest("POST", url, reqParams, http.StatusCreated, &req); err != nil {
+	if err := c.makeRequest("POST", url, reqParams, &req); err != nil {
 		return "", err
 	}
 
@@ -97,7 +97,7 @@ func (c *client) GetRequest(requestId string) (proto.Request, error) {
 	url := c.baseUrl + "/api/v1/requests/" + requestId
 
 	var req proto.Request
-	err := c.makeRequest("GET", url, nil, http.StatusOK, &req)
+	err := c.makeRequest("GET", url, nil, &req)
 	return req, err
 }
 
@@ -105,7 +105,7 @@ func (c *client) StartRequest(requestId string) error {
 	// PUT /api/v1/requests/${requestId}/start
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/start"
 
-	return c.makeRequest("PUT", url, nil, http.StatusOK, nil)
+	return c.makeRequest("PUT", url, nil, nil)
 }
 
 func (c *client) FinishRequest(requestId string, state byte, finishedAt time.Time) error {
@@ -118,21 +118,21 @@ func (c *client) FinishRequest(requestId string, state byte, finishedAt time.Tim
 		FinishedAt: finishedAt,
 	}
 
-	return c.makeRequest("PUT", url, finishParams, http.StatusOK, nil)
+	return c.makeRequest("PUT", url, finishParams, nil)
 }
 
 func (c *client) StopRequest(requestId string) error {
 	// PUT /api/v1/requests/${requestId}/stop
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/stop"
 
-	return c.makeRequest("PUT", url, nil, http.StatusOK, nil)
+	return c.makeRequest("PUT", url, nil, nil)
 }
 
 func (c *client) SuspendRequest(requestId string, sjc proto.SuspendedJobChain) error {
 	// PUT /api/v1/requests/${requestId}/suspend
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/suspend"
 
-	return c.makeRequest("PUT", url, sjc, http.StatusOK, nil)
+	return c.makeRequest("PUT", url, sjc, nil)
 }
 
 func (c *client) RequestStatus(requestId string) (proto.RequestStatus, error) {
@@ -140,7 +140,7 @@ func (c *client) RequestStatus(requestId string) (proto.RequestStatus, error) {
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/status"
 
 	var status proto.RequestStatus
-	err := c.makeRequest("GET", url, nil, http.StatusOK, &status)
+	err := c.makeRequest("GET", url, nil, &status)
 	return status, err
 }
 
@@ -149,7 +149,7 @@ func (c *client) GetJobChain(requestId string) (proto.JobChain, error) {
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/job-chain"
 
 	var jc proto.JobChain
-	err := c.makeRequest("GET", url, nil, http.StatusOK, &jc)
+	err := c.makeRequest("GET", url, nil, &jc)
 	return jc, err
 }
 
@@ -158,7 +158,7 @@ func (c *client) GetJL(requestId string) ([]proto.JobLog, error) {
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/log"
 
 	var jl []proto.JobLog
-	err := c.makeRequest("GET", url, nil, http.StatusOK, &jl)
+	err := c.makeRequest("GET", url, nil, &jl)
 	return jl, err
 }
 
@@ -166,14 +166,14 @@ func (c *client) CreateJL(requestId string, jl proto.JobLog) error {
 	// POST /api/v1/requests/${requestId}/log
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/log"
 
-	return c.makeRequest("POST", url, jl, http.StatusCreated, nil)
+	return c.makeRequest("POST", url, jl, nil)
 }
 
 func (c *client) RequestList() ([]proto.RequestSpec, error) {
 	// GET /api/v1/requests
 	url := c.baseUrl + "/api/v1/request-list"
 	var req []proto.RequestSpec
-	err := c.makeRequest("GET", url, nil, http.StatusOK, &req)
+	err := c.makeRequest("GET", url, nil, &req)
 	return req, err
 }
 
@@ -181,7 +181,7 @@ func (c *client) SysStatRunning() (proto.RunningStatus, error) {
 	// GET /api/v1/requests
 	url := c.baseUrl + "/api/v1/status/running"
 	var req proto.RunningStatus
-	err := c.makeRequest("GET", url, nil, http.StatusOK, &req)
+	err := c.makeRequest("GET", url, nil, &req)
 	return req, err
 }
 
@@ -193,7 +193,7 @@ func (c *client) SysStatRunning() (proto.RunningStatus, error) {
 // JSON and sent as the payload of the request. If the respStruct argument is
 // provided (if it's not nil), the response body of the request will be
 // unmarshalled into the struct pointed to by it.
-func (c *client) makeRequest(httpVerb, url string, payloadStruct interface{}, expectedStatusCode int, respStruct interface{}) error {
+func (c *client) makeRequest(httpVerb, url string, payloadStruct interface{}, respStruct interface{}) error {
 	// Marshal payload.
 	var payload []byte
 	var err error
@@ -224,10 +224,32 @@ func (c *client) makeRequest(httpVerb, url string, payloadStruct interface{}, ex
 		return err
 	}
 
-	// Check the status code.
-	if resp.StatusCode != expectedStatusCode {
-		return fmt.Errorf("unsuccessful status code: %d (response body: %s)",
-			resp.StatusCode, string(body))
+	// Success if status 200 or 201. Else it should be a proto.Error message with
+	// a helpful error message. The err returned here will most likely be reported
+	// verbatim by the client (e.g. spinc), so it's important to make it clear.
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		if len(body) == 0 {
+			// If there's no response body, then the API probably crashed and
+			// the status code is probably 500
+			return fmt.Errorf("no response from API, check logs (HTTP status %d)", resp.StatusCode)
+		}
+		var perr proto.Error
+		err := json.Unmarshal(body, &perr)
+		if err == nil && perr.Message != "" {
+			if resp.StatusCode == http.StatusNotFound {
+				// 404s aren't API errors, so just report the "not found" error message as-is
+				return perr
+			} else {
+				// This can be anything from 500 errors on db error, or 401 errors
+				// if caller sends bad data
+				return fmt.Errorf("API error: %s (HTTP status %d)", perr, resp.StatusCode)
+			}
+		} else {
+			// If proto.Error.Message is empty, the API probably crashed and maybe
+			// the framework (Echo) sent something else. Dump whatever content body
+			// we have; it probably has some info about the error.
+			return fmt.Errorf("API error: %s (HTTP status %d)", string(body), resp.StatusCode)
+		}
 	}
 
 	// Unmarshal the body into the struct pointed to by the respStruct argument.
