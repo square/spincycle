@@ -1,3 +1,10 @@
+---
+layout: default
+title: Deploy
+parent: Operate
+nav_order: 1
+---
+
 # Deploy
 
 ## System Requirements

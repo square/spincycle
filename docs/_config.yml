@@ -1,7 +1,7 @@
 title: Spin Cycle
 description: >-
   Platform automation at scale
-url: https://square.github.io/spincycle
+baseurl: /spincycle
 twitter_username: square
 github_username: square
 markdown: kramdown
@@ -11,4 +11,8 @@ exclude:
   - Gemfile.lock
   - README.md
 
-theme: jekyll-theme-slate
+remote_theme: pmarsceill/just-the-docs
+search_enabled: true
+aux_links:
+  "Spin Cycle":
+    - "//github.com/square/spincycle"
