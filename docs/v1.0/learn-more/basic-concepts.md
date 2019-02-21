@@ -11,19 +11,19 @@ _Requests_, _sequences_, and _jobs_ are the building blocks of Spin Cycle:
 
 ![Generic Request-Sequence-Job Diagram](/spincycle/assets/img/request_sequence_job_generic.svg)
 
-#### Request
+### Request
 
 A request is something users can ask Spin Cycle to do. For example, request "stop-mysql" allows users to stop MySQL. You create requests; Spin Cycle has no built-in requests. Requests are any functionality you want to expose to users. For example, the database team at Square exposes "stop-host" and "start-host" requests so that the hardware team can safely stop and start database hosts.
 
 From the user's point of view, everything is a request. Requests can have required and optional arguments ("args"), the values of which are provided by the user. A "stop-host" request probably has a required "hostname" arg to let the user specify which host to stop. Apart from the request args, the request is a black box to the user: users don't know (and shouldn't know) how requests are accomplished.
 
-#### Sequence
+### Sequence
 
 A sequence is a unique set of jobs. (Don't worry what jobs are, those are explained next.) Sequences are an implementation detail of requests that users don't see. You&mdash;a Spin Cycle operator and developer&mdash;create sequences and combine them to create requests. In the diagram above, two sequences comprise the request.
 
 Ideally, sequences are reusable, but they don't have to be. For example, the database team at Square has a "provision-database-node" sequence which provisions a single database instance. This sequence is used by different requests. For example, it's used by the request that provisions a new database cluster, and it's used by the request that adds a database node to an existing cluster.
 
-#### Job
+### Job
 
 A job is an atomic, reusable unit of work. Of the three building blocks, jobs are the most important because they do actual work. (Under the hood, requests are directed acyclic graphs, sequences are subgraphs, and jobs are vertices/nodes.) For example:
 
