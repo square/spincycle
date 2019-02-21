@@ -1,8 +1,17 @@
+---
+layout: default
+title: Home
+nav_order: 1
+description: "Spin Cycle automates and exposes complex infrastructure tasks to other teams and services."
+permalink: /
+---
+# Spin Cycle
+
 Spin Cycle automates and exposes complex infrastructure tasks to other teams and services. This allows a few engineers to quickly and reliably manage thousands of resources&mdash;platform automation at scale.
 
 Spin Cycle was purpose-built for platform automation at scale:
 
-* Fully REST API-driven 
+* Fully REST API-driven
 * Highly available and horizontally scalable
 * Real-time status (no dark corners)
 * Extensive code reuse (flywheel effect)
@@ -11,8 +20,8 @@ Spin Cycle was purpose-built for platform automation at scale:
 Spin Cycle can do anything you can program. The database team at [Square](https://squareup.com/) uses it to provision and decommission databases, safely stop and start hosts, upgrade MySQL and Docker images, reconfigure services, and more.
 
 ## Learn More
-* **[Basic Concepts](basic-concepts)**&nbsp;&#x2728;
-* [Support](support)
+* [Basic Concepts](v1.0/learn_more/basic-concepts)&nbsp;&#x2728;
+* [Support](v1.0/learn_more/support)
 
 ## Operate
 * [Deploy](v1.0/operate/deploy)

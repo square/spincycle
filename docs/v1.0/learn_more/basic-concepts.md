@@ -1,8 +1,15 @@
+---
+layout: default
+title: Basic Concepts
+parent: Learn More
+nav_order: 1
+---
+
 # Basic Concepts
 
 _Requests_, _sequences_, and _jobs_ are the building blocks of Spin Cycle:
 
-![Generic Request-Sequence-Job Diagram](assets/img/request_sequence_job_generic.svg)
+![Generic Request-Sequence-Job Diagram](/spincycle/assets/img/request_sequence_job_generic.svg)
 
 #### Request
 
@@ -80,7 +87,7 @@ Request specs are necessarily meticulous because you must specify every sequence
 
 Sequence expansion refers to generating requests from static specs and variables args. Consider request "shutdown-host" to shutdown a physical host that runs a variable number of virtualized hosts. For example, a physical host could be running virtual host1, virtual host2, etc. We want "shutdown-host" to require only the physical hostname, automatically determine the virtual hosts on it, and shut them down in parallel. Solution:
 
-![Sequence Expansion](assets/img/sequence_expansion.svg)
+![Sequence Expansion](/spincycle/assets/img/sequence_expansion.svg)
 
 One job (not shown) takes required arg "physicalHost", determines the virtual hosts, and sets a new arg "hosts" (list of virtual hostnames on "physicalHost"). Sequence 1 is expanded on each value in "hosts", passing the current list element as arg "hostname" to the expanded sequence (Sequence 1-1 and Sequence 1-2). The lone job in the sequence expects args "hostname", which it uses to stop that virtual host.
 
@@ -118,7 +125,7 @@ Both Request Manager and Job Runner use the job factory. The RM makes jobs when 
 
 The aforementioned concepts and components form Spin Cycle at a high level:
 
-![Spin Cycle High-Level](assets/img/spincycle_high_level.svg)
+![Spin Cycle High-Level](/spincycle/assets/img/spincycle_high_level.svg)
 
 There's more to learn and do, but everything relates to the basic concepts presented here.
 
