@@ -2,7 +2,7 @@
 layout: default
 title: Support
 parent: Learn More
-nav_order: 2
+nav_order: 4
 ---
 
 # Support
