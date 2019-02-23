@@ -1,9 +1,10 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package server bootstraps and runs the Job Runner.
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -96,12 +97,23 @@ func (s *Server) Boot() error {
 
 	// Either both or neither RunAPI and StopAPI hooks must be provided - can't
 	// have just one.
+	// @todo: this needs to happen earlier
 	if (s.appCtx.Hooks.RunAPI == nil) != (s.appCtx.Hooks.StopAPI == nil) {
 		return fmt.Errorf("Only one of RunAPI and StopAPI hooks provided - either both or neither must be provided.")
 	}
-	if err := s.loadConfig(); err != nil {
-		return err
+
+	// Load config file
+	cfg, err := s.appCtx.Hooks.LoadConfig(s.appCtx)
+	if err != nil {
+		return fmt.Errorf("error loading config: %s", err)
 	}
+	// Override with env vars, if set
+	cfg.Server.Addr = config.Env("SPINCYCLE_SERVER_ADDR", cfg.Server.Addr)
+	cfg.RMClient.ServerURL = config.Env("SPINCYCLE_RMCLIENT_URL", cfg.RMClient.ServerURL)
+	s.appCtx.Config = cfg
+	cfgstr, _ := json.MarshalIndent(cfg, "", "  ")
+	log.Printf("Config: %s", cfgstr)
+
 	if err := s.makeAPI(); err != nil {
 		return err
 	}
@@ -181,52 +193,41 @@ func (s *Server) waitForShutdown() {
 	}
 }
 
-func (s *Server) loadConfig() error {
-	var err error
-	var cfg config.JobRunner
-	if s.appCtx.Hooks.LoadConfig != nil {
-		cfg, err = s.appCtx.Hooks.LoadConfig(s.appCtx)
-	} else {
-		cfg, err = s.appCtx.Hooks.LoadConfig(s.appCtx)
-	}
-	if err != nil {
-		return fmt.Errorf("error loading config at %s", err)
-	}
-	s.appCtx.Config = cfg
-	return nil
-}
-
 func (s *Server) makeAPI() error {
-	var err error
-
-	// //////////////////////////////////////////////////////////////////////
-	// Request Manager Client
-	// //////////////////////////////////////////////////////////////////////
+	// JR uses Request Manager client to send back job logs, suspend job chains,
+	// and tell the RM when a job chain (request) is done
 	rmc, err := s.appCtx.Factories.MakeRequestManagerClient(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("error loading config at %s", err)
 	}
 
-	// //////////////////////////////////////////////////////////////////////
-	// Chain repo
-	// //////////////////////////////////////////////////////////////////////
-	chainRepo, err := s.appCtx.Factories.MakeChainRepo(s.appCtx)
-	if err != nil {
-		return fmt.Errorf("error loading config at %s", err)
-	}
+	// Chain repo holds running job chains in memory. It's primarily used by
+	// chain.Traversers while running chains. It's also used by status.Manager
+	// to report status back to RM (then back to user).
+	chainRepo := chain.NewMemoryRepo()
 
-	// //////////////////////////////////////////////////////////////////////
-	// API
-	// //////////////////////////////////////////////////////////////////////
+	// Status Manager reports what's happening in the JR
 	stat := status.NewManager(chainRepo)
+
+	// Runner Factory makes a job.Runner to run one job. It's used by chain.Traversers
+	// to run jobs.
 	rf := runner.NewFactory(jobs.Factory, rmc)
+
+	// Traverser Factory is used by API to make a new chain.Traverser to run a
+	// job chain. These are stored in a Traverser Repo (just a map) so API can
+	// keep track of what's running.
 	trFactory := chain.NewTraverserFactory(chainRepo, rf, rmc, s.shutdownChan)
 	s.traverserRepo = cmap.New()
+
+	// Base URL is what this JR reports itself as, e.g. https://spin-jr.prod.local:32307
+	// The RM saves this so it knows which JR to query to get the status of a
+	// given request.
 	baseURL, err := s.appCtx.Hooks.ServerURL(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("error getting base server URL: %s", err)
 	}
 
+	// The API instance
 	apiCfg := api.Config{
 		AppCtx:           s.appCtx,
 		TraverserFactory: trFactory,

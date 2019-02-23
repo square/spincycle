@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package api provides controllers for each api endpoint. Controllers are
 // "dumb wiring"; there is little to no application logic in this package.
@@ -129,9 +129,9 @@ func NewAPI(cfg Config) *API {
 func (api *API) Run() error {
 	var err error
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
-		err = api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
+		err = api.echo.StartTLS(api.appCtx.Config.Server.Addr, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
 	} else {
-		err = api.echo.Start(api.appCtx.Config.Server.ListenAddress)
+		err = api.echo.Start(api.appCtx.Config.Server.Addr)
 	}
 	return err
 }

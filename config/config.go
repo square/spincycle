@@ -1,5 +1,7 @@
 // Copyright 2017-2019, Square, Inc.
 
+// Package config provides structs describing Request Manager and Job Runner YAML config files.
+// The top-level structs are RequestManager and JobRunner.
 package config
 
 import (
@@ -7,12 +9,56 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 
 	"gopkg.in/yaml.v2"
 )
 
-// NewTLSConfig takes a cert, key, and ca file and creates a *tls.Config.
+// Default values are used when corresponding values are not specified in a config file.
+// These are sufficient for development but not production.
+const (
+	DEFAULT_ADDR_REQUEST_MANAGER = "127.0.0.1:32308"
+	DEFAULT_ADDR_JOB_RUNNER      = "127.0.0.1:32307"
+	DEFAULT_MYSQL_DSN            = "root:@tcp(localhost:3306)/spincycle_development"
+	DEFAULT_SPECS_DIR            = "specs/"
+)
+
+// Load loads a config file into the struct pointed to by configStruct.
+func Load(configStruct interface{}) error {
+	var cfgFile string
+	var required bool
+	if len(os.Args) > 1 {
+		cfgFile = os.Args[1]
+		required = true // required if specified
+	} else {
+		// Default config file not required
+		switch os.Getenv("ENVIRONMENT") {
+		case "staging":
+			cfgFile = "config/staging.yaml"
+		case "production":
+			cfgFile = "config/production.yaml"
+		default:
+			cfgFile = "config/development.yaml"
+		}
+	}
+	log.Printf("Loading config file %s", cfgFile)
+
+	// Read the file.
+	data, err := ioutil.ReadFile(cfgFile)
+	if err != nil {
+		if os.IsNotExist(err) && !required {
+			log.Printf("Config file %s does not exist, using defaults", cfgFile)
+			return nil
+		}
+		return err
+	}
+
+	// Unmarshal the contents of the file into the provided struct.
+	return yaml.Unmarshal(data, configStruct)
+}
+
+// NewTLSConfig creates a tls.Config from the given cert, key, and ca files.
 func NewTLSConfig(caFile, certFile, keyFile string) (*tls.Config, error) {
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
@@ -34,132 +80,105 @@ func NewTLSConfig(caFile, certFile, keyFile string) (*tls.Config, error) {
 	return tlsConfig, nil
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// High-Level Config Structs
-///////////////////////////////////////////////////////////////////////////////
+// Defaults returns a RequestManager and JobRunner with all default values.
+func Defaults() (RequestManager, JobRunner) {
+	rmCfg := RequestManager{
+		Server: Server{
+			Addr: DEFAULT_ADDR_REQUEST_MANAGER,
+		},
+		MySQL: MySQL{
+			DSN: DEFAULT_MYSQL_DSN,
+		},
+		Specs: Specs{
+			Dir: DEFAULT_SPECS_DIR,
+		},
+		JRClient: HTTPClient{
+			ServerURL: "http://" + DEFAULT_ADDR_JOB_RUNNER,
+		},
+	}
+	jrCfg := JobRunner{
+		Server: Server{
+			Addr: DEFAULT_ADDR_JOB_RUNNER,
+		},
+		RMClient: HTTPClient{
+			ServerURL: "http://" + DEFAULT_ADDR_REQUEST_MANAGER,
+		},
+	}
+	return rmCfg, jrCfg
+}
 
-// The config used by the Request Manager. this is read from in
-// request-manager/bin/main.go
+// Env returns the envar value if set, else the default value.
+func Env(envar, def string) string {
+	val := os.Getenv(envar)
+	if val != "" {
+		return val
+	}
+	return def
+}
+
+// --------------------------------------------------------------------------
+
+// Request Manager represents the top-level layout for a Request Manager (RM)
+// YAML config file. An RM config file looks like:
+//
+//   ---
+//   server:
+//     addr: 10.0.0.50:32308
+//     tls:
+//       cert_file: myorg.crt
+//       key_file: myorg.key
+//       ca_file: myorg.ca
+//   mysql:
+//     dsn: "spincycle@tcp(spin-mysql.local:3306)/spincycle_production"
+//   specs:
+//     dir: /data/app/spin-rm/specs/
+//   auth:
+//     admin_roles: ["dba"]
+//     strict: true
+//   jr_client:
+//     url: https://spincycle-jr.myorg.local:32307
+//     tls:
+//       cert_file: myorg.crt
+//       key_file: myorg.key
+//       ca_file: myorg.ca
+//
+// The reciprocal top-level config is JobRunner.
 type RequestManager struct {
-	// The config that the RM web server will run with.
-	Server
-
-	// The config that the RM will use to connect to its database.
-	Db SQLDb `yaml:"db"`
-
-	// The config that the RM will use to make a JR client with. The JR
-	// client is used for communicating with the JR.
-	JRClient HTTPClient `yaml:"jr_client"`
-
-	// The directory that holds all of the grapher spec files. This dir
-	// should not contain anything other than spec files.
-	SpecFileDir string `yaml:"spec_file_dir"`
-
-	// Auth specifies auth plugin options. If a user-provide auth plugin is not
-	// given, these options are ignored and all users and apps have admin access.
-	Auth Auth `yaml:"auth"`
+	Server   Server     `yaml:"server"`    // API addr and TLS
+	MySQL    MySQL      `yaml:"mysql"`     // MySQL database
+	Specs    Specs      `yaml:"specs"`     // request specs
+	Auth     Auth       `yaml:"auth"`      // auth plugin
+	JRClient HTTPClient `yaml:"jr_client"` // RM to JR internal communication
 }
 
-// The config used by the Job Runner. This is read from in
-// job-runner/bin/main.go
+// JobRunner represents the top-level layout for a Job Runner (JR) YAML config file.
+// A JR config file looks like:
+//
+//   ---
+//   server:
+//     addr: 10.0.0.55:32307
+//     tls:
+//       cert_file: myorg.crt
+//       key_file: myorg.key
+//       ca_file: myorg.ca
+//   rm_client:
+//     url: https://spincycle-rm.myorg.local:32308
+//     tls:
+//       cert_file: myorg.crt
+//       key_file: myorg.key
+//       ca_file: myorg.ca
+//
+// The reciprocal top-level config is RequestManager.
 type JobRunner struct {
-	// The config that the JR web server will run with.
-	Server
-
-	// The config that the JR will use to make a RM client with. The RM
-	// client is used for communicating with the RM.
-	RMClient HTTPClient `yaml:"rm_client"`
-
-	// The type of backend to use for the chain repo. Choices are: memory,
-	// redis. If this is set to redis, the config for the redis instance
-	// will be retrieved from the RedisDb struct.
-	ChainRepoType string `yaml:"chain_repo_type"`
-
-	// The config that the JR will use to connect to redis (if
-	// ChainRepoType is set to "redis").
-	Redis RedisDb
+	Server   Server     `yaml:"server"`    // API addr and TLS
+	RMClient HTTPClient `yaml:"rm_client"` // JR to RM internal communication
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Config Components
-///////////////////////////////////////////////////////////////////////////////
+// --------------------------------------------------------------------------
 
-// Configuration for a web server.
-type Server struct {
-	// The address the server will listen on (ex: "127.0.0.1:80").
-	ListenAddress string `yaml:"listen_address"`
-
-	// The TLS config used by the server.
-	TLS `yaml:"tls_config"`
-}
-
-// Configuration for an HTTP client.
-type HTTPClient struct {
-	// The base URL of the service that this client communicates with
-	// (ex: https://127.0.0.1:9340). If running multiple instances of the
-	// service (Job Runner or Request Manager), this URL should point to a
-	// load balancer.
-	ServerURL string `yaml:"server_url"`
-
-	// The TLS config used by the client.
-	TLS `yaml:"tls_config"`
-}
-
-// Configuration for a SQL database.
-type SQLDb struct {
-	// The driverName that is passed to sql.Open() (ex: "mysql").
-	Type string
-
-	// The full Data Source Name (DSN) of the sql database (see
-	// https://github.com/go-sql-driver/mysql#dsn-data-source-name for
-	// MySQL documentation, or https://godoc.org/github.com/lib/pq for
-	// PostgreSQL documentation).
-	//
-	// Note: if a TLS config is specified within the SQLDb struct, it
-	// will automatically get appended to the DSN (you don't have to
-	// include it in the string). Also, "parseTime=true" will always be
-	// appended to the DSN, so you don't need to add that either.
-	DSN string
-
-	// The TLS config used to connect to the sql database..
-	TLS `yaml:"tls_config"`
-
-	// The path to the database's CLI tool. This is only used for
-	// testing. Ex: /usr/bin/mysql
-	CLIPath string `yaml:"cli_path"`
-}
-
-// Configuration for a Redis database.
-type RedisDb struct {
-	// The network for the redis server (ex: "tcp", "unix")
-	Network string
-
-	// The address for the redis server (ex: "localhost:6379", "/path/to/redis.sock")
-	Address string
-
-	// The prefix used for redis keys.
-	Prefix string
-
-	// The timeout lenght (in seconds) for connections.
-	IdleTimeout int `yaml:"idle_timeout"`
-
-	// The maximum number of idle connections in the redis pool.
-	MaxIdle int `yaml:"max_idle"`
-}
-
-// TLS configuration.
-type TLS struct {
-	// The certificate file to use.
-	CertFile string `yaml:"cert_file"`
-
-	// The key file to use.
-	KeyFile string `yaml:"key_file"`
-
-	// The CA file to use.
-	CAFile string `yaml:"ca_file"`
-}
-
-// Auth configuration.
+// The auth section of RequestManager configures role-based authentication.
+// To enable auth, you must provide an auth plugin.  Else, the default is no auth
+// and these options are ignored.
 type Auth struct {
 	// Callers with one of these roles are admins (allowed all ops) for all requests.
 	AdminRoles []string `yaml:"admin_roles"`
@@ -170,30 +189,92 @@ type Auth struct {
 	Strict bool `yaml:"strict"`
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Loading Config
-///////////////////////////////////////////////////////////////////////////////
+// The specs section of RequestManager configures the request specs.
+type Specs struct {
+	// Directory where all request specs are located. Subdirectories are ignored.
+	//
+	// The default is DEFAULT_SPECS_DIR.
+	Dir string `yaml:"dir"`
+}
 
-// Load loads a configuration file into the struct pointed to by the
-// configStruct argument.
-func Load(configFile string, configStruct interface{}) error {
-	// Make sure the file exists.
-	_, err := os.Stat(configFile)
-	if err != nil {
-		return err
-	}
+// The server section configures the server and API. Both RequestManager and
+// JobRunner have a server section.
+type Server struct {
+	// Addr is the network address ("IP:port") to listen on. For development,
+	// this is the address clients connect to. But for production, the API is
+	// usually behind load balancers or some type of NAT, so this is only the
+	// local bind address.
+	//
+	// Specify ":port" to listen on all interface for the given port.
+	//
+	// The default is DEFAULT_ADDR_REQUEST_MANAGER or DEFAULT_ADDR_JOB_RUNNER.
+	Addr string `yaml:"addr"`
 
-	// Read the file.
-	data, err := ioutil.ReadFile(configFile)
-	if err != nil {
-		return err
-	}
+	// TLS specifies certificate, key, and CA files to enable TLS connections.
+	// If enabled, clients must connect using HTTPS.
+	//
+	// The default is not using TLS.
+	TLS TLS `yaml:"tls"`
+}
 
-	// Unmarshal the contents of the file into the provided struct.
-	err = yaml.Unmarshal(data, configStruct)
-	if err != nil {
-		return err
-	}
+// HTTPClient represents sections jr_client (RequestManager.JRClient) and rm_client
+// (JobRunner.RMClient) for configuring Job Runner and Request Manager HTTP clients,
+// respectively.
+type HTTPClient struct {
+	// ServerURL is the base URL of the destination API (e.g. http://IP:port).
+	// For development, this is Server.Addr. But for production, each API is
+	// usually behind load balancers or some type of NAT, so this is probably
+	// the load balancer/gateway address in front of the destination API.
+	//
+	// The default is the other API default address: DEFAULT_ADDR_REQUEST_MANAGER
+	// or DEFAULT_ADDR_JOB_RUNNER.
+	ServerURL string `yaml:"url"`
 
-	return nil
+	// TLS specifies certificate, key, and CA files to enable TLS connections
+	// to the destination API. The destation API must also be configured to use
+	// TLS by specifying Server.TLS.
+	//
+	// The default is not using TLS.
+	TLS `yaml:"tls"`
+}
+
+// Configuration for a SQL database.
+type MySQL struct {
+	// DSN is the data source name for connecting to MySQL. See
+	// https://github.com/go-sql-driver/mysql#dsn-data-source-name for the
+	// full syntax. The "parseTime=true" parameter is automatically appended
+	// to the DSN.
+	//
+	// The DSN must end with "/db" where db is the database name where the
+	// Request Manager schema has been loaded. Full privileges should be granted
+	// on this database to the MySQL user specified by the DSN.
+	//
+	// To enable TLS, configure the TLS options, do not use the "tls" DSN parameter.
+	//
+	// The default is DEFAULT_MYSQL_DSN.
+	DSN string `yaml:"dsn"`
+
+	// TLS specifies certificate, key, and CA files to enable TLS connections
+	// to MySQL. If enabled, the "tls" DSN parameter is used automatically.
+	//
+	// The default is no TLS.
+	TLS `yaml:"tls"`
+
+	// Path to mysql CLI. This is only used for testing.
+	CLIPath string `yaml:"cli_path"`
+}
+
+// TLS represents the tls sections for Server, HTTPClient, and MySQL. Each tls
+// section is unique, allowing different TLS files for each section.
+//
+// There are no defaults. Specify all files, or none.
+type TLS struct {
+	// The certificate file to use.
+	CertFile string `yaml:"cert_file"`
+
+	// The key file to use.
+	KeyFile string `yaml:"key_file"`
+
+	// The CA file to use.
+	CAFile string `yaml:"ca_file"`
 }
