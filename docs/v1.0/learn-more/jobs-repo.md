@@ -7,7 +7,7 @@ nav_order: 2
 
 # Jobs Repo
 
-The jobs repo contains your jobs and a factory for making them. When compling Spin Cycle, the open-source code is "linked" to your jobs repo. (See [Building](/spincycle/v1.0/operate/deploy.html#building).) There are four requirements for your jobs repo:
+The jobs repo is a Go package called `jobs` that contains your jobs and a factory for making them. When building Spin Cycle, the open-source code is "linked" to your jobs repo. (See [Building](/spincycle/v1.0/operate/deploy.html#building).) There are four requirements for your jobs repo:
 
 1. Package name `jobs`
 1. Defines package variable `var Factory job.Factory`
@@ -15,7 +15,7 @@ The jobs repo contains your jobs and a factory for making them. When compling Sp
 1. Every job implements [job.Job](https://godoc.org/github.com/square/spincycle/job#Job)
 
 
-Open-source Spin Cycle only uses the `Factory` package variable. In request specs, jobs are given any type name you like. Spin Cycle makes jobs by type, by calling `Factory.Make`. Spin Cycle has no specific knowledge about any job. To Spin Cycle, every job is equal.
+Open-source Spin Cycle only uses the `jobs.Factory` package variable. In request specs, jobs are given any type name you choose. Spin Cycle makes jobs by type, by calling `Factory.Make`. Spin Cycle has no specific knowledge about any job. To Spin Cycle, every job is equal.
 
 You can organize the jobs repo any way you want. For example:
 
@@ -71,4 +71,4 @@ func (f factory) Make(id Id) (Job, error) {
 
 A real factory is much more complicated, but the basic idea is the same. Private type `factory` implements [job.Factory](https://godoc.org/github.com/square/spincycle/job#Factory): `func (f factory) Make(id Id) (Job, error)` (requirement 3).
 
-The `case` statements implicitly defined the job types. Specifying "mysql/start" in a request spec will match the first `case`, etc. You can name jobs types however you like. "mysql/start" could be called "mysql-start", "start_MySQL", etc. as long as it matches usage in request specs. We chose to name them matching the package organization.
+The `case` statements implicitly define the job types. Specifying "mysql/start" in a request spec will match the first `case`, etc. You can name jobs types however you like. "mysql/start" could be called "mysql-start", "start_MySQL", etc. as long as it matches usage in request specs. We chose to name them matching the package organization.
