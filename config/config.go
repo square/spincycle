@@ -25,10 +25,11 @@ const (
 )
 
 // Load loads a config file into the struct pointed to by configStruct.
-func Load(configStruct interface{}) error {
-	var cfgFile string
+func Load(cfgFile string, configStruct interface{}) error {
 	var required bool
-	if len(os.Args) > 1 {
+	if cfgFile != "" {
+		required = true // required if specified
+	} else if len(os.Args) > 1 {
 		cfgFile = os.Args[1]
 		required = true // required if specified
 	} else {

@@ -129,7 +129,7 @@ func Defaults() Context {
 // "development".
 func LoadConfig(ctx Context) (config.RequestManager, error) {
 	cfg, _ := config.Defaults()
-	if err := config.Load(&cfg); err != nil {
+	if err := config.Load("", &cfg); err != nil {
 		return cfg, err
 	}
 	return cfg, nil

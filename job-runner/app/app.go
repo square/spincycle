@@ -64,7 +64,7 @@ func Defaults() Context {
 
 func LoadConfig(appCtx Context) (config.JobRunner, error) {
 	_, cfg := config.Defaults()
-	if err := config.Load(&cfg); err != nil {
+	if err := config.Load("", &cfg); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
