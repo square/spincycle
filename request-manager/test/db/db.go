@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package db
 
@@ -10,16 +10,14 @@ import (
 	"sync"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/square/spincycle/config"
 	rmtest "github.com/square/spincycle/request-manager/test"
 	"github.com/square/spincycle/test"
 )
 
 type manager struct {
-	defaultDSNConfig *mysql.Config
-	dbType           string
-	defaultCmdArgs   []string
-	cliPath          string
+	dsn            *mysql.Config
+	defaultCmdArgs []string
+	cliPath        string
 	//
 	dbs map[string]*sql.DB // db name => *sql.Db
 	*sync.Mutex
@@ -40,37 +38,27 @@ type Manager interface {
 }
 
 func NewManager() (Manager, error) {
-	// Get db connection info from the test config.
-	var cfg config.RequestManager
-	err := config.Load(rmtest.ConfigFile, &cfg)
-	if err != nil {
-		return nil, err
-	}
-	defaultDSNConfig, err := mysql.ParseDSN(cfg.Db.DSN + "?parseTime=true") // parseTime=true always has to be set
+	dsn, err := mysql.ParseDSN(rmtest.MySQLDSN)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create default args for running the mysql cli with exec.Command.
-	dca := defaultCmdArgs(defaultDSNConfig)
+	dca := defaultCmdArgs(dsn)
 
-	var cliPath string
-	if cfg.Db.CLIPath == "" {
-		cliPath = "mysql" // default to current path
-	}
+	cliPath := "mysql" // @todo: env var SPINCYCLE_TEST_MYSQL_CLI
 
 	return &manager{
-		defaultDSNConfig: defaultDSNConfig,
-		dbType:           cfg.Db.Type,
-		defaultCmdArgs:   dca,
-		cliPath:          cliPath,
-		dbs:              make(map[string]*sql.DB),
-		Mutex:            &sync.Mutex{},
+		dsn:            dsn,
+		defaultCmdArgs: dca,
+		cliPath:        cliPath,
+		dbs:            make(map[string]*sql.DB),
+		Mutex:          &sync.Mutex{},
 	}, nil
 }
 
 func (m *manager) Create(dataFile string) (string, error) {
-	dbName := m.defaultDSNConfig.DBName + "_" + test.RandSeq(6)
+	dbName := m.dsn.DBName + "_" + test.RandSeq(6)
 
 	// Create a fresh db.
 	if err := m.dropDB(dbName); err != nil {
@@ -110,9 +98,9 @@ func (m *manager) Connect(dbName string) (*sql.DB, error) {
 
 	if db == nil {
 		// Override the db in the default dsn, and connect to the db.
-		curDsn := *m.defaultDSNConfig
+		curDsn := *m.dsn
 		curDsn.DBName = dbName
-		db, err := sql.Open(m.dbType, curDsn.FormatDSN())
+		db, err := sql.Open("mysql", curDsn.FormatDSN())
 		if err != nil {
 			return db, err
 		}

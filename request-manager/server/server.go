@@ -1,9 +1,10 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package server bootstraps and runs the Request Manager.
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
+	"github.com/square/spincycle/config"
 	"github.com/square/spincycle/request-manager/api"
 	"github.com/square/spincycle/request-manager/app"
 	"github.com/square/spincycle/request-manager/auth"
@@ -166,7 +168,20 @@ func (s *Server) Boot() error {
 	if err != nil {
 		return fmt.Errorf("error loading config: %s", err)
 	}
+	// Override with env vars, if set
+	cfg.Server.Addr = config.Env("SPINCYCLE_SERVER_ADDR", cfg.Server.Addr)
+	cfg.Server.TLS.CertFile = config.Env("SPINCYCLE_SERVER_TLS_CERT_FILE", cfg.Server.TLS.CertFile)
+	cfg.Server.TLS.KeyFile = config.Env("SPINCYCLE_SERVER_TLS_KEY_FILE", cfg.Server.TLS.KeyFile)
+	cfg.Server.TLS.CAFile = config.Env("SPINCYCLE_SERVER_TLS_CA_FILE", cfg.Server.TLS.CAFile)
+	cfg.MySQL.DSN = config.Env("SPINCYCLE_MYSQL_DSN", cfg.MySQL.DSN)
+	cfg.Specs.Dir = config.Env("SPINCYCLE_SPECS_DIR", cfg.Specs.Dir)
+	cfg.JRClient.ServerURL = config.Env("SPINCYCLE_JR_CLIENT_URL", cfg.JRClient.ServerURL)
+	cfg.JRClient.TLS.CertFile = config.Env("SPINCYCLE_JR_CLIENT_TLS_CERT_FILE", cfg.JRClient.TLS.CertFile)
+	cfg.JRClient.TLS.KeyFile = config.Env("SPINCYCLE_JR_CLIENT_TLS_KEY_FILE", cfg.JRClient.TLS.KeyFile)
+	cfg.JRClient.TLS.CAFile = config.Env("SPINCYCLE_JR_CLIENT_TLS_CA_FILE", cfg.JRClient.TLS.CAFile)
 	s.appCtx.Config = cfg
+	cfgstr, _ := json.MarshalIndent(cfg, "", "  ")
+	log.Printf("Config: %s", cfgstr)
 
 	// Load requests specification files (specs)
 	specs, err := s.appCtx.Hooks.LoadSpecs(s.appCtx)

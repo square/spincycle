@@ -172,7 +172,7 @@ func TestNewJobChainShutdown(t *testing.T) {
 func TestNewJobChainSuccess(t *testing.T) {
 	requestId := "abc"
 	ctx := app.Defaults()
-	ctx.Config.Server.ListenAddress = "host:port"
+	ctx.Config.Server.Addr = "host:port"
 	setupWithCtx(&mock.TraverserFactory{}, ctx)
 	defer cleanup()
 
@@ -198,7 +198,7 @@ func TestNewJobChainSuccess(t *testing.T) {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
 	}
 
-	expectedLocation := "http://" + ctx.Config.Server.ListenAddress + "/api/v1/job-chains/" + requestId
+	expectedLocation := "http://" + ctx.Config.Server.Addr + "/api/v1/job-chains/" + requestId
 	if len(headers["Location"]) < 1 {
 		t.Errorf("location header not set at all")
 	} else {
@@ -212,7 +212,7 @@ func TestNewJobChainSuccess(t *testing.T) {
 func TestResumeJobChainSuccess(t *testing.T) {
 	requestId := "abc"
 	ctx := app.Defaults()
-	ctx.Config.Server.ListenAddress = "host:port"
+	ctx.Config.Server.Addr = "host:port"
 	setupWithCtx(&mock.TraverserFactory{}, ctx)
 	defer cleanup()
 
@@ -245,7 +245,7 @@ func TestResumeJobChainSuccess(t *testing.T) {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
 	}
 
-	expectedLocation := "http://" + ctx.Config.Server.ListenAddress + "/api/v1/job-chains/" + requestId
+	expectedLocation := "http://" + ctx.Config.Server.Addr + "/api/v1/job-chains/" + requestId
 	if len(headers["Location"]) < 1 {
 		t.Errorf("location header not set at all")
 	} else {

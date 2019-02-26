@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package config_test
 
@@ -53,12 +53,11 @@ func TestLoadConfigRequestManager(t *testing.T) {
 	content := []byte(`
 ---
 server:
-  listen_address: ":8888"
-db:
-  type: mysql
+  addr: ":8888"
+mysql:
   dsn: root:@localhost:3306/request_manager_development
 jr_client:
-  server_url: "http://127.0.0.1:9999"
+  url: "http://127.0.0.1:9999"
 `)
 	fileName := createTempFile(t, content)
 	defer os.Remove(fileName)
@@ -71,11 +70,10 @@ jr_client:
 
 	expectedConfig := config.RequestManager{
 		Server: config.Server{
-			ListenAddress: ":8888",
+			Addr: ":8888",
 		},
-		Db: config.SQLDb{
-			Type: "mysql",
-			DSN:  "root:@localhost:3306/request_manager_development",
+		MySQL: config.MySQL{
+			DSN: "root:@localhost:3306/request_manager_development",
 		},
 		JRClient: config.HTTPClient{
 			ServerURL: "http://127.0.0.1:9999",
@@ -92,10 +90,9 @@ func TestLoadConfigJobRunner(t *testing.T) {
 	content := []byte(`
 ---
 server:
-  listen_address: ":9999"
+  addr: ":9999"
 rm_client:
-  server_url: "http://127.0.0.1:8888"
-chain_repo_type: memory
+  url: "http://127.0.0.1:8888"
 `)
 	fileName := createTempFile(t, content)
 	defer os.Remove(fileName)
@@ -108,9 +105,8 @@ chain_repo_type: memory
 
 	expectedConfig := config.JobRunner{
 		Server: config.Server{
-			ListenAddress: ":9999",
+			Addr: ":9999",
 		},
-		ChainRepoType: "memory",
 		RMClient: config.HTTPClient{
 			ServerURL: "http://127.0.0.1:8888",
 		},

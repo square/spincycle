@@ -123,9 +123,9 @@ func NewAPI(appCtx app.Context) *API {
 func (api *API) Run() error {
 	var err error
 	if api.appCtx.Config.Server.TLS.CertFile != "" && api.appCtx.Config.Server.TLS.KeyFile != "" {
-		err = api.echo.StartTLS(api.appCtx.Config.Server.ListenAddress, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
+		err = api.echo.StartTLS(api.appCtx.Config.Server.Addr, api.appCtx.Config.Server.TLS.CertFile, api.appCtx.Config.Server.TLS.KeyFile)
 	} else {
-		err = api.echo.Start(api.appCtx.Config.Server.ListenAddress)
+		err = api.echo.Start(api.appCtx.Config.Server.Addr)
 	}
 	return err
 }

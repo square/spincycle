@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -129,22 +128,11 @@ func Defaults() Context {
 // environment variable specifing "staging" or "production", else it defaults to
 // "development".
 func LoadConfig(ctx Context) (config.RequestManager, error) {
-	var cfgFile string
-	if len(os.Args) > 1 {
-		cfgFile = os.Args[1]
-	} else {
-		switch os.Getenv("ENVIRONMENT") {
-		case "staging":
-			cfgFile = "config/staging.yaml"
-		case "production":
-			cfgFile = "config/production.yaml"
-		default:
-			cfgFile = "config/development.yaml"
-		}
+	cfg, _ := config.Defaults()
+	if err := config.Load("", &cfg); err != nil {
+		return cfg, err
 	}
-	var cfg config.RequestManager
-	err := config.Load(cfgFile, &cfg)
-	return cfg, err
+	return cfg, nil
 }
 
 // LoadSpecs is the default LoadSpecs hook.
@@ -154,12 +142,13 @@ func LoadSpecs(ctx Context) (grapher.Config, error) {
 	}
 	// For each config in the cfg.SpecFileDir directory, read the file and
 	// then aggregate all of the resulting configs into a single struct.
-	specFiles, err := ioutil.ReadDir(ctx.Config.SpecFileDir)
+	specsDir := ctx.Config.Specs.Dir
+	specFiles, err := ioutil.ReadDir(specsDir)
 	if err != nil {
 		return specs, err
 	}
 	for _, f := range specFiles {
-		spec, err := grapher.ReadConfig(filepath.Join(ctx.Config.SpecFileDir, f.Name()))
+		spec, err := grapher.ReadConfig(filepath.Join(specsDir, f.Name()))
 		if err != nil {
 			return specs, fmt.Errorf("error reading spec file %s: %s", f.Name(), err)
 		}
@@ -196,7 +185,8 @@ func MakeJobRunnerClient(ctx Context) (jr.Client, error) {
 
 // MakeDbConnPool is the default MakeDbConnPool factory.
 func MakeDbConnPool(ctx Context) (*sql.DB, error) {
-	dbcfg := ctx.Config.Db
+	// @todo: validate dsn
+	dbcfg := ctx.Config.MySQL
 	dsn := dbcfg.DSN + "?parseTime=true" // always needs to be set
 	if dbcfg.TLS.CAFile != "" && dbcfg.TLS.CertFile != "" && dbcfg.TLS.KeyFile != "" {
 		tlsConfig, err := config.NewTLSConfig(dbcfg.TLS.CAFile, dbcfg.TLS.CertFile, dbcfg.TLS.KeyFile)
@@ -210,6 +200,7 @@ func MakeDbConnPool(ctx Context) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error creating sql.DB: %s", err)
 	}
+	// @todo: make this configurable
 	db.SetMaxIdleConns(10)
 	db.SetMaxOpenConns(100)
 	db.SetConnMaxLifetime(12 * time.Hour)

@@ -6,11 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
-	"time"
 
 	"github.com/square/spincycle/config"
-	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/request-manager"
 )
 
@@ -23,7 +20,6 @@ type Context struct {
 
 type Factories struct {
 	MakeRequestManagerClient func(Context) (rm.Client, error)
-	MakeChainRepo            func(Context) (chain.Repo, error)
 }
 
 type Hooks struct {
@@ -45,8 +41,8 @@ type Hooks struct {
 	// This URL is returned to the Request Manager when a job chain is run, so the
 	// Request Manager may direct status/stop queries for the request to the
 	// correct Job Runner instance. The default ServerURL hook must be overriden if
-	// a ListenAddress (and TLS config) is not provided in the Job Runner config
-	// file. This is typical if a RunAPI hook has been provided, as ListenAddress
+	// a Addr (and TLS config) is not provided in the Job Runner config
+	// file. This is typical if a RunAPI hook has been provided, as Addr
 	// and TLS config files are used only in the default api.Run.
 	ServerURL func(Context) (string, error)
 }
@@ -55,7 +51,6 @@ func Defaults() Context {
 	return Context{
 		Factories: Factories{
 			MakeRequestManagerClient: MakeRequestManagerClient,
-			MakeChainRepo:            MakeChainRepo,
 		},
 		Hooks: Hooks{
 			LoadConfig: LoadConfig,
@@ -68,40 +63,26 @@ func Defaults() Context {
 }
 
 func LoadConfig(appCtx Context) (config.JobRunner, error) {
-	var cfgFile string
-	if len(os.Args) > 1 {
-		cfgFile = os.Args[1]
-	} else {
-		switch os.Getenv("ENVIRONMENT") {
-		case "staging":
-			cfgFile = "config/staging.yaml"
-		case "production":
-			cfgFile = "config/staging.yaml"
-		default:
-			cfgFile = "config/development.yaml"
-		}
-	}
-	var cfg config.JobRunner
-	err := config.Load(cfgFile, &cfg)
-	if err != nil {
-		return cfg, fmt.Errorf("error loading config at %s: %s", cfgFile, err)
+	_, cfg := config.Defaults()
+	if err := config.Load("", &cfg); err != nil {
+		return cfg, err
 	}
 	return cfg, nil
 }
 
-// Default ServerURL Hook. Uses config's ListenAddress as the host and sets scheme
+// Default ServerURL Hook. Uses Server.Addr from config as the host and sets scheme
 // based on the presence of a TLS config.
 func ServerURL(appCtx Context) (string, error) {
 	var serverURL url.URL
 
-	address := appCtx.Config.ListenAddress
-	if address == "" {
-		return "", fmt.Errorf("listen_address not set in config")
+	serverURL.Host = appCtx.Config.Server.Addr
+	if serverURL.Host == "" {
+		// @todo: check earlier, and it shouldn't happen: addr must be set
+		return "", fmt.Errorf("server.addr not set in config")
 	}
-	serverURL.Host = address
 
 	// If config has TLS info, use https; else http.
-	if appCtx.Config.TLS.CertFile != "" && appCtx.Config.TLS.KeyFile != "" {
+	if appCtx.Config.Server.TLS.CertFile != "" && appCtx.Config.Server.TLS.KeyFile != "" {
 		serverURL.Scheme = "https"
 	} else {
 		serverURL.Scheme = "http"
@@ -128,26 +109,4 @@ func MakeRequestManagerClient(appCtx Context) (rm.Client, error) {
 	}
 	rmc := rm.NewClient(httpClient, cfg.RMClient.ServerURL)
 	return rmc, nil
-}
-
-func MakeChainRepo(appCtx Context) (chain.Repo, error) {
-	cfg := appCtx.Config
-	switch cfg.ChainRepoType {
-	case "memory":
-		return chain.NewMemoryRepo(), nil
-	case "redis":
-		redisConf := chain.RedisRepoConfig{
-			Network:     cfg.Redis.Network,
-			Address:     cfg.Redis.Address,
-			Prefix:      cfg.Redis.Prefix,
-			IdleTimeout: time.Duration(cfg.Redis.IdleTimeout) * time.Second,
-			MaxIdle:     cfg.Redis.MaxIdle,
-		}
-		chainRepo, err := chain.NewRedisRepo(redisConf)
-		if err != nil {
-			return nil, fmt.Errorf("error setting up redis chain repo: %s", err)
-		}
-		return chainRepo, nil
-	}
-	return nil, fmt.Errorf("invalid chain repo type (%s). valid options are 'memory' and 'redis'", cfg.ChainRepoType)
 }
