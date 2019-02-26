@@ -128,8 +128,3 @@ The aforementioned concepts and components form Spin Cycle at a high level:
 ![Spin Cycle High-Level](/spincycle/assets/img/spincycle_high_level.svg)
 
 There's more to learn and do, but everything relates to the basic concepts presented here.
-
-Next steps:
-
-* Read [Operate](operate/) docs to learn how to build and deploy Spin Cycle
-* Then [Develop](develop/) your jobs, job factory, and requests

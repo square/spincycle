@@ -83,7 +83,7 @@ Take a config option, change `.` to `_`, upper-case everything, and add `SPINCYC
 
 <a id="rm.jr_client.tls">jr_client.tls</a>: Enable TLS when RM connects to any JR at [jr_client.url](#rm.jr_client.url).
 
-<a id="rm.mysql.dsn">mysql.dsn</a>: [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) specifying connection to MySQL. Do use `tls` DSN parameter, specify the TLS config and Spin Cycle will add the `tls` DSN parameter automatically.
+<a id="rm.mysql.dsn">mysql.dsn</a>: [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) specifying connection to MySQL. The DSN must specify the database, for example: `/spincycle_production`. Do use `tls` DSN parameter, specify the TLS config and Spin Cycle will add the `tls` DSN parameter automatically.
 
 <a id="rm.server.addr">server.addr</a>: Network address:port to listen on. To listen on all interfaces on the default port, specify ":32308".
 
