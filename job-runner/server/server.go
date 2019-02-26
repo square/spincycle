@@ -109,7 +109,13 @@ func (s *Server) Boot() error {
 	}
 	// Override with env vars, if set
 	cfg.Server.Addr = config.Env("SPINCYCLE_SERVER_ADDR", cfg.Server.Addr)
-	cfg.RMClient.ServerURL = config.Env("SPINCYCLE_RMCLIENT_URL", cfg.RMClient.ServerURL)
+	cfg.Server.TLS.CertFile = config.Env("SPINCYCLE_SERVER_TLS_CERT_FILE", cfg.Server.TLS.CertFile)
+	cfg.Server.TLS.KeyFile = config.Env("SPINCYCLE_SERVER_TLS_KEY_FILE", cfg.Server.TLS.KeyFile)
+	cfg.Server.TLS.CAFile = config.Env("SPINCYCLE_SERVER_TLS_CA_FILE", cfg.Server.TLS.CAFile)
+	cfg.RMClient.ServerURL = config.Env("SPINCYCLE_RM_CLIENT_URL", cfg.RMClient.ServerURL)
+	cfg.RMClient.TLS.CertFile = config.Env("SPINCYCLE_RM_CLIENT_TLS_CERT_FILE", cfg.RMClient.TLS.CertFile)
+	cfg.RMClient.TLS.KeyFile = config.Env("SPINCYCLE_RM_CLIENT_TLS_KEY_FILE", cfg.RMClient.TLS.KeyFile)
+	cfg.RMClient.TLS.CAFile = config.Env("SPINCYCLE_RM_CLIENT_TLS_CA_FILE", cfg.RMClient.TLS.CAFile)
 	s.appCtx.Config = cfg
 	cfgstr, _ := json.MarshalIndent(cfg, "", "  ")
 	log.Printf("Config: %s", cfgstr)

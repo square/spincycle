@@ -170,9 +170,15 @@ func (s *Server) Boot() error {
 	}
 	// Override with env vars, if set
 	cfg.Server.Addr = config.Env("SPINCYCLE_SERVER_ADDR", cfg.Server.Addr)
+	cfg.Server.TLS.CertFile = config.Env("SPINCYCLE_SERVER_TLS_CERT_FILE", cfg.Server.TLS.CertFile)
+	cfg.Server.TLS.KeyFile = config.Env("SPINCYCLE_SERVER_TLS_KEY_FILE", cfg.Server.TLS.KeyFile)
+	cfg.Server.TLS.CAFile = config.Env("SPINCYCLE_SERVER_TLS_CA_FILE", cfg.Server.TLS.CAFile)
 	cfg.MySQL.DSN = config.Env("SPINCYCLE_MYSQL_DSN", cfg.MySQL.DSN)
 	cfg.Specs.Dir = config.Env("SPINCYCLE_SPECS_DIR", cfg.Specs.Dir)
-	cfg.JRClient.ServerURL = config.Env("SPINCYCLE_JRCLIENT_URL", cfg.JRClient.ServerURL)
+	cfg.JRClient.ServerURL = config.Env("SPINCYCLE_JR_CLIENT_URL", cfg.JRClient.ServerURL)
+	cfg.JRClient.TLS.CertFile = config.Env("SPINCYCLE_JR_CLIENT_TLS_CERT_FILE", cfg.JRClient.TLS.CertFile)
+	cfg.JRClient.TLS.KeyFile = config.Env("SPINCYCLE_JR_CLIENT_TLS_KEY_FILE", cfg.JRClient.TLS.KeyFile)
+	cfg.JRClient.TLS.CAFile = config.Env("SPINCYCLE_JR_CLIENT_TLS_CA_FILE", cfg.JRClient.TLS.CAFile)
 	s.appCtx.Config = cfg
 	cfgstr, _ := json.MarshalIndent(cfg, "", "  ")
 	log.Printf("Config: %s", cfgstr)
