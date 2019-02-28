@@ -18,6 +18,7 @@ import (
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/job-runner/status"
 	"github.com/square/spincycle/proto"
+	v "github.com/square/spincycle/version"
 )
 
 const (
@@ -82,6 +83,7 @@ func NewAPI(cfg Config) *API {
 	api.echo.GET(API_ROOT+"job-chains/:requestId/status", api.statusJobChainHandler)
 
 	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler)
+	api.echo.GET("/version", api.versionHandler)
 
 	// //////////////////////////////////////////////////////////////////////
 	// Middleware and hooks
@@ -89,35 +91,10 @@ func NewAPI(cfg Config) *API {
 	api.echo.Use(middleware.Recover())
 	api.echo.Use(middleware.Logger())
 
-	// Auth hook
+	// Called before every route
 	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if cfg.AppCtx.Hooks.Auth == nil {
-				return next(c) // no auth
-			}
-			ok, err := cfg.AppCtx.Hooks.Auth(c.Request())
-			if err != nil {
-				return err
-			}
-			if !ok {
-				//c.Response().Header().Set(echo.HeaderWWWAuthenticate, basic+" realm="+realm)
-				return echo.ErrUnauthorized // 401
-			}
-			return next(c) // auth OK
-		}
-	}))
-
-	// SetUsername hook
-	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			if cfg.AppCtx.Hooks.SetUsername == nil {
-				return next(c) // no auth
-			}
-			username, err := cfg.AppCtx.Hooks.SetUsername(c.Request())
-			if err != nil {
-				return err
-			}
-			c.Set("username", username)
+			c.Response().Header().Set("X-Spincycle-Version", v.Version())
 			return next(c)
 		}
 	}))
@@ -301,6 +278,10 @@ func (api *API) statusRunningHandler(c echo.Context) error {
 		return handleError(ErrTraverserNotFound)
 	}
 	return c.JSON(http.StatusOK, running)
+}
+
+func (api *API) versionHandler(c echo.Context) error {
+	return c.String(http.StatusOK, v.Version())
 }
 
 // ------------------------------------------------------------------------- //

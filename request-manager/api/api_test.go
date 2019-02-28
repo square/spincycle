@@ -4,6 +4,7 @@ package api_test
 
 import (
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/square/spincycle/request-manager/auth"
 	testutil "github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
+	v "github.com/square/spincycle/version"
 )
 
 var server *httptest.Server
@@ -795,5 +797,27 @@ func TestAuth(t *testing.T) {
 	}
 	if startCalled == false {
 		t.Errorf("request.Manager.Start not called, expected it to be called")
+	}
+}
+
+func TestGetVersion(t *testing.T) {
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
+	defer cleanup()
+	resp, err := http.Get(server.URL + "/version")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("response status = %d, expected %d", resp.StatusCode, http.StatusOK)
+	}
+	expectVersion := v.Version()
+	gotVersion := string(body)
+	if gotVersion != expectVersion {
+		t.Errorf("got version '%s', expected '%s'", gotVersion, expectVersion)
 	}
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/square/spincycle/request-manager/joblog"
 	"github.com/square/spincycle/request-manager/request"
 	"github.com/square/spincycle/request-manager/status"
+	v "github.com/square/spincycle/version"
 )
 
 const (
@@ -81,6 +82,7 @@ func NewAPI(appCtx app.Context) *API {
 	// Meta
 	api.echo.GET(API_ROOT+"request-list", api.requestListHandler)     // request list
 	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler) // running requests
+	api.echo.GET("/version", api.versionHandler)                      // return version.VERSION
 
 	// //////////////////////////////////////////////////////////////////////
 	// Middleware and hooks
@@ -92,13 +94,14 @@ func NewAPI(appCtx app.Context) *API {
 	// @todo: ignore OPTION requests?
 	api.echo.Use((func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			c.Response().Header().Set("X-Spincycle-Version", v.Version())
 			caller, err := appCtx.Auth.Authenticate(c.Request())
 			if err != nil {
 				return echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 			}
 			c.Set("caller", caller)
 			c.Set("username", caller.Name)
-			return next(c) // authenticed
+			return next(c) // authenticated
 		}
 	}))
 
@@ -405,6 +408,10 @@ func (api *API) statusRunningHandler(c echo.Context) error {
 
 	// Return the RequestStatus struct.
 	return c.JSON(http.StatusOK, running)
+}
+
+func (api *API) versionHandler(c echo.Context) error {
+	return c.String(http.StatusOK, v.Version())
 }
 
 // ------------------------------------------------------------------------- //

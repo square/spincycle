@@ -5,18 +5,21 @@ services:
     command: --default-authentication-plugin=mysql_native_password
     environment:
       MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    expose:
+      - "3306"
   request-manager:
     build:
       context: ./
       dockerfile: request-manager/Dockerfile
     ports:
-      - "127.0.0.1:32308:32308"
+      - "32308:32308"
     depends_on:
       - mysql
     environment:
       INIT_SPINCYCLE_DB: "yes"
+      SPINCYCLE_SERVER_ADDR: "0.0.0.0:32308"
       SPINCYCLE_MYSQL_DSN: "root:@tcp(mysql:3306)/spincycle_development"
-      SPINCYCLE_JRCLIENT_URL: "http://job-runner:32307"
+      SPINCYCLE_JR_CLIENT_URL: "http://job-runner:32307"
   job-runner:
     build:
       context: ./
@@ -24,4 +27,6 @@ services:
     depends_on:
       - mysql
     environment:
-      SPINCYCLE_RMCLIENT_URL: "http://request-manager:32308"
+      SPINCYCLE_RM_CLIENT_URL: "http://request-manager:32308"
+    expose:
+      - "32307"

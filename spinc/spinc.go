@@ -13,6 +13,7 @@ import (
 	"github.com/square/spincycle/spinc/app"
 	"github.com/square/spincycle/spinc/cmd"
 	"github.com/square/spincycle/spinc/config"
+	v "github.com/square/spincycle/version"
 )
 
 var (
@@ -114,7 +115,7 @@ func Run(ctx app.Context) error {
 
 	// spinc --version or spinc version
 	if o.Version || c.Cmd == "version" {
-		fmt.Println("spinc v0.0.0")
+		fmt.Println("spinc " + v.Version())
 		return nil
 	}
 

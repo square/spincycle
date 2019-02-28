@@ -38,3 +38,6 @@ Spin Cycle can do anything you can program. The database team at [Square](https:
 
 ## API
 * [API Endpoints](v1.0/api/)
+
+## Release Notes
+* [Release Notes](release-notes)
