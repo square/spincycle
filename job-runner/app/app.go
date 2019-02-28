@@ -23,9 +23,7 @@ type Factories struct {
 }
 
 type Hooks struct {
-	LoadConfig  func(Context) (config.JobRunner, error)
-	Auth        func(*http.Request) (bool, error)
-	SetUsername func(*http.Request) (string, error)
+	LoadConfig func(Context) (config.JobRunner, error)
 
 	// RunAPI runs the Job Runner API. It should block until the API is stopped
 	// via a call to StopAPI. If this hook is provided, it is called instead of
@@ -54,10 +52,7 @@ func Defaults() Context {
 		},
 		Hooks: Hooks{
 			LoadConfig: LoadConfig,
-			SetUsername: (func(ireq *http.Request) (string, error) {
-				return "admin", nil
-			}),
-			ServerURL: ServerURL,
+			ServerURL:  ServerURL,
 		},
 	}
 }
