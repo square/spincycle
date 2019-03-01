@@ -1,0 +1,36 @@
+---
+sequences:
+  request-name:
+    args:
+      required:
+        - name: cmd
+          desc: Shell command name
+      optional:
+        - name: foo
+          desc: Args to shell command
+    nodes:
+      job1name:
+        category: conditional
+        if: foo
+        eq:
+          yes: yesJob
+          default: defaultSeq
+        args:
+          - expected: cmd
+            given: cmd
+          - expected: foo
+            given: foo
+        sets: []
+  defaultSeq:
+    args:
+      required:
+        - name: cmd
+          desc: Shell command name
+    nodes:
+      job1name:
+        category: job
+        type: job1
+        args:
+          - expected: cmd
+            given: cmd
+        sets: []
