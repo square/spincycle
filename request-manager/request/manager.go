@@ -431,30 +431,34 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	}
 
 	// For each job in the job chain, get the job's status from either
-	// liveJobs or finishedJobs. Since the way we collect these maps is not
-	// transactional (we get liveJobs before finishedJobs), there can
-	// potentially be outdated info in liveJobs. Therefore, statuses in
-	// finishedJobs take priority over statuses in liveJobs. If a job does
-	// not exist in either map, it must be pending.
-	allS := proto.JobStatuses{}
+	// liveJ or finishedJ. We get live before finished, so it's possible
+	// a job can complete between these two, which means JR reports it
+	// running and there's a JLE for it. But it's also possible the job
+	// is being retried which yields the same. Live takes precdence, i.e.
+	// the point in time for this status is when job status is fetched
+	// from JR. -- If job is neither live nor logged, then we presume
+	// it's pending.
+	jobStatuses := proto.JobStatuses{}
 	for _, j := range req.JobChain.Jobs {
-		if s, ok := finishedJ[j.Id]; ok {
-			allS = append(allS, s)
-		} else if s, ok := liveJ[j.Id]; ok {
-			allS = append(allS, s)
-		} else {
+		if s, ok := liveJ[j.Id]; ok { // live
+			jobStatuses = append(jobStatuses, s)
+		} else if s, ok := finishedJ[j.Id]; ok { // logged/complete
+			jobStatuses = append(jobStatuses, s)
+		} else { // presume pending
 			s := proto.JobStatus{
 				JobId: j.Id,
 				Name:  j.Name,
 				State: proto.STATE_PENDING,
 			}
-			allS = append(allS, s)
+			jobStatuses = append(jobStatuses, s)
 		}
 	}
 
+	// @todo: Fix inconsistent JobStatus fields. See TestStatusJobRetried
+
 	reqStatus.JobChainStatus = proto.JobChainStatus{
 		RequestId:   req.Id,
-		JobStatuses: allS,
+		JobStatuses: jobStatuses,
 	}
 
 	return reqStatus, nil
