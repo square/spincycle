@@ -171,8 +171,9 @@ type JobStatus struct {
 	Args      map[string]interface{} `json:"jobArgs"`
 	StartedAt int64                  `json:"startedAt"` // when job started (UnixNano)
 	State     byte                   `json:"state"`     // usually proto.STATE_RUNNING
-	Status    string                 `json:"status"`    // @todo: job.Status()
+	Status    string                 `json:"status"`    // real-time status, if running
 	N         uint                   `json:"n"`         // Nth job ran in chain
+	// @todo: Try uint
 }
 
 // JobChainStatus represents the status of a job chain reported by the Job Runner.

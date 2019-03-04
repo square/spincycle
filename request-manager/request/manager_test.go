@@ -577,14 +577,6 @@ func TestStatusRunning(t *testing.T) {
 						State:     proto.STATE_RUNNING,
 						Status:    "in progress",
 					},
-					// This job is marked as COMPLETE in the database. Therefore,
-					// the RM will disregard this status since it's out of date.
-					proto.JobStatus{
-						RequestId: reqId,
-						JobId:     "590s",
-						State:     proto.STATE_RUNNING,
-						Status:    "will get disregarded",
-					},
 				},
 			}, nil
 		},
