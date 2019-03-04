@@ -438,6 +438,7 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 	// not exist in either map, it must be pending.
 	allS := proto.JobStatuses{}
 	for _, j := range req.JobChain.Jobs {
+		fmt.Printf("LOG: %+v\n", j)
 		if s, ok := finishedJ[j.Id]; ok {
 			allS = append(allS, s)
 		} else if s, ok := liveJ[j.Id]; ok {
@@ -451,6 +452,8 @@ func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
 			allS = append(allS, s)
 		}
 	}
+
+	// @todo: Fix inconsistent JobStatus fields. See TestStatusJobRetried
 
 	reqStatus.JobChainStatus = proto.JobChainStatus{
 		RequestId:   req.Id,
