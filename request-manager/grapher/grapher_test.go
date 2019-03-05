@@ -164,15 +164,15 @@ func TestNodeRetry(t *testing.T) {
 			if node.Retry != 3 {
 				t.Errorf("%s node retries = %d, expected %d", node.Name, node.Retry, 3)
 			}
-			if node.RetryWait != 10 {
-				t.Errorf("%s node retry delay = %d, expected %d", node.Name, node.RetryWait, 10)
+			if node.RetryWait != "10s" {
+				t.Errorf("%s node retryWait = %s, expected 10s", node.Name, node.RetryWait)
 			}
 		} else {
 			if node.Retry != 0 {
-				t.Errorf("%s node retries = %d, expected %d", node.Name, node.Retry, 0)
+				t.Errorf("%s node retries = %d, expected 0", node.Name, node.Retry)
 			}
-			if node.RetryWait != 0 {
-				t.Errorf("%s node retry delay = %d, expected %d", node.Name, node.RetryWait, 0)
+			if node.RetryWait != "" {
+				t.Errorf("%s node retryWait = %s, expected empty string", node.Name, node.RetryWait)
 			}
 		}
 	}

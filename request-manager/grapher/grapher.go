@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/proto"
@@ -721,6 +722,20 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 	err = rj.Create(nodeArgs)
 	if err != nil {
 		return nil, fmt.Errorf("Error creating '%s %s' job: %s", j.NodeType, j.Name, err)
+	}
+
+	if j.Retry > 0 {
+		// retry is set, so parse retryWait if set, else default to 0s
+		if j.RetryWait != "" {
+			if _, err := time.ParseDuration(j.RetryWait); err != nil {
+				return nil, fmt.Errorf("Error creating '%s %s' job: retryWait: %s is not a valid duration:  %s", j.NodeType, j.Name, j.RetryWait, err)
+			}
+		} else {
+			j.RetryWait = "0s"
+		}
+	} else if j.RetryWait != "" {
+		// If no retry, then retryWait shouldn't be set
+		return nil, fmt.Errorf("Error creating '%s %s' job: retryWait: %s is set but retry is not set", j.NodeType, j.Name, j.RetryWait)
 	}
 
 	return &Node{

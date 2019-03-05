@@ -18,7 +18,7 @@ sequences:
         sets: [aArg]
         deps: []
         retry: 1
-        retryWait: 500
+        retryWait: 500ms
       b:
         category: job
         type: bJobType

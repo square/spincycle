@@ -70,6 +70,12 @@ type runner struct {
 // NewRunner takes a proto.Job struct and its corresponding job.Job interface, and
 // returns a Runner.
 func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, sequenceTry uint, rmc rm.Client) Runner {
+	var retryWait time.Duration
+	if pJob.RetryWait != "" {
+		retryWait, _ = time.ParseDuration(pJob.RetryWait) // validated by grapher
+	} else {
+		retryWait = 0
+	}
 	return &runner{
 		realJob: realJob,
 		reqId:   reqId,
@@ -82,7 +88,7 @@ func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, se
 		maxTries:    1 + pJob.Retry, // + 1 because we always run once
 		sequenceId:  pJob.SequenceId,
 		sequenceTry: sequenceTry,
-		retryWait:   time.Duration(pJob.RetryWait) * time.Millisecond,
+		retryWait:   retryWait,
 		stopChan:    make(chan struct{}),
 		Mutex:       &sync.Mutex{},
 		logger:      log.WithFields(log.Fields{"requestId": reqId, "jobId": pJob.Id}),

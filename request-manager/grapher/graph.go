@@ -33,7 +33,7 @@ type Node struct {
 	Name          string                 // the name of the node
 	Args          map[string]interface{} // the args the node was created with
 	Retry         uint                   // the number of times to retry a node
-	RetryWait     uint                   // the time, in seconds, to sleep between retries
+	RetryWait     string                 // the time, in seconds, to sleep between retries
 	SequenceId    string                 // ID for first node in sequence
 	SequenceRetry uint                   // Number of times to retry a sequence. Only set for first node in sequence.
 }
