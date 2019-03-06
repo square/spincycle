@@ -79,7 +79,7 @@ A job node specifies a job to run. (If this was a tree data structure, these wou
           - env   # string
 	  - nodes # []string
         retry: 2
-        retryWait: 3000 # ms
+        retryWait: 3s
         deps: []
 ```
 
@@ -102,7 +102,7 @@ If a job has optional args, they must be listed so they are passed to the job, i
 
 `sets:` specifies the job args that the job sets. The RM checks this. In the example above, the job sets "app", "env", and "node" in `jobArgs`. After calling the job's `Create` method, the RM checks that all three are set in `jobArgs` (with any value, including nil). Like `args:`, this is strict but makes it possible to follow every arg through different sequences. It also makes it explicit which jobs set which args.
 
-`retry:` and `retryWait:` specify how many times the JR should retry the job if `Run` does not return `proto.STATE_COMPLETE`. The job is always ran once, so total runs is 1 + `retry`. `retryWait` is milliseconds between tries.
+`retry:` and `retryWait:` specify how many times the JR should retry the job if `Run` does not return `proto.STATE_COMPLETE`. The job is always ran once, so total runs is 1 + `retry`. `retryWait` is the wait time between tries. It is a [time.Duration string](https://golang.org/pkg/time/#ParseDuration) like "3s" or "500ms". If not specified, the default is no wait between tries.
 
 `deps:` is a list of node names that this node depends on. For nodes A and B, if B depends on A, the graph is A -> B. The JR runs B only after A completes successfully. A node can depend on many nodes, creating fan-out and fan-in points:
 
