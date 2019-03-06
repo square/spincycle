@@ -19,7 +19,7 @@ type NodeSpec struct {
 	Sets         []string          `yaml:"sets"`      // expected job args to be set
 	Dependencies []string          `yaml:"deps"`      // nodes with out-edges leading to this node
 	Retry        uint              `yaml:"retry"`     // the number of times to retry a "job" that fails
-	RetryWait    uint              `yaml:"retryWait"` // the time, in seconds, to sleep between "job" retries
+	RetryWait    string            `yaml:"retryWait"` // the time, in seconds, to sleep between "job" retries
 	If           string            `yaml:"if"`        // the name of the jobArg to check for a conditional value
 	Eq           map[string]string `yaml:"eq"`        // conditional values mapping to appropriate sequence names
 }

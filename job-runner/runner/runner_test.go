@@ -136,7 +136,7 @@ func TestRunStop(t *testing.T) {
 		Type:      "jtype",
 		Bytes:     []byte{},
 		Retry:     1,
-		RetryWait: 30000, // important...the runner will sleep for 30 seconds after the job fails the first time
+		RetryWait: "30s", // important...the runner will sleep for 30 seconds after the job fails the first time
 	}
 	rmc := &mock.RMClient{}
 	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
