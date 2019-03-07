@@ -47,20 +47,20 @@ func Run(ctx app.Context) error {
 	var o config.Options = cmdLine.Options
 	var c config.Command = cmdLine.Command
 
-	// Apply defaults
-	if o.Timeout == 0 {
-		o.Timeout = config.DEFAULT_TIMEOUT
-	}
-	if o.Addr == "" {
-		o.Addr = config.DEFAULT_ADDR
-	}
-
 	// Let hook modify options, if set
 	if ctx.Hooks.AfterParseOptions != nil {
 		if o.Debug {
 			app.Debug("calling hook AfterParseOptions")
 		}
 		ctx.Hooks.AfterParseOptions(&o)
+	}
+
+	// Apply defaults
+	if o.Timeout == 0 {
+		o.Timeout = config.DEFAULT_TIMEOUT
+	}
+	if o.Addr == "" {
+		o.Addr = config.DEFAULT_ADDR
 	}
 
 	// This is a little hack to make spinc -> quick help work, i.e. print
@@ -145,12 +145,6 @@ func Run(ctx app.Context) error {
 }
 
 func makeRMC(ctx app.Context) (rm.Client, error) {
-	if ctx.Options.Addr == "" {
-		return nil, fmt.Errorf("Request Manager API address is not set."+
-			" It is best to specify addr in a config file (%s). Or, specify"+
-			" --addr on the command line option or set the ADDR environment"+
-			" variable. Use --ping to test addr when set.", config.DEFAULT_CONFIG_FILES)
-	}
 	if ctx.Options.Debug {
 		app.Debug("addr: %s", ctx.Options.Addr)
 	}
