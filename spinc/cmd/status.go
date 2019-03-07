@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package cmd
 
 import (
@@ -74,4 +76,8 @@ func (c *Status) Run() error {
 
 func (c *Status) Cmd() string {
 	return "status " + c.reqId
+}
+
+func (c *Status) Help() string {
+	return "'spinc status <request ID>' prints the status of the request.\n"
 }

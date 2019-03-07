@@ -18,7 +18,7 @@ func main() {
 		Factories: app.Factories{},
 	}
 	if err := spinc.Run(defaultContext); err != nil {
-		if err != spinc.ErrHelp {
+		if err != app.ErrHelp {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}

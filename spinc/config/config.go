@@ -4,9 +4,7 @@
 package config
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -15,18 +13,13 @@ import (
 	"strings"
 
 	"github.com/alexflint/go-arg"
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager"
 	"gopkg.in/yaml.v2"
 )
 
 const (
 	DEFAULT_CONFIG_FILES = "/etc/spinc/spinc.yaml,~/.spinc.yaml"
-	DEFAULT_TIMEOUT      = 10000 // 10s
-)
-
-var (
-	ErrUnknownRequest = errors.New("request does not exist")
+	DEFAULT_ADDR         = "http://127.0.0.1:32308"
+	DEFAULT_TIMEOUT      = 5000 // 5s
 )
 
 // Options represents typical command line options: --addr, --config, etc.
@@ -84,98 +77,6 @@ func ParseCommandLine(def Options) CommandLine {
 		}
 	}
 	return c
-}
-
-// Help prints full help or minimal request help if full is false. An rm.Client
-// is used to get the list of available requests from the Request Manager API.
-func Help(full bool, rmc rm.Client, out io.Writer) {
-	if full {
-		fmt.Fprintf(out, "Usage: spinc [flags] <command> [request|id] [args|file]\n\n"+
-			"Flags:\n"+
-			"  --addr     Address of Request Managers (https://local.domain:8080)\n"+
-			"  --config   Config files (default: %s)\n"+
-			"  --debug    Print debug to stderr\n"+
-			"  --env      Environment (dev, staging, production)\n"+
-			"  --help     Print help\n"+
-			"  --ping     Ping addr\n"+
-			"  --timeout  API timeout, milliseconds (default: %d)\n"+
-			"  --version  Print version\n"+
-			"  -v         Verbose ps or status\n\n"+
-			"Commands:\n"+
-			"  help    <request>  Print request help\n"+
-			"  start   <request>  Start new request\n"+
-			"  stop    <ID>       Stop request\n"+
-			"  status  <ID>       Print status of request\n"+
-			"  running <ID>       Exit 0 if request is running, else exit 1\n"+
-			"  ps                 Show all running requests and jobs\n\n",
-			DEFAULT_CONFIG_FILES, DEFAULT_TIMEOUT)
-		printRequestList(rmc, out)
-		fmt.Fprintf(out, "\n'spinc help <request>' for request help\n")
-	} else {
-		fmt.Fprintf(out, "spinc help  <request>\nspinc start <request>\n\n")
-		printRequestList(rmc, out)
-		fmt.Fprintf(out, "\n'spinc help' for more\n")
-	}
-}
-
-func printRequestList(rmc rm.Client, out io.Writer) {
-	if rmc == nil {
-		fmt.Fprintf(out, "Specify --addr or ADDR environment variable to list all requests\n")
-		return
-	}
-
-	fmt.Fprintf(out, "Requests:\n")
-	req, err := rmc.RequestList()
-	if err != nil {
-		fmt.Fprintf(out, "%s\n", err)
-	} else {
-		for _, r := range req {
-			fmt.Fprintf(out, "  "+r.Name+"\n")
-		}
-	}
-}
-
-func RequestHelp(reqName string, rmc rm.Client) error {
-	reqList, err := rmc.RequestList()
-	if err != nil {
-		return err
-	}
-
-	var req *proto.RequestSpec
-	for _, r := range reqList {
-		if r.Name != reqName {
-			continue
-		}
-		req = &r
-		break
-	}
-
-	if req == nil {
-		return ErrUnknownRequest
-	}
-
-	fmt.Printf("%s args (* required)\n\n", req.Name)
-	l := 0
-	for _, a := range req.Args {
-		if len(a.Name) > l {
-			l = len(a.Name)
-		}
-	}
-	line := fmt.Sprintf("  %%s %%-%ds  %%s\n", l)
-	for _, a := range req.Args {
-		help := a.Desc
-		star := " "
-		if a.Type == proto.ARG_TYPE_REQUIRED {
-			star = "*"
-		} else {
-			help += " (default: " + a.Default.(string) + ")"
-		}
-		fmt.Printf(line, star, a.Name, help)
-	}
-	fmt.Println("\nspinc start shutdown-host # prompt for args\n" +
-		"spinc start shutdown-host <args>\n" +
-		"spinc start shutdown-host <args-file.yaml>")
-	return nil
 }
 
 func ParseConfigFiles(files string, debug bool) Options {

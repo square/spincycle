@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package cmd
 
 import (
@@ -90,4 +92,9 @@ func (c *Log) Run() error {
 
 func (c *Log) Cmd() string {
 	return "log " + c.reqId
+}
+
+func (c *Log) Help() string {
+	return "'spin log <request ID>' prints the entire job log of the request.\n" +
+		"The job log can be long, so pipe the output to less: 'spinc log <request ID> | less'.\n"
 }

@@ -23,10 +23,6 @@
   version = "~3.2"
 
 [[constraint]]
-  name = "github.com/satori/go.uuid"
-  revision = "b2ce2384e17bbe0c6d34077efa39dbab3e09123b"
-
-[[constraint]]
   name = "github.com/go-sql-driver/mysql"
   version = "v1.4.1"
 

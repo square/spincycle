@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package cmd
 
 import (
@@ -52,4 +54,9 @@ func (c *Running) Run() error {
 
 func (c *Running) Cmd() string {
 	return "running " + c.reqId
+}
+
+func (c *Running) Help() string {
+	return "'spinc running <request ID>' exits 0 if the request is pending or running, else exits 1.\n" +
+		"This can be used in Bash scripts like: 'while spinc running <request ID>; do sleep 2; done'.\n"
 }
