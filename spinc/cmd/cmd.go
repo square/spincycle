@@ -41,6 +41,10 @@ func (f *DefaultFactory) Make(name string, ctx app.Context) (app.Command, error)
 		return NewStatus(ctx), nil
 	case "stop":
 		return NewStop(ctx), nil
+	case "help":
+		return NewHelp(ctx), nil
+	case "version":
+		return NewVersion(ctx), nil
 	default:
 		return nil, ErrNotExist
 	}

@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package cmd
 
 import (
@@ -35,4 +37,8 @@ func (c *Stop) Run() error {
 
 func (c *Stop) Cmd() string {
 	return "stop " + c.reqId
+}
+
+func (c *Stop) Help() string {
+	return "'spinc stop <request ID>' stops the request immediately.\n"
 }

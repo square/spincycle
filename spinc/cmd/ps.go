@@ -123,3 +123,7 @@ func (c *Ps) Run() error {
 func (c *Ps) Cmd() string {
 	return "ps"
 }
+
+func (c *Ps) Help() string {
+	return "'spinc ps' prints all running requests and jobs.\n"
+}

@@ -128,13 +128,6 @@
   version = "v1.1"
 
 [[projects]]
-  digest = "1:5ac0fbcd505c34fff82274992b82b0528f80fbed290125cdd04edc88d6246fd6"
-  name = "github.com/satori/go.uuid"
-  packages = ["."]
-  pruneopts = "NUT"
-  revision = "b2ce2384e17bbe0c6d34077efa39dbab3e09123b"
-
-[[projects]]
   digest = "1:af354641f23332b1a8d5d361d11b5a9171589e412a67d499633706c611acc064"
   name = "github.com/valyala/bytebufferpool"
   packages = ["."]
@@ -203,7 +196,6 @@
     "github.com/labstack/echo/middleware",
     "github.com/orcaman/concurrent-map",
     "github.com/rs/xid",
-    "github.com/satori/go.uuid",
     "gopkg.in/yaml.v2",
   ]
   solver-name = "gps-cdcl"

@@ -1,15 +1,21 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package app provides app-wide data structs and functions.
 package app
 
 import (
+	"errors"
 	"io"
 	"log"
 	"net/http"
 
 	"github.com/square/spincycle/request-manager"
 	"github.com/square/spincycle/spinc/config"
+)
+
+var (
+	ErrHelp           = errors.New("print help")
+	ErrUnknownRequest = errors.New("request does not exist")
 )
 
 // Context represents how to run spinc. A context is passed to spinc.Run().
@@ -27,12 +33,14 @@ type Context struct {
 	Options  config.Options // command line options (--addr, etc.)
 	Command  config.Command // command and args, if any ("start <request>", etc.)
 	RMClient rm.Client      // Request Manager client
+	Nargs    int            // number of positional args including command
 }
 
 type Command interface {
 	Prepare() error
 	Run() error
 	Cmd() string
+	Help() string
 }
 
 type CommandFactory interface {

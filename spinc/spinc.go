@@ -4,20 +4,15 @@
 package spinc
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	rm "github.com/square/spincycle/request-manager"
 	"github.com/square/spincycle/spinc/app"
 	"github.com/square/spincycle/spinc/cmd"
 	"github.com/square/spincycle/spinc/config"
-	v "github.com/square/spincycle/version"
-)
-
-var (
-	ErrHelp = errors.New("print help")
 )
 
 // Run runs spinc and exits when done. When using a standard spinc bin, Run is
@@ -51,137 +46,90 @@ func Run(ctx app.Context) error {
 	// Final options and commands
 	var o config.Options = cmdLine.Options
 	var c config.Command = cmdLine.Command
-	if o.Debug {
-		app.Debug("command: %#v\n", c)
-		app.Debug("options: %#v\n", o)
-	}
 
+	// Let hook modify options, if set
 	if ctx.Hooks.AfterParseOptions != nil {
 		if o.Debug {
 			app.Debug("calling hook AfterParseOptions")
 		}
 		ctx.Hooks.AfterParseOptions(&o)
-
-		// Dump options again to see if hook changed them
-		if o.Debug {
-			app.Debug("options: %#v\n", o)
-		}
 	}
+
+	// Apply defaults
+	if o.Timeout == 0 {
+		o.Timeout = config.DEFAULT_TIMEOUT
+	}
+	if o.Addr == "" {
+		o.Addr = config.DEFAULT_ADDR
+	}
+
+	// This is a little hack to make spinc -> quick help work, i.e. print
+	// quick help when there is no command. We can't check os.Args because
+	// it'll be >0 if any flag, like --debug, is specified but we ignore
+	// flags. And we can't check c.Cmd == "" because we set c.Cmd = "help".
+	ctx.Nargs = len(c.Args) + 1
+	if c.Cmd == "" {
+		ctx.Nargs -= 1
+	}
+
+	// spinc with no args or --help = spinc help
+	if len(os.Args) == 1 || o.Help || c.Cmd == "" {
+		c.Cmd = "help"
+	}
+
+	// --version = spinc version
+	if o.Version {
+		c.Cmd = "version"
+	}
+
 	ctx.Options = o
 	ctx.Command = c
-
-	// //////////////////////////////////////////////////////////////////////
-	// Help and version
-	// //////////////////////////////////////////////////////////////////////
-
-	// Help uses a Request Manager client to fetch the list of all requests.
-	// If addr is set, then this works; else, ignore and always print help.
-	rmc, _ := makeRMC(&ctx)
-
-	// spinc with no args (Args[0] = "spinc" itself). Print short request help
-	// because Ryan is very busy.
-	if len(os.Args) == 1 {
-		config.Help(false, rmc, ctx.Out)
-		return ErrHelp
+	if o.Debug {
+		app.Debug("command: %#v\n", c)
+		app.Debug("options: %#v\n", o)
 	}
 
-	// spinc --help or spinc help (full help)
-	if o.Help || c.Cmd == "help" || c.Cmd == "" {
-		config.Help(true, rmc, ctx.Out)
-		return ErrHelp
-	}
-
-	// spinc help <command>
-	if c.Cmd == "help" && len(c.Args) > 0 {
-		// Need rm client for this
-		if rmc == nil {
-			var err error
-			rmc, err = makeRMC(&ctx)
-			if err != nil {
-				return err
-			}
-		}
-		reqName := c.Args[0]
-		if err := config.RequestHelp(reqName, rmc); err != nil {
-			switch err {
-			case config.ErrUnknownRequest:
-				return fmt.Errorf("Unknown request: %s. Run spinc (no arguments) to list all requests.", reqName)
-			default:
-				return fmt.Errorf("API error: %s. Use --ping to test the API connection.", err)
-			}
-		}
-		return nil
-	}
-
-	// spinc --version or spinc version
-	if o.Version || c.Cmd == "version" {
-		fmt.Println("spinc " + v.Version())
-		return nil
+	// Use default, built-in command factory if not set by user
+	if ctx.Factories.Command == nil {
+		ctx.Factories.Command = &cmd.DefaultFactory{}
 	}
 
 	// //////////////////////////////////////////////////////////////////////
 	// Request Manager Client
 	// //////////////////////////////////////////////////////////////////////
-	if rmc == nil {
-		var err error
-		rmc, err = makeRMC(&ctx)
-		if err != nil {
+	var err error
+	ctx.RMClient, err = makeRMC(ctx)
+	if err != nil {
+		if o.Debug {
+			app.Debug("error making RM client: %s", err)
+		}
+		// All cmds except help and version require an RM client
+		if c.Cmd != "help" && c.Cmd != "version" {
 			return err
 		}
 	}
 
 	// //////////////////////////////////////////////////////////////////////
-	// Ping
-	// //////////////////////////////////////////////////////////////////////
-	if o.Ping {
-		if _, err := rmc.RequestList(); err != nil {
-			return fmt.Errorf("Ping failed: %s", err)
-		}
-		fmt.Printf("%s OK\n", o.Addr)
-		return nil
-	}
-
-	// //////////////////////////////////////////////////////////////////////
 	// Commands
 	// //////////////////////////////////////////////////////////////////////
-	cmdFactory := &cmd.DefaultFactory{}
 
-	var err error
-	var run app.Command
-	if ctx.Factories.Command != nil {
-		run, err = ctx.Factories.Command.Make(c.Cmd, ctx)
-		if err != nil {
-			switch err {
-			case cmd.ErrNotExist:
-				if o.Debug {
-					app.Debug("user cmd factory cannot make a %s cmd, trying default factory", c.Cmd)
-				}
-			default:
-				return fmt.Errorf("User command factory error: %s", err)
-			}
-		}
-	}
-	if run == nil {
-		if o.Debug {
-			app.Debug("using default factory to make a %s cmd", c.Cmd)
-		}
-		run, err = cmdFactory.Make(c.Cmd, ctx)
-		if err != nil {
-			switch err {
-			case cmd.ErrNotExist:
-				return fmt.Errorf("Unknown command: %s. Run 'spinc help' to list commands.", c.Cmd)
-			default:
-				return fmt.Errorf("Command factory error: %s", err)
-			}
+	spincCmd, err := ctx.Factories.Command.Make(c.Cmd, ctx)
+	if err != nil {
+		switch err {
+		case cmd.ErrNotExist:
+			return fmt.Errorf("Unknown command: %s. Run 'spinc help' to list commands.", c.Cmd)
+		default:
+			return fmt.Errorf("Command factory error: %s", err)
 		}
 	}
 
-	if err := run.Prepare(); err != nil {
+	// Let command prepare to run. The start command makes heavy use of this.
+	if err := spincCmd.Prepare(); err != nil {
 		if o.Debug {
 			app.Debug("%s Prepare error: %s", c.Cmd, err)
 		}
 		switch err {
-		case config.ErrUnknownRequest:
+		case app.ErrUnknownRequest:
 			reqName := c.Args[0]
 			return fmt.Errorf("Unknown request: %s. Run spinc (no arguments) to list all requests.", reqName)
 		default:
@@ -189,36 +137,29 @@ func Run(ctx app.Context) error {
 		}
 	}
 
-	if err := run.Run(); err != nil {
-		if o.Debug {
-			app.Debug("%s Run error: %s", c.Cmd, err)
-		}
-		return err
+	err = spincCmd.Run()
+	if o.Debug {
+		app.Debug("%s Run error: %s", c.Cmd, err)
 	}
-
-	return nil
+	return err
 }
 
-func makeRMC(ctx *app.Context) (rm.Client, error) {
-	if ctx.Options.Addr == "" {
-		return nil, fmt.Errorf("Request Manager API address is not set."+
-			" It is best to specify addr in a config file (%s). Or, specify"+
-			" --addr on the command line option or set the ADDR environment"+
-			" variable. Use --ping to test addr when set.", config.DEFAULT_CONFIG_FILES)
-	}
+func makeRMC(ctx app.Context) (rm.Client, error) {
 	if ctx.Options.Debug {
 		app.Debug("addr: %s", ctx.Options.Addr)
 	}
 	var httpClient *http.Client
 	var err error
 	if ctx.Factories.HTTPClient != nil {
-		httpClient, err = ctx.Factories.HTTPClient.Make(*ctx)
+		httpClient, err = ctx.Factories.HTTPClient.Make(ctx)
 	} else {
-		httpClient = &http.Client{}
+		httpClient = &http.Client{
+			Timeout: time.Duration(ctx.Options.Timeout) * time.Millisecond,
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("Error making http.Client: %s", err)
 	}
-	ctx.RMClient = rm.NewClient(httpClient, ctx.Options.Addr)
-	return ctx.RMClient, nil
+	rmc := rm.NewClient(httpClient, ctx.Options.Addr)
+	return rmc, nil
 }

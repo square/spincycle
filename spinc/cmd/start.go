@@ -1,3 +1,5 @@
+// Copyright 2017-2019, Square, Inc.
+
 package cmd
 
 import (
@@ -6,7 +8,6 @@ import (
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/spinc/app"
-	"github.com/square/spincycle/spinc/config"
 	"github.com/square/spincycle/spinc/prompt"
 )
 
@@ -53,7 +54,7 @@ func (c *Start) Prepare() error {
 		break
 	}
 	if req == nil {
-		return config.ErrUnknownRequest
+		return app.ErrUnknownRequest
 	}
 
 	// Split and save request args given on cmd line
@@ -213,4 +214,9 @@ func (c *Start) Cmd() string {
 	c.args = args
 	c.fullCmd = fullCmd
 	return c.fullCmd
+}
+
+func (c *Start) Help() string {
+	return "'spinc start <request> [args]' starts a new request.\n" +
+		"Request args can be provided, else spinc prompts for them. Run 'spinc help <request>' to list the request args.\n"
 }

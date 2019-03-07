@@ -20,7 +20,7 @@ func TestArgsNoCommand(t *testing.T) {
 	}
 	os.Args = []string{"spinc", "--env", "staging", "--addr", "http://localhost"}
 	err := spinc.Run(ctx)
-	if err != spinc.ErrHelp {
+	if err != app.ErrHelp {
 		t.Errorf("got error '%v', expected ErrHelp", err)
 	}
 }
