@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package chain implements a job chain. It provides the ability to traverse a chain
 // and run all of the jobs in it.
@@ -6,7 +6,6 @@ package chain
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
@@ -77,35 +76,6 @@ func NewChain(jc *proto.JobChain, sequenceTries map[string]uint, totalJobTries m
 	}
 }
 
-// ErrInvalidChain is the error returned when a chain is not valid.
-type ErrInvalidChain struct {
-	Message string
-}
-
-func (e ErrInvalidChain) Error() string {
-	return e.Message
-}
-
-// FirstJob finds the job in the chain with indegree 0. If there is not
-// exactly one of these jobs, it returns an error.
-func (c *Chain) FirstJob() (proto.Job, error) {
-	var jobIds []string
-	for jobId, count := range c.indegreeCounts() {
-		if count == 0 {
-			jobIds = append(jobIds, jobId)
-		}
-	}
-
-	if len(jobIds) != 1 {
-		return proto.Job{}, ErrInvalidChain{
-			Message: fmt.Sprintf("chain has %d first job(s), should "+
-				"have one (first job(s) = %v)", len(jobIds), jobIds),
-		}
-	}
-
-	return c.jobChain.Jobs[jobIds[0]], nil
-}
-
 // NextJobs finds all of the jobs adjacent to the given job.
 func (c *Chain) NextJobs(jobId string) proto.Jobs {
 	c.jobsMux.RLock()
@@ -136,16 +106,13 @@ func (c *Chain) IsRunnable(jobId string) bool {
 // runnable if all of its previous jobs are complete and it is Pending
 // or Stopped with some retries still remaining.
 func (c *Chain) RunnableJobs() proto.Jobs {
-	// Loop through every job in the chain and check if it's runnable.
 	var runnableJobs proto.Jobs
 	for jobId, job := range c.jobChain.Jobs {
 		if !c.IsRunnable(jobId) {
 			continue
 		}
-
 		runnableJobs = append(runnableJobs, job)
 	}
-
 	return runnableJobs
 }
 
@@ -280,34 +247,6 @@ func (c *Chain) ToSuspended() proto.SuspendedJobChain {
 		SequenceTries:     seqTries,
 	}
 	return sjc
-}
-
-// Validate checks if a job chain is valid. It returns an error if it's not.
-func (c *Chain) Validate() error {
-	// Make sure the adjacency list is valid.
-	if !c.adjacencyListIsValid() {
-		return ErrInvalidChain{
-			Message: "invalid adjacency list: some jobs exist in " +
-				"chain.AdjacencyList but not chain.Jobs",
-		}
-	}
-
-	// Make sure there is one first job.
-	if _, err := c.FirstJob(); err != nil {
-		return err
-	}
-
-	// Make sure there is one last job.
-	if _, err := c.lastJob(); err != nil {
-		return err
-	}
-
-	// Make sure there are no cycles.
-	if !c.isAcyclic() {
-		return ErrInvalidChain{Message: "chain is cyclic"}
-	}
-
-	return nil
 }
 
 // RequestId returns the request id of the job chain.
@@ -532,131 +471,6 @@ func (c *Chain) previousJobs(jobId string) proto.Jobs {
 		}
 	}
 	return prevJobs
-}
-
-// lastJob finds the job in the chain with outdegree 0. If there is not
-// exactly one of these jobs, it returns an error.
-func (c *Chain) lastJob() (proto.Job, error) {
-	var jobIds []string
-	for jobId, count := range c.outdegreeCounts() {
-		if count == 0 {
-			jobIds = append(jobIds, jobId)
-		}
-	}
-
-	if len(jobIds) != 1 {
-		return proto.Job{}, ErrInvalidChain{
-			Message: fmt.Sprintf("chain has %d last job(s), should "+
-				"have one (last job(s) = %v)", len(jobIds), jobIds),
-		}
-	}
-
-	return c.jobChain.Jobs[jobIds[0]], nil
-}
-
-// indegreeCounts finds the indegree for each job in the chain.
-func (c *Chain) indegreeCounts() map[string]int {
-	indegreeCounts := make(map[string]int)
-	for job := range c.jobChain.Jobs {
-		indegreeCounts[job] = 0
-	}
-
-	for _, nextJobs := range c.jobChain.AdjacencyList {
-		for _, nextJob := range nextJobs {
-			if _, ok := indegreeCounts[nextJob]; ok {
-				indegreeCounts[nextJob] += 1
-			}
-		}
-	}
-
-	return indegreeCounts
-}
-
-// outdegreeCounts finds the outdegree for each job in the chain.
-func (c *Chain) outdegreeCounts() map[string]int {
-	outdegreeCounts := make(map[string]int)
-	for job := range c.jobChain.Jobs {
-		outdegreeCounts[job] = len(c.jobChain.AdjacencyList[job])
-	}
-
-	return outdegreeCounts
-}
-
-// isAcyclic returns whether or not a job chain is acyclic. It essentially
-// works by moving through the job chain from the top (the first job)
-// down to the bottom (the last job), and if there are any cycles in the
-// chain (dependencies that go in the opposite direction...i.e., bottom to
-// top), it returns false.
-func (c *Chain) isAcyclic() bool {
-	indegreeCounts := c.indegreeCounts()
-	queue := make(map[string]struct{})
-
-	// Add all of the first jobs to the queue (in reality there should
-	// only be 1).
-	for job, indegreeCount := range indegreeCounts {
-		if indegreeCount == 0 {
-			queue[job] = struct{}{}
-		}
-	}
-
-	jobsVisited := 0
-	for {
-		// Break when there are no more jobs in the queue. This happens
-		// when either there are no first jobs, or when a cycle
-		// prevents us from enqueuing a job below.
-		if len(queue) == 0 {
-			break
-		}
-
-		// Get a job from the queue.
-		var curJob string
-		for k := range queue {
-			curJob = k
-		}
-		delete(queue, curJob)
-
-		// Visit each job adjacent to the current job and decrement
-		// their indegree count by 1. When a job's indegree count
-		// becomes 0, add it to the queue.
-		//
-		// If there is a cycle somewhere, at least one jobs indegree
-		// count will never reach 0, and therefore it will never be
-		// enqueued and visited.
-		for _, adjJob := range c.jobChain.AdjacencyList[curJob] {
-			indegreeCounts[adjJob] -= 1
-			if indegreeCounts[adjJob] == 0 {
-				queue[adjJob] = struct{}{}
-			}
-		}
-
-		// Keep track of the number of jobs we've visited. If there is
-		// a cycle in the chain, we won't end up visiting some jobs.
-		jobsVisited += 1
-	}
-
-	if jobsVisited != len(c.jobChain.Jobs) {
-		return false
-	}
-
-	return true
-}
-
-// adjacencyListIsValid returns whether or not the chain's adjacency list is
-// not valid. An adjacency list is not valid if any of the jobs in it do not
-// exist in chain.Jobs.
-func (c *Chain) adjacencyListIsValid() bool {
-	for job, adjJobs := range c.jobChain.AdjacencyList {
-		if _, ok := c.jobChain.Jobs[job]; !ok {
-			return false
-		}
-
-		for _, adjJob := range adjJobs {
-			if _, ok := c.jobChain.Jobs[adjJob]; !ok {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 // contains returns whether or not a slice of strings contains a specific string.

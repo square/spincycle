@@ -282,7 +282,7 @@ func TestStopRequestHandlerSuccess(t *testing.T) {
 
 func TestSuspendRequestHandlerSuccess(t *testing.T) {
 	reqId := "729ghskd329dhj3sbjnr"
-	payload := []byte("{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobChain\":{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobs\":{\"hw48\":{\"id\":\"hw48\",\"type\":\"test\",\"bytes\":null,\"state\":6,\"args\":null,\"data\":null,\"retry\":5,\"retryWait\":\"1s\",\"sequenceStartId\":\"hw48\",\"sequenceRetry\":1}},\"adjacencyList\":null,\"state\":7},\"totalJobTries\":{\"hw48\":5},\"latestRunJobTries\":{\"hw48\":2},\"sequenceTries\":{\"hw48\":1}}")
+	payload := []byte("{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobChain\":{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobs\":{\"hw48\":{\"id\":\"hw48\",\"type\":\"test\",\"bytes\":null,\"state\":6,\"args\":null,\"data\":null,\"retry\":5,\"retryWait\":\"1s\",\"sequenceId\":\"hw48\",\"sequenceRetry\":1}},\"adjacencyList\":null,\"state\":7},\"totalJobTries\":{\"hw48\":5},\"latestRunJobTries\":{\"hw48\":2},\"sequenceTries\":{\"hw48\":1}}")
 
 	// Create a mock request manager that will record the finish params it receives.
 	var rrSJC proto.SuspendedJobChain
@@ -352,9 +352,9 @@ func TestSuspendRequestHandlerInvalidPayload(t *testing.T) {
 
 func TestSuspendRequestHandlerRMError(t *testing.T) {
 	// reqId := "4"
-	// payload := `{"requestId":"4","jobChain":{"requestId":"4","jobs":{"hw48":{"id":"hw48","type":"test","state":6,"retry":5,"sequenceStartId":"hw48","sequenceRetry":1}},"state":7},"jobTries":{"hw48":5},"stoppedJobTries":{"hw48":2},"sequenceRetries":{"hw48":1}}`
+	// payload := `{"requestId":"4","jobChain":{"requestId":"4","jobs":{"hw48":{"id":"hw48","type":"test","state":6,"retry":5,"sequenceId":"hw48","sequenceRetry":1}},"state":7},"jobTries":{"hw48":5},"stoppedJobTries":{"hw48":2},"sequenceRetries":{"hw48":1}}`
 	reqId := "729ghskd329dhj3sbjnr"
-	payload := []byte("{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobChain\":{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobs\":{\"hw48\":{\"id\":\"hw48\",\"type\":\"test\",\"bytes\":null,\"state\":6,\"args\":null,\"data\":null,\"retry\":5,\"retryWait\":\"1s\",\"sequenceStartId\":\"hw48\",\"sequenceRetry\":1}},\"adjacencyList\":null,\"state\":7},\"totalJobTries\":{\"hw48\":5},\"latestRunJobTries\":{\"hw48\":2},\"sequenceTries\":{\"hw48\":1}}")
+	payload := []byte("{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobChain\":{\"requestId\":\"729ghskd329dhj3sbjnr\",\"jobs\":{\"hw48\":{\"id\":\"hw48\",\"type\":\"test\",\"bytes\":null,\"state\":6,\"args\":null,\"data\":null,\"retry\":5,\"retryWait\":\"1s\",\"sequenceId\":\"hw48\",\"sequenceRetry\":1}},\"adjacencyList\":null,\"state\":7},\"totalJobTries\":{\"hw48\":5},\"latestRunJobTries\":{\"hw48\":2},\"sequenceTries\":{\"hw48\":1}}")
 
 	// Create a mock request manager that will return an error and record the
 	// sjc it receives.

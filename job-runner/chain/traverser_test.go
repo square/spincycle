@@ -19,29 +19,6 @@ import (
 // Default timeout for traverser (stopping jobs + sending to doneJobChan)
 const timeout = 100 * time.Millisecond
 
-// Return an error when we try to create an invalid chain.
-func TestMakeErrorNoFirstJob(t *testing.T) {
-	requestId := "test_run_error_no_first_job"
-	chainRepo := chain.NewMemoryRepo()
-	rf := &mock.RunnerFactory{}
-	rmc := &mock.RMClient{}
-	shutdownChan := make(chan struct{})
-	f := chain.NewTraverserFactory(chainRepo, rf, rmc, shutdownChan)
-
-	jc := proto.JobChain{
-		RequestId:     requestId,
-		Jobs:          testutil.InitJobs(2),
-		AdjacencyList: map[string][]string{},
-	}
-	tr, err := f.Make(jc)
-	if err == nil {
-		t.Errorf("expected an error but did not get one")
-	}
-	if tr != nil {
-		t.Errorf("got non-nil Traverser, expected nil on error")
-	}
-}
-
 // All jobs in the chain complete successfully.
 func TestRunComplete(t *testing.T) {
 	// Job Chain:
@@ -231,7 +208,7 @@ func TestResume(t *testing.T) {
 			"job1": 2,
 		},
 	}
-	traverser, err := tf.MakeFromSJC(sjc)
+	traverser, err := tf.MakeFromSJC(&sjc)
 	if err != nil {
 		t.Errorf("got error when making traverser: %s", err)
 		return

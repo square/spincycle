@@ -25,7 +25,6 @@ var (
 func defaultFactory(reqId string) *chain.ChainReaperFactory {
 	return &chain.ChainReaperFactory{
 		Chain:        chain.NewChain(&proto.JobChain{}, make(map[string]uint), make(map[string]uint), make(map[string]uint)),
-		ChainRepo:    chain.NewMemoryRepo(),
 		RMClient:     &mock.RMClient{},
 		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
 		RMCTries:     5,
@@ -314,7 +313,6 @@ func TestRunningReaper(t *testing.T) {
 
 	factory := &chain.ChainReaperFactory{
 		Chain:        c,
-		ChainRepo:    chain.NewMemoryRepo(),
 		RMClient:     rmc,
 		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
 		RMCTries:     5,
@@ -383,12 +381,6 @@ func TestRunningReaper(t *testing.T) {
 	if receivedState != proto.STATE_FAIL {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_FAIL])
 	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
-	}
 }
 
 // test runningChainReaper.Run on a resumed chain (faking the runJobs loop)
@@ -434,7 +426,6 @@ func TestRunningReaperResume(t *testing.T) {
 
 	factory := &chain.ChainReaperFactory{
 		Chain:        c,
-		ChainRepo:    chain.NewMemoryRepo(),
 		RMClient:     rmc,
 		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
 		RMCTries:     5,
@@ -500,12 +491,6 @@ func TestRunningReaperResume(t *testing.T) {
 
 	if receivedState != proto.STATE_COMPLETE {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_COMPLETE])
-	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
 	}
 }
 
@@ -589,7 +574,6 @@ func TestStoppedReaper(t *testing.T) {
 	runnerRepo := runner.NewRepo()
 	factory := &chain.ChainReaperFactory{
 		Chain:        c,
-		ChainRepo:    chain.NewMemoryRepo(),
 		RMClient:     rmc,
 		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
 		RMCTries:     5,
@@ -653,12 +637,6 @@ func TestStoppedReaper(t *testing.T) {
 	if receivedState != proto.STATE_FAIL {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_FAIL])
 	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
-	}
 }
 
 // test stoppedChainReaper.Run + .Stop
@@ -699,7 +677,6 @@ func TestStoppedReaperStop(t *testing.T) {
 	runnerRepo := runner.NewRepo()
 	factory := &chain.ChainReaperFactory{
 		Chain:        c,
-		ChainRepo:    chain.NewMemoryRepo(),
 		RMClient:     rmc,
 		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
 		RMCTries:     5,
@@ -756,12 +733,6 @@ func TestStoppedReaperStop(t *testing.T) {
 
 	if receivedState != proto.STATE_FAIL {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_FAIL])
-	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
 	}
 }
 
@@ -969,7 +940,6 @@ func TestSuspendedReaper(t *testing.T) {
 	runnerRepo := runner.NewRepo()
 	factory := &chain.ChainReaperFactory{
 		Chain:        c,
-		ChainRepo:    chain.NewMemoryRepo(),
 		RMClient:     rmc,
 		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
 		RMCTries:     5,
@@ -1047,12 +1017,6 @@ func TestSuspendedReaper(t *testing.T) {
 	if diff := deep.Equal(receivedSJC, expectedSJC); diff != nil {
 		t.Errorf("received SJC != expected SJC: %s", diff)
 	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
-	}
 }
 
 // test suspendedChainReaper.Run on a chain that completes
@@ -1092,7 +1056,6 @@ func TestSuspendedReaperCompleted(t *testing.T) {
 	runnerRepo := runner.NewRepo()
 	factory := &chain.ChainReaperFactory{
 		Chain:        c,
-		ChainRepo:    chain.NewMemoryRepo(),
 		RMClient:     rmc,
 		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
 		RMCTries:     5,
@@ -1139,12 +1102,6 @@ func TestSuspendedReaperCompleted(t *testing.T) {
 	if receivedState != proto.STATE_COMPLETE {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_COMPLETE])
 	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
-	}
 }
 
 // test suspendedChainReaper.Run + .Stop
@@ -1184,7 +1141,6 @@ func TestSuspendedReaperStop(t *testing.T) {
 	runnerRepo := runner.NewRepo()
 	factory := &chain.ChainReaperFactory{
 		Chain:        c,
-		ChainRepo:    chain.NewMemoryRepo(),
 		RMClient:     rmc,
 		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
 		RMCTries:     5,
@@ -1225,12 +1181,6 @@ func TestSuspendedReaperStop(t *testing.T) {
 
 	if receivedState != proto.STATE_FAIL {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_FAIL])
-	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
 	}
 }
 
@@ -1308,12 +1258,6 @@ func TestSuspendedFinalize(t *testing.T) {
 	if diff := deep.Equal(receivedSJC, expectedSJC); diff != nil {
 		t.Errorf("received SJC != expected SJC: %s", diff)
 	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
-	}
 }
 
 // test suspendedChainReaper.Finalize on a chain that finished
@@ -1377,11 +1321,5 @@ func TestSuspendedFinalizeFinished(t *testing.T) {
 
 	if receivedState != proto.STATE_FAIL {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_FAIL])
-	}
-
-	// check that chain was removed from repo
-	_, err := factory.ChainRepo.Get(jc.RequestId)
-	if err == nil {
-		t.Errorf("chain not removed from chain repo")
 	}
 }

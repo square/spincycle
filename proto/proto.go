@@ -65,7 +65,7 @@ type Job struct {
 	Data          map[string]interface{} `json:"data,omitempty"`      // job-specific data during Job.Run
 	Retry         uint                   `json:"retry"`               // retry N times if first run fails
 	RetryWait     string                 `json:"retryWait,omitempty"` // wait between tries (duration string: "N{ms|s|m|h}", default: 0s)
-	SequenceId    string                 `json:"sequenceStartId"`     // ID for first job in sequence
+	SequenceId    string                 `json:"sequenceId"`          // Job.Id of first job in sequence
 	SequenceRetry uint                   `json:"sequenceRetry"`       // retry sequence N times if first run fails. Only set for first job in sequence.
 }
 
@@ -173,7 +173,7 @@ type JobStatus struct {
 	State     byte                   `json:"state"`     // usually proto.STATE_RUNNING
 	Status    string                 `json:"status"`    // real-time status, if running
 	N         uint                   `json:"n"`         // Nth job ran in chain
-	// @todo: Try uint
+	Try       uint                   `json:"try"`       // try number, can be >1+retry on sequence retry
 }
 
 // JobChainStatus represents the status of a job chain reported by the Job Runner.

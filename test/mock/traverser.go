@@ -33,18 +33,18 @@ func (t *Traverser) Status() (proto.JobChainStatus, error) {
 }
 
 type TraverserFactory struct {
-	MakeFunc        func(proto.JobChain) (chain.Traverser, error)
-	MakeFromSJCFunc func(proto.SuspendedJobChain) (chain.Traverser, error)
+	MakeFunc        func(*proto.JobChain) (chain.Traverser, error)
+	MakeFromSJCFunc func(*proto.SuspendedJobChain) (chain.Traverser, error)
 }
 
-func (tf *TraverserFactory) Make(jc proto.JobChain) (chain.Traverser, error) {
+func (tf *TraverserFactory) Make(jc *proto.JobChain) (chain.Traverser, error) {
 	if tf.MakeFunc != nil {
 		return tf.MakeFunc(jc)
 	}
 	return &Traverser{}, nil
 }
 
-func (tf *TraverserFactory) MakeFromSJC(sjc proto.SuspendedJobChain) (chain.Traverser, error) {
+func (tf *TraverserFactory) MakeFromSJC(sjc *proto.SuspendedJobChain) (chain.Traverser, error) {
 	if tf.MakeFromSJCFunc != nil {
 		return tf.MakeFromSJCFunc(sjc)
 	}
