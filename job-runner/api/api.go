@@ -143,14 +143,17 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 	default:
 	}
 
-	// Convert the payload into a proto.JobChain.
+	// Convert the payload into a proto.JobChain and validate.
 	var jc proto.JobChain
 	if err := c.Bind(&jc); err != nil {
 		return err
 	}
+	if err := chain.Validate(jc); err != nil {
+		return handleError(err)
+	}
 
 	// Create a new traverser.
-	t, err := api.traverserFactory.Make(jc)
+	t, err := api.traverserFactory.Make(&jc)
 	if err != nil {
 		return handleError(err)
 	}
@@ -192,9 +195,12 @@ func (api *API) resumeJobChainHandler(c echo.Context) error {
 	if err := c.Bind(&sjc); err != nil {
 		return err
 	}
+	if err := chain.Validate(*sjc.JobChain); err != nil {
+		return handleError(err)
+	}
 
 	// Create a new traverser.
-	t, err := api.traverserFactory.MakeFromSJC(sjc)
+	t, err := api.traverserFactory.MakeFromSJC(&sjc)
 	if err != nil {
 		return handleError(err)
 	}

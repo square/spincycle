@@ -79,7 +79,7 @@ func baseURL() string {
 func TestNewJobChainTraverserError(t *testing.T) {
 	// Force an error in creating a traverser.
 	tf := &mock.TraverserFactory{
-		MakeFunc: func(jc proto.JobChain) (chain.Traverser, error) {
+		MakeFunc: func(jc *proto.JobChain) (chain.Traverser, error) {
 			return nil, mock.ErrTraverser
 		},
 	}
@@ -299,7 +299,7 @@ func TestResumeJobChainShutdown(t *testing.T) {
 func TestResumeJobChainTraverserError(t *testing.T) {
 	// Force an error in creating a traverser.
 	tf := &mock.TraverserFactory{
-		MakeFromSJCFunc: func(sjc proto.SuspendedJobChain) (chain.Traverser, error) {
+		MakeFromSJCFunc: func(sjc *proto.SuspendedJobChain) (chain.Traverser, error) {
 			return nil, mock.ErrTraverser
 		},
 	}

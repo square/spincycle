@@ -62,8 +62,8 @@ type Traverser interface {
 
 // A TraverserFactory makes a new Traverser.
 type TraverserFactory interface {
-	Make(proto.JobChain) (Traverser, error)
-	MakeFromSJC(proto.SuspendedJobChain) (Traverser, error)
+	Make(*proto.JobChain) (Traverser, error)
+	MakeFromSJC(*proto.SuspendedJobChain) (Traverser, error)
 }
 
 type traverserFactory struct {
@@ -84,14 +84,14 @@ func NewTraverserFactory(cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan
 
 // Make makes a Traverser for the job chain. The chain is first validated
 // and saved to the chain repo.
-func (f *traverserFactory) Make(jobChain proto.JobChain) (Traverser, error) {
+func (f *traverserFactory) Make(jobChain *proto.JobChain) (Traverser, error) {
 	// Convert/wrap chain from proto to Go object.
-	chain := NewChain(&jobChain, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+	chain := NewChain(jobChain, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	return f.make(chain)
 }
 
 // MakeFromSJC makes a Traverser from a suspended job chain.
-func (f *traverserFactory) MakeFromSJC(sjc proto.SuspendedJobChain) (Traverser, error) {
+func (f *traverserFactory) MakeFromSJC(sjc *proto.SuspendedJobChain) (Traverser, error) {
 	// Convert/wrap chain from proto to Go object.
 	chain := NewChain(sjc.JobChain, sjc.SequenceTries, sjc.TotalJobTries, sjc.LatestRunJobTries)
 	return f.make(chain)
@@ -99,17 +99,11 @@ func (f *traverserFactory) MakeFromSJC(sjc proto.SuspendedJobChain) (Traverser, 
 
 // Creates a new Traverser from a chain. Used for both new and resumed chains.
 func (f *traverserFactory) make(chain *Chain) (Traverser, error) {
-	// Validate the chain
-	err := chain.Validate()
-	if err != nil {
-		return nil, err
-	}
-
-	// Save the chain. If this JR instance dies, another can recover the chain
-	// from the repo.
-	err = f.chainRepo.Set(chain)
-	if err != nil {
-		return nil, fmt.Errorf("cannot save chain to repo: %s", err)
+	// Add chain to repo. This used to save the chain in Redis, if configured,
+	// but now it's only an in-memory map. The only functionality it serves is
+	// preventing this JR instance from running the same job chain.
+	if err := f.chainRepo.Add(chain); err != nil {
+		return nil, fmt.Errorf("error adding job chain: %s", err)
 	}
 
 	// Create and return a traverser for the chain. The traverser is responsible
@@ -125,8 +119,7 @@ func (f *traverserFactory) make(chain *Chain) (Traverser, error) {
 		StopTimeout:   defaultTimeout,
 		SendTimeout:   defaultTimeout,
 	}
-	tr := NewTraverser(cfg)
-	return tr, nil
+	return NewTraverser(cfg), nil
 }
 
 // -------------------------------------------------------------------------- //
@@ -209,6 +202,8 @@ func NewTraverser(cfg TraverserConfig) *traverser {
 func (t *traverser) Run() {
 	t.logger.Infof("chain traverser started")
 	defer t.logger.Infof("chain traverser done")
+
+	defer t.chainRepo.Remove(t.chain.RequestId())
 
 	// Start a goroutine to run jobs. This consumes from the runJobChan. When
 	// jobs are done, they will be sent to the doneJobChan, which the job reapers
@@ -449,8 +444,8 @@ func (t *traverser) runJobs() {
 			}
 
 			// Run the job. This is a blocking operation that could take a long time.
-			t.chain.SetJobState(job.Id, proto.STATE_RUNNING)
 			jLogger.Infof("running job")
+			t.chain.SetJobState(job.Id, proto.STATE_RUNNING)
 			ret := runner.Run(job.Data)
 
 			t.chain.AddJobTries(job.Id, ret.Tries)

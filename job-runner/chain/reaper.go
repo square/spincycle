@@ -91,7 +91,6 @@ func (f *ChainReaperFactory) MakeRunning() JobReaper {
 	return &RunningChainReaper{
 		reaper: reaper{
 			chain:             f.Chain,
-			chainRepo:         f.ChainRepo,
 			rmc:               f.RMClient,
 			logger:            f.Logger,
 			finalizeTries:     f.RMCTries,
@@ -110,7 +109,6 @@ func (f *ChainReaperFactory) MakeSuspended() JobReaper {
 	return &SuspendedChainReaper{
 		reaper: reaper{
 			chain:             f.Chain,
-			chainRepo:         f.ChainRepo,
 			rmc:               f.RMClient,
 			logger:            f.Logger,
 			finalizeTries:     f.RMCTries,
@@ -129,7 +127,6 @@ func (f *ChainReaperFactory) MakeStopped() JobReaper {
 	return &StoppedChainReaper{
 		reaper: reaper{
 			chain:             f.Chain,
-			chainRepo:         f.ChainRepo,
 			rmc:               f.RMClient,
 			logger:            f.Logger,
 			finalizeTries:     f.RMCTries,
@@ -210,7 +207,6 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 
 	// Set the final state of the job in the chain.
 	r.chain.SetJobState(job.Id, job.State)
-	r.chainRepo.Set(r.chain)
 
 	if job.State == proto.STATE_FAIL {
 		// Retry the sequence if possible.
@@ -247,7 +243,6 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 		for k, v := range job.Data {
 			nextJob.Data[k] = v
 		}
-		r.chainRepo.Set(r.chain)
 
 		// Enqueue any runnable child jobs.
 		if !r.chain.IsRunnable(nextJob.Id) {
@@ -276,9 +271,7 @@ func (r *RunningChainReaper) Finalize(complete bool) {
 		r.logger.Warn("chain is done, some jobs failed")
 		r.chain.SetState(proto.STATE_FAIL)
 	}
-	r.chainRepo.Set(r.chain)
 	r.sendFinalState(finishedAt)
-	r.chainRepo.Remove(r.chain.RequestId())
 }
 
 // -------------------------------------------------------------------------- //
@@ -365,7 +358,6 @@ func (r *SuspendedChainReaper) Reap(job proto.Job) {
 
 	// Set the final state of the job in the chain.
 	r.chain.SetJobState(job.Id, job.State)
-	r.chainRepo.Set(r.chain)
 
 	switch job.State {
 	case proto.STATE_FAIL:
@@ -411,17 +403,13 @@ func (r *SuspendedChainReaper) Finalize() {
 			r.logger.Infof("chain is done, some jobs failed")
 			r.chain.SetState(proto.STATE_FAIL)
 		}
-		r.chainRepo.Set(r.chain)
 		r.sendFinalState(finishedAt)
-		r.chainRepo.Remove(r.chain.RequestId())
-
 		return
 	}
 
 	// Chain isn't done - send SuspendedJobChain to RM.
 	r.logger.Infof("chain is not done - sending Suspended Job Chain to RM...")
 	r.chain.SetState(proto.STATE_SUSPENDED)
-	r.chainRepo.Set(r.chain)
 	sjc := r.chain.ToSuspended()
 	err := retry.Do(r.finalizeTries, r.finalizeRetryWait,
 		func() error {
@@ -435,7 +423,6 @@ func (r *SuspendedChainReaper) Finalize() {
 		r.chain.SetState(proto.STATE_FAIL)
 		r.sendFinalState(finishedAt)
 	}
-	r.chainRepo.Remove(r.chain.RequestId())
 }
 
 // -------------------------------------------------------------------------- //
@@ -513,13 +500,10 @@ func (r *StoppedChainReaper) Reap(job proto.Job) {
 
 	// Set the final state of the job in the chain.
 	r.chain.SetJobState(job.Id, job.State)
-	r.chainRepo.Set(r.chain)
-
 	return
 }
 
-// Finalize determines the final state of the chain and sends it to the Request
-// Manager.
+// Finalize determines the final state of the chain and sends it to the Request Manager.
 func (r *StoppedChainReaper) Finalize() {
 	finishedAt := time.Now().UTC()
 
@@ -539,9 +523,7 @@ func (r *StoppedChainReaper) Finalize() {
 		r.logger.Infof("chain is done, some jobs failed")
 		r.chain.SetState(proto.STATE_FAIL)
 	}
-	r.chainRepo.Set(r.chain)
 	r.sendFinalState(finishedAt)
-	r.chainRepo.Remove(r.chain.RequestId())
 }
 
 // -------------------------------------------------------------------------- //
@@ -550,7 +532,6 @@ func (r *StoppedChainReaper) Finalize() {
 // they all use.
 type reaper struct {
 	chain             *Chain
-	chainRepo         Repo
 	rmc               rm.Client
 	logger            *log.Entry
 	finalizeTries     int
@@ -599,7 +580,6 @@ func (r *reaper) prepareSequenceRetry(failedJob proto.Job) {
 	for _, job := range sequenceJobsToRetry {
 		r.chain.SetJobState(job.Id, proto.STATE_PENDING)
 	}
-	r.chainRepo.Set(r.chain)
 }
 
 // sequenceJobsCompleted does a BFS to find all jobs in the sequence that have

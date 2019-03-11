@@ -26,17 +26,6 @@
   revision = "e80c3b7ed292b052c7083b6fd7154a8422c33f65"
 
 [[projects]]
-  digest = "1:a4351913023274a2173a6a571080996049238f5a8bc32cc3f22541c5998df113"
-  name = "github.com/alicebob/miniredis"
-  packages = [
-    ".",
-    "server",
-  ]
-  pruneopts = "NUT"
-  revision = "995ba133bd8fe5dae5a34732bd99f558b0b60e1a"
-  version = "2.1.0"
-
-[[projects]]
   digest = "1:01ced7908dbaae42990af9521328922b8948bdcb174c23bba6db572381515716"
   name = "github.com/dgrijalva/jwt-go"
   packages = ["."]
@@ -59,17 +48,6 @@
   pruneopts = "NUT"
   revision = "6592d9cc0a499ad2d5f574fde80a2b5c5cc3b4f5"
   version = "v1.0.1"
-
-[[projects]]
-  digest = "1:38ec74012390146c45af1f92d46e5382b50531247929ff3a685d2b2be65155ac"
-  name = "github.com/gomodule/redigo"
-  packages = [
-    "internal",
-    "redis",
-  ]
-  pruneopts = "NUT"
-  revision = "9c11da706d9b7902c6da69c592f75637793fe121"
-  version = "v2.0.0"
 
 [[projects]]
   digest = "1:7227408b1bbf71f08b4d2cb9f3e66e507d0c184fb2233da1b343133e00ecc2a9"
@@ -188,10 +166,8 @@
   input-imports = [
     "github.com/Sirupsen/logrus",
     "github.com/alexflint/go-arg",
-    "github.com/alicebob/miniredis",
     "github.com/go-sql-driver/mysql",
     "github.com/go-test/deep",
-    "github.com/gomodule/redigo/redis",
     "github.com/labstack/echo",
     "github.com/labstack/echo/middleware",
     "github.com/orcaman/concurrent-map",
