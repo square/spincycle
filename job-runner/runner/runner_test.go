@@ -31,7 +31,7 @@ func TestFactory(t *testing.T) {
 		Bytes: []byte{},
 	}
 
-	jr, err := rf.Make(pJob, "abc", 0, 0, 0)
+	jr, err := rf.Make(pJob, "abc", 0, 0)
 	if err != mock.ErrJob {
 		t.Errorf("err = nil, expected %s", mock.ErrJob)
 	}
@@ -67,7 +67,7 @@ func TestRunFail(t *testing.T) {
 			return nil
 		},
 	}
-	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 0, 0, rmc)
 
 	ret := jr.Run(noJobData)
 	if ret.FinalState != proto.STATE_FAIL {
@@ -109,7 +109,7 @@ func TestRunSuccess(t *testing.T) {
 			return nil
 		},
 	}
-	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 0, 0, rmc)
 
 	ret := jr.Run(noJobData)
 	if ret.FinalState != proto.STATE_COMPLETE {
@@ -126,9 +126,18 @@ func TestRunSuccess(t *testing.T) {
 
 // Test to make sure the runner will return when Stop is called.
 func TestRunStop(t *testing.T) {
+	stopChan := make(chan struct{})
 	mJob := &mock.Job{
 		RunFunc: func(jobData map[string]interface{}) (job.Return, error) {
+			t.Log("mock job start", time.Now())
+			<-stopChan
+			defer t.Log("mock job return", time.Now())
 			return job.Return{State: proto.STATE_FAIL}, nil
+		},
+		StopFunc: func() error {
+			t.Log("job.Stop called")
+			close(stopChan)
+			return nil
 		},
 	}
 	pJob := proto.Job{
@@ -139,7 +148,7 @@ func TestRunStop(t *testing.T) {
 		RetryWait: "30s", // important...the runner will sleep for 30 seconds after the job fails the first time
 	}
 	rmc := &mock.RMClient{}
-	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 0, 0, rmc)
 
 	// Run the job and let it block.
 	stateChan := make(chan byte)
@@ -156,9 +165,10 @@ func TestRunStop(t *testing.T) {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
+	// RunFunc returns FAIL but Runner knows it was stopped so it changes the state
 	finalState := <-stateChan
-	if finalState != proto.STATE_FAIL {
-		t.Errorf("final state = %d, expected %d", finalState, proto.STATE_FAIL)
+	if finalState != proto.STATE_STOPPED {
+		t.Errorf("final state = %s, expected STATE_STOPPED", proto.StateName[finalState])
 	}
 
 	// Make sure calling stop on an already stopped job doesn't panic.
@@ -179,7 +189,7 @@ func TestRunStatus(t *testing.T) {
 		Bytes: []byte{},
 	}
 	rmc := &mock.RMClient{}
-	jr := runner.NewRunner(pJob, mJob, "abc", 1, 1, rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 0, 0, rmc)
 
 	status := jr.Status()
 	if status != expectedStatus {
@@ -215,7 +225,7 @@ func TestRunPanic(t *testing.T) {
 			return nil
 		},
 	}
-	jr := runner.NewRunner(pJob, mJob, "abc", 0, 1, rmc)
+	jr := runner.NewRunner(pJob, mJob, "abc", 0, 0, rmc)
 
 	ret := jr.Run(noJobData)
 	if ret.FinalState != proto.STATE_FAIL {
@@ -227,30 +237,28 @@ func TestRunPanic(t *testing.T) {
 
 	expectedJLs := []proto.JobLog{
 		proto.JobLog{
-			RequestId:   "abc",
-			JobId:       "panicJob",
-			Name:        "jobName",
-			Type:        "jtype",
-			Try:         1,
-			SequenceTry: 1,
-			StartedAt:   sentJLs[0].StartedAt,
-			FinishedAt:  sentJLs[0].FinishedAt,
-			State:       proto.STATE_FAIL,
-			Exit:        1,
-			Error:       "panic from job.Run: forced job.Run panic",
+			RequestId:  "abc",
+			JobId:      "panicJob",
+			Name:       "jobName",
+			Type:       "jtype",
+			Try:        1,
+			StartedAt:  sentJLs[0].StartedAt,
+			FinishedAt: sentJLs[0].FinishedAt,
+			State:      proto.STATE_FAIL,
+			Exit:       1,
+			Error:      "panic from job.Run: forced job.Run panic",
 		},
 		proto.JobLog{
-			RequestId:   "abc",
-			JobId:       "panicJob",
-			Name:        "jobName",
-			Type:        "jtype",
-			Try:         2,
-			SequenceTry: 1,
-			StartedAt:   sentJLs[1].StartedAt,
-			FinishedAt:  sentJLs[1].FinishedAt,
-			State:       proto.STATE_FAIL,
-			Exit:        1,
-			Error:       "panic from job.Run: forced job.Run panic",
+			RequestId:  "abc",
+			JobId:      "panicJob",
+			Name:       "jobName",
+			Type:       "jtype",
+			Try:        2,
+			StartedAt:  sentJLs[1].StartedAt,
+			FinishedAt: sentJLs[1].FinishedAt,
+			State:      proto.STATE_FAIL,
+			Exit:       1,
+			Error:      "panic from job.Run: forced job.Run panic",
 		},
 	}
 	if jlsSent != 2 {
