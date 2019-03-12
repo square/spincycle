@@ -199,7 +199,7 @@ TRY_LOOP:
 		select {
 		case <-time.After(r.retryWait):
 		case <-r.stopChan:
-			tryLogger.Info("job stopped while waiting to run try %d", tryNo)
+			tryLogger.Infof("job stopped while waiting to run try %d", tryNo)
 			break TRY_LOOP
 		}
 	}

@@ -16,10 +16,8 @@ const (
 	STATE_RUNNING  // running
 	STATE_COMPLETE // completed successfully
 
-	// Error states, no order
-	STATE_FAIL    // failed due to error or non-zero exit
-	STATE_TIMEOUT // timeout
-	STATE_STOPPED // stopped by user
+	STATE_FAIL    // failed, job/seq retry if possible
+	STATE_STOPPED // stopped by user or API shutdown
 
 	// A request or chain can be suspended and then resumed at a later time.
 	// Jobs aren't suspended - they're stopped when a chain is suspended.
@@ -32,7 +30,6 @@ var StateName = map[byte]string{
 	STATE_RUNNING:   "RUNNING",
 	STATE_COMPLETE:  "COMPLETE",
 	STATE_FAIL:      "FAIL",
-	STATE_TIMEOUT:   "TIMEOUT",
 	STATE_STOPPED:   "STOPPED",
 	STATE_SUSPENDED: "SUSPENDED",
 }
@@ -43,7 +40,6 @@ var StateValue = map[string]byte{
 	"RUNNING":   STATE_RUNNING,
 	"COMPLETE":  STATE_COMPLETE,
 	"FAIL":      STATE_FAIL,
-	"TIMEOUT":   STATE_TIMEOUT,
 	"STOPPED":   STATE_STOPPED,
 	"SUSPENDED": STATE_SUSPENDED,
 }

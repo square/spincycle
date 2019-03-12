@@ -211,6 +211,8 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 	switch job.State {
 	case proto.STATE_COMPLETE:
 		jLogger.Infof("job complete")
+		r.chain.IncrementFinishedJobs(1)
+
 		for _, nextJob := range r.chain.NextJobs(job.Id) {
 			nextJLogger := jLogger.WithFields(log.Fields{"next_job_id": nextJob.Id})
 
@@ -257,10 +259,10 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 func (r *RunningChainReaper) Finalize(complete bool) {
 	finishedAt := time.Now().UTC()
 	if complete {
-		r.logger.Infof("chain is done, all jobs finished successfully")
+		r.logger.Infof("job chain complete")
 		r.chain.SetState(proto.STATE_COMPLETE)
 	} else {
-		r.logger.Warn("chain is done, some jobs failed")
+		r.logger.Warn("job chain failed")
 		r.chain.SetState(proto.STATE_FAIL)
 	}
 	r.sendFinalState(finishedAt)
@@ -385,22 +387,16 @@ func (r *SuspendedChainReaper) Finalize() {
 		r.chain.SetJobState(jobId, proto.STATE_FAIL)
 	}
 
-	done, complete := r.chain.IsDoneRunning()
-	if done {
-		// If chain finished, send final state to RM.
-		if complete {
-			r.logger.Infof("chain is done, all jobs finished successfully")
-			r.chain.SetState(proto.STATE_COMPLETE)
-		} else {
-			r.logger.Infof("chain is done, some jobs failed")
-			r.chain.SetState(proto.STATE_FAIL)
-		}
+	_, complete := r.chain.IsDoneRunning()
+	if complete {
+		r.logger.Infof("job chain complete")
+		r.chain.SetState(proto.STATE_COMPLETE)
 		r.sendFinalState(finishedAt)
 		return
 	}
 
-	// Chain isn't done - send SuspendedJobChain to RM.
-	r.logger.Infof("chain is not done - sending Suspended Job Chain to RM...")
+	// Send suspended job chain (SJC) to RM
+	r.logger.Infof("suspending job chain")
 	r.chain.SetState(proto.STATE_SUSPENDED)
 	sjc := r.chain.ToSuspended()
 	err := retry.Do(r.finalizeTries, r.finalizeRetryWait,
@@ -509,11 +505,11 @@ func (r *StoppedChainReaper) Finalize() {
 	// and send this final state to the RM.
 	_, complete := r.chain.IsDoneRunning()
 	if complete {
-		r.logger.Infof("chain is done, all jobs finished successfully")
+		r.logger.Infof("job chain complete")
 		r.chain.SetState(proto.STATE_COMPLETE)
 	} else {
-		r.logger.Infof("chain is done, some jobs failed")
-		r.chain.SetState(proto.STATE_FAIL)
+		r.logger.Infof("job chain stopped")
+		r.chain.SetState(proto.STATE_STOPPED)
 	}
 	r.sendFinalState(finishedAt)
 }
@@ -575,9 +571,8 @@ func (r *reaper) prepareSequenceRetry(failedJob proto.Job) proto.Job {
 		r.chain.SetJobState(job.Id, proto.STATE_PENDING) // set job back to PENDING
 	}
 
-	// Roll back the request and sequence
-	r.chain.IncrementFinishedJobs(-1 * len(sequenceJobsToRetry)) // un-finish all jobs in seq
-	r.chain.IncrementSequenceTries(sequenceStartJob.Id, 1)       // seq id = seq first job id
+	// Roll back the number of finished jobs
+	r.chain.IncrementFinishedJobs(-1 * len(sequenceJobsToRetry))
 
 	// Caller enqueues/re-runs first job in sequence
 	return sequenceStartJob

@@ -112,17 +112,18 @@ func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 		case proto.STATE_RUNNING:
 			// If any jobs are still running, the chain isn't done or complete.
 			return false, false
-		case proto.STATE_PENDING, proto.STATE_STOPPED:
+		case proto.STATE_STOPPED:
+			// If any jobs are stopped, the chain is done but not complete.
+			return true, false
+		case proto.STATE_PENDING:
 			// If any job can be run, the chain is not done or complete.
-			// Treat stopped jobs as pending jobs because they may be retried,
-			// as when resuming a suspended job chain.
 			if c.isRunnable(job.Id) {
 				return false, false
 			}
 		default:
-			// Any job that matches none of the above cases is failed
+			// Any job that matches none of the above cases is failed.
+			// If sequence can retry, then chain isn't done or complete.
 			if c.canRetrySequence(job.Id) {
-				// This failed job is part of a sequence that can be retried.
 				return false, false
 			}
 		}
