@@ -11,7 +11,7 @@ import (
 // A Factory takes a proto.Job, creates a corresponding job.Job interface for
 // it, and passes both to NewRunner to make a Runner.
 type Factory interface {
-	Make(job proto.Job, requestId string, prevTries uint, prevSeqTries uint, sequenceRetry uint) (Runner, error)
+	Make(job proto.Job, requestId string, prevTries, totalTries uint) (Runner, error)
 }
 type factory struct {
 	jf  job.Factory
@@ -27,12 +27,7 @@ func NewFactory(jf job.Factory, rmc rm.Client) Factory {
 }
 
 // Make a runner for a new job.
-func (f *factory) Make(pJob proto.Job, requestId string, prevTries uint, prevSeqTries uint, sequenceRetry uint) (Runner, error) {
-	// Subtract the number of times the job was already tried within this
-	// sequence try (i.e. before being stopped). Used when resuming a
-	// previously stopped job.
-	pJob.Retry -= prevSeqTries
-
+func (f *factory) Make(pJob proto.Job, requestId string, prevTries, totalTries uint) (Runner, error) {
 	// Instantiate a "blank" job of the given type.
 	realJob, err := f.jf.Make(job.NewIdWithRequestId(pJob.Type, pJob.Name, pJob.Id, requestId))
 	if err != nil {
@@ -46,5 +41,5 @@ func (f *factory) Make(pJob proto.Job, requestId string, prevTries uint, prevSeq
 	}
 
 	// Job should be ready to run. Create and return a runner for it.
-	return NewRunner(pJob, realJob, requestId, prevTries, sequenceRetry, f.rmc), nil
+	return NewRunner(pJob, realJob, requestId, prevTries, totalTries, f.rmc), nil
 }

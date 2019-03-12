@@ -76,6 +76,7 @@ type JobChain struct {
 	Jobs          map[string]Job      `json:"jobs"`          // Job.Id => job
 	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Id => next []Job.Id
 	State         byte                `json:"state"`         // STATE_* const
+	FinishedJobs  uint                `json:"finishedJobs"`
 }
 
 // Request represents something that a user asks Spin Cycle to do.
@@ -91,8 +92,8 @@ type Request struct {
 	FinishedAt *time.Time `json:"finishedAt"` // when the job runner finished the request. doesn't indicate success/failure
 
 	JobChain     *JobChain `json:",omitempty"`   // job chain (request_archives.job_chain)
-	TotalJobs    int       `json:"totalJobs"`    // the number of jobs in the request's job chain
-	FinishedJobs int       `json:"finishedJobs"` // the number of finished jobs in the request
+	TotalJobs    uint      `json:"totalJobs"`    // the number of jobs in the request's job chain
+	FinishedJobs uint      `json:"finishedJobs"` // the number of finished jobs in the request
 
 	JobRunnerURL string `json:"jrURL,omitempty"` // URL of the job runner running the request
 }
@@ -144,11 +145,9 @@ const (
 // JobLog represents a log entry for a finished job.
 type JobLog struct {
 	// These three fields uniquely identify an entry in the job log.
-	RequestId   string `json:"requestId"`
-	JobId       string `json:"jobId"`
-	Try         uint   `json:"try"`         // try number that is monotonically increasing
-	SequenceTry uint   `json:"sequenceTry"` // try number N of 1 + Job's sequence retry
-	SequenceId  string `json:"sequenceId"`  // ID of first job in sequence
+	RequestId string `json:"requestId"`
+	JobId     string `json:"jobId"`
+	Try       uint   `json:"try"` // try number that is monotonically increasing
 
 	Name       string `json:"name"`
 	Type       string `json:"type"`
@@ -186,6 +185,11 @@ type JobChainStatus struct {
 type RequestStatus struct {
 	Request        `json:"request"`
 	JobChainStatus JobChainStatus `json:"jobChainStatus"`
+}
+
+// RequestProgress updates request progress from the Job Runner.
+type RequestProgress struct {
+	FinishedJobs uint `json:"finishedJobs"`
 }
 
 type RunningStatus struct {

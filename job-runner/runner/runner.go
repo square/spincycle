@@ -53,15 +53,14 @@ type runner struct {
 	reqId   string    // the request id the job belongs to
 	rmc     rm.Client // client used to send JLs to the RM
 	// --
-	jobId       string
-	jobName     string
-	jobType     string
-	prevTryNo   uint
-	sequenceId  string
-	sequenceTry uint
-	maxTries    uint
-	retryWait   time.Duration
-	stopChan    chan struct{}
+	jobId      string
+	jobName    string
+	jobType    string
+	tries      uint // try count this seq try [0, maxTries]
+	totalTries uint // try count all seq tries
+	maxTries   uint // max tries per seq try, not global maxTry in request spec (once implemented)
+	retryWait  time.Duration
+	stopChan   chan struct{}
 	*sync.Mutex
 	logger    *log.Entry
 	startTime time.Time
@@ -69,7 +68,7 @@ type runner struct {
 
 // NewRunner takes a proto.Job struct and its corresponding job.Job interface, and
 // returns a Runner.
-func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, sequenceTry uint, rmc rm.Client) Runner {
+func NewRunner(pJob proto.Job, realJob job.Job, reqId string, tries, totalTries uint, rmc rm.Client) Runner {
 	var retryWait time.Duration
 	if pJob.RetryWait != "" {
 		retryWait, _ = time.ParseDuration(pJob.RetryWait) // validated by grapher
@@ -77,21 +76,20 @@ func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, se
 		retryWait = 0
 	}
 	return &runner{
-		realJob: realJob,
-		reqId:   reqId,
-		rmc:     rmc,
+		realJob:    realJob,
+		reqId:      reqId,
+		tries:      tries,
+		totalTries: totalTries,
+		rmc:        rmc,
 		// --
-		jobId:       pJob.Id,
-		jobName:     pJob.Name,
-		jobType:     pJob.Type,
-		prevTryNo:   prevTryNo,
-		maxTries:    1 + pJob.Retry, // + 1 because we always run once
-		sequenceId:  pJob.SequenceId,
-		sequenceTry: sequenceTry,
-		retryWait:   retryWait,
-		stopChan:    make(chan struct{}),
-		Mutex:       &sync.Mutex{},
-		logger:      log.WithFields(log.Fields{"requestId": reqId, "jobId": pJob.Id}),
+		jobId:     pJob.Id,
+		jobName:   pJob.Name,
+		jobType:   pJob.Type,
+		maxTries:  1 + pJob.Retry, // + 1 because we always run once
+		retryWait: retryWait,
+		stopChan:  make(chan struct{}),
+		Mutex:     &sync.Mutex{},
+		logger:    log.WithFields(log.Fields{"requestId": reqId, "jobId": pJob.Id}),
 	}
 }
 
@@ -99,11 +97,9 @@ func (r *runner) Run(jobData map[string]interface{}) Return {
 	// The chain.traverser that's calling us only cares about the final state
 	// of the job. If maxTries > 1, the intermediate states are only logged if
 	// the run fails.
-	var finalState byte = proto.STATE_PENDING
-
+	finalState := proto.STATE_PENDING
 	r.startTime = time.Now().UTC()
-
-	tryNo := uint(1)
+	tryNo := r.tries + 1
 TRY_LOOP:
 	for tryNo <= r.maxTries {
 		tryLogger := r.logger.WithFields(log.Fields{
@@ -111,6 +107,13 @@ TRY_LOOP:
 			"max_tries": r.maxTries,
 		})
 		tryLogger.Infof("starting the job")
+
+		// Can be stopped before we've started. Although we never started, we
+		// must set final state = stopped so that this try is re-ran on resume.
+		if r.stopped() {
+			finalState = proto.STATE_STOPPED
+			break TRY_LOOP
+		}
 
 		// Run the job. Use a separate method so we can easily recover from a panic
 		// in job.Run.
@@ -128,22 +131,30 @@ TRY_LOOP:
 			errMsg = jobRet.Error.Error()
 		}
 
+		// Can be stopped while running, in which case STATE_FAIL is not really
+		// because it failed but because we stopped it, so log then overwrite
+		// the state = stopped. This also sets finalState below.
+		if r.stopped() {
+			if jobRet.State != proto.STATE_STOPPED {
+				tryLogger.Errorf("job stoped: changing state %s (%d) to STATE_STOPPED", proto.StateName[jobRet.State], jobRet.State)
+				jobRet.State = proto.STATE_STOPPED
+			}
+		}
+
 		// Create a JL and send it to the RM.
 		jl := proto.JobLog{
-			RequestId:   r.reqId,
-			JobId:       r.jobId,
-			Name:        r.jobName,
-			Type:        r.jobType,
-			Try:         r.prevTryNo + tryNo,
-			SequenceId:  r.sequenceId,
-			SequenceTry: r.sequenceTry,
-			StartedAt:   startedAt,
-			FinishedAt:  finishedAt,
-			State:       jobRet.State,
-			Exit:        jobRet.Exit,
-			Error:       errMsg,
-			Stdout:      jobRet.Stdout,
-			Stderr:      jobRet.Stderr,
+			RequestId:  r.reqId,
+			JobId:      r.jobId,
+			Name:       r.jobName,
+			Type:       r.jobType,
+			Try:        r.totalTries + tryNo, // job_log.try is monotonically increasing across all seq tries
+			StartedAt:  startedAt,
+			FinishedAt: finishedAt,
+			State:      jobRet.State,
+			Exit:       jobRet.Exit,
+			Error:      errMsg,
+			Stdout:     jobRet.Stdout,
+			Stderr:     jobRet.Stderr,
 		}
 		// Send the JL to the RM.
 		err := retry.Do(JOB_LOG_TRIES, JOB_LOG_RETRY_WAIT,
@@ -165,27 +176,32 @@ TRY_LOOP:
 			break TRY_LOOP
 		}
 
+		if jobRet.State == proto.STATE_STOPPED {
+			tryLogger.Info("job stopped")
+			break TRY_LOOP
+		}
+
 		// //////////////////////////////////////////////////////////////////
 		// Job failed, wait and retry?
 		// //////////////////////////////////////////////////////////////////
-
-		// Log the failure
-		tryLogger.Errorf("job failed because state != %s: state = %s",
-			proto.StateName[proto.STATE_COMPLETE], proto.StateName[jl.State])
+		tryLogger.Errorf("job failed: state %s (%d)", proto.StateName[jl.State], jl.State)
 
 		// If last try, break retry loop, don't wait
 		if tryNo == r.maxTries {
 			break TRY_LOOP
 		}
+		tryNo++ // see next comment...
 
-		// Wait between retries
+		// Wait between retries. Can be stopped while waiting which is why we
+		// need to increment tryNo first. At this point, we're effectively on
+		// the next try. E.g. try 1 fails, we're waiting for try 2, then we're
+		// stopped: we want try 2 state = stopped so that on resume try 2 is re-ran.
 		select {
 		case <-time.After(r.retryWait):
 		case <-r.stopChan:
-			// runner has been stopped
+			tryLogger.Info("job stopped while waiting to run try %d", tryNo)
 			break TRY_LOOP
 		}
-		tryNo++
 	}
 
 	return Return{
@@ -238,6 +254,15 @@ func (r *runner) Stop() error {
 
 	r.logger.Infof("stopping the job")
 	return r.realJob.Stop() // this is a blocking operation that should return quickly
+}
+
+func (r *runner) stopped() bool {
+	select {
+	case <-r.stopChan:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *runner) Runtime() float64 {

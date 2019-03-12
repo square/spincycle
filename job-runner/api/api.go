@@ -148,7 +148,7 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 	if err := c.Bind(&jc); err != nil {
 		return err
 	}
-	if err := chain.Validate(jc); err != nil {
+	if err := chain.Validate(jc, true); err != nil {
 		return handleError(err)
 	}
 
@@ -195,7 +195,7 @@ func (api *API) resumeJobChainHandler(c echo.Context) error {
 	if err := c.Bind(&sjc); err != nil {
 		return err
 	}
-	if err := chain.Validate(*sjc.JobChain); err != nil {
+	if err := chain.Validate(*sjc.JobChain, false); err != nil {
 		return handleError(err)
 	}
 

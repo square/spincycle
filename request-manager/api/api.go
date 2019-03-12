@@ -48,7 +48,6 @@ type API struct {
 
 // NewAPI creates a new API struct. It initializes an echo web server within the
 // struct, and registers all of the API's routes with it.
-// @todo: create a struct of managers and pass that in here instead?
 func NewAPI(appCtx app.Context) *API {
 	api := &API{
 		appCtx:       appCtx,
@@ -65,14 +64,15 @@ func NewAPI(appCtx app.Context) *API {
 	// //////////////////////////////////////////////////////////////////////
 
 	// Request
-	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)                   // create
-	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                // get
-	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)        // start
-	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)      // finish
-	api.echo.PUT(API_ROOT+"requests/:reqId/stop", api.stopRequestHandler)          // stop
-	api.echo.PUT(API_ROOT+"requests/:reqId/suspend", api.suspendRequestHandler)    // suspend
-	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)      // status
-	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler) // job chain
+	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)                        // create
+	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                     // get
+	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)             // start
+	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)           // finish
+	api.echo.PUT(API_ROOT+"requests/:reqId/stop", api.stopRequestHandler)               // stop
+	api.echo.PUT(API_ROOT+"requests/:reqId/suspend", api.suspendRequestHandler)         // suspend
+	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)           // status
+	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler)      // job chain
+	api.echo.PUT(API_ROOT+"requests/:reqId/progress", api.updateRequestProgressHandler) // progress
 
 	// Job Log
 	api.echo.POST(API_ROOT+"requests/:reqId/log", api.createJLHandler)    // create
@@ -381,13 +381,6 @@ func (api *API) createJLHandler(c echo.Context) error {
 		return handleError(err, c)
 	}
 
-	// Increment the finished jobs counter if the job completed successfully.
-	if jl.State == proto.STATE_COMPLETE {
-		if err := api.rm.IncrementFinishedJobs(reqId); err != nil {
-			return handleError(err, c)
-		}
-	}
-
 	// Return the JL.
 	return c.JSON(http.StatusCreated, jl)
 }
@@ -412,6 +405,12 @@ func (api *API) statusRunningHandler(c echo.Context) error {
 
 func (api *API) versionHandler(c echo.Context) error {
 	return c.String(http.StatusOK, v.Version())
+}
+
+func (api *API) updateRequestProgressHandler(c echo.Context) error {
+	if err := api.rm.IncrementFinishedJobs(reqId); err != nil {
+		return handleError(err, c)
+	}
 }
 
 // ------------------------------------------------------------------------- //

@@ -5,7 +5,7 @@
 package chain
 
 import (
-	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -21,54 +21,21 @@ type Chain struct {
 
 	runningMux *sync.RWMutex
 	running    map[string]proto.JobStatus // keyed on job id
-	numJobsRun uint                       // Number of jobs run so far
 
 	triesMux          *sync.RWMutex   // for access to sequence/job tries maps
 	sequenceTries     map[string]uint // Number of sequence retries attempted so far
-	latestRunJobTries map[string]uint // job.Id -> number of times tried within the latest time it was run (i.e. within the latest sequence try)
+	latestRunJobTries map[string]uint // job.Id -> number of times tried for current sequence try
 	totalJobTries     map[string]uint // job.Id -> total number of times tried
 }
 
 // NewChain takes a JobChain proto and maps of sequence + jobs tries, and turns them
 // into a Chain that the JR can use.
 func NewChain(jc *proto.JobChain, sequenceTries map[string]uint, totalJobTries map[string]uint, latestRunJobTries map[string]uint) *Chain {
-	// Make sure all jobs have valid State + Data fields, and count the number of
-	// completed + failed jobs (the number of jobs that have finished running).
-	numJobsRun := uint(0)
-	for jobName, job := range jc.Jobs {
-		switch job.State {
-		case proto.STATE_PENDING:
-			// Pending is a valid job state - do nothing.
-		case proto.STATE_STOPPED:
-			// Valid state when resuming a suspended chain. Treated the same as
-			// pending jobs.
-		case proto.STATE_COMPLETE:
-			// Valid state, job is done running.
-			numJobsRun += 1
-		case proto.STATE_FAIL:
-			// Valid state, job is done running.
-			numJobsRun += 1
-		default:
-			// Job isn't pending, stopped, failed, or complete. For a new /
-			// suspended chain, these are the only valid states (no jobs can be
-			// running before the chain is started or resumed). Treat jobs with
-			// other states as failed.
-			job.State = proto.STATE_FAIL
-			numJobsRun += 1
-		}
-
-		if job.Data == nil {
-			job.Data = map[string]interface{}{}
-		}
-		jc.Jobs[jobName] = job
-	}
-
 	return &Chain{
 		jobsMux:           &sync.RWMutex{},
 		jobChain:          jc,
 		runningMux:        &sync.RWMutex{},
 		running:           map[string]proto.JobStatus{},
-		numJobsRun:        numJobsRun,
 		sequenceTries:     sequenceTries,
 		triesMux:          &sync.RWMutex{},
 		totalJobTries:     totalJobTries,
@@ -189,12 +156,35 @@ func (c *Chain) CanRetrySequence(jobId string) bool {
 	return c.sequenceTries[sequenceStartJob.Id] <= sequenceStartJob.SequenceRetry
 }
 
-func (c *Chain) IncrementSequenceTries(jobId string) {
+func (c *Chain) IncrementJobTries(jobId string, delta int) {
+	c.triesMux.Lock()
+	if delta > 0 {
+		// Total job tries can only increase. This is the job try count
+		// that's monotonically increasing across all sequence retries.
+		c.totalJobTries[jobId] += uint(delta)
+	}
+	// Job count wrt current sequnce try can reset to zero
+	cur := int(c.latestRunJobTries[jobId])
+	if cur+delta < 0 { // shouldn't happen
+		panic(fmt.Sprintf("IncrementJobTries jobId %s: cur %d + delta %d < 0", jobId, cur, delta))
+	}
+	c.latestRunJobTries[jobId] = uint(cur + delta)
+	c.triesMux.Unlock()
+}
+
+func (c *Chain) JobTries(jobId string) (cur uint, total uint) {
+	c.triesMux.RLock()
+	defer c.triesMux.RUnlock()
+	return c.latestRunJobTries[jobId], c.totalJobTries[jobId]
+}
+
+func (c *Chain) IncrementSequenceTries(jobId string, delta int) {
 	c.jobsMux.RLock()
 	seqId := c.jobChain.Jobs[jobId].SequenceId
 	c.jobsMux.RUnlock()
 	c.triesMux.Lock()
-	c.sequenceTries[seqId] += 1
+	cur := int(c.sequenceTries[seqId])
+	c.sequenceTries[seqId] = uint(cur + delta)
 	c.triesMux.Unlock()
 }
 
@@ -207,29 +197,25 @@ func (c *Chain) SequenceTries(jobId string) uint {
 	return c.sequenceTries[seqId]
 }
 
-func (c *Chain) AddJobTries(jobId string, tries uint) {
-	c.triesMux.Lock()
-	c.totalJobTries[jobId] += tries
-	c.latestRunJobTries[jobId] = tries
-	c.triesMux.Unlock()
+// IncrementFinishedJobs increments the finished jobs count by delta. Negative delta
+// is given on sequence retry. Returns the new finished jobs count.
+func (c *Chain) IncrementFinishedJobs(delta int) {
+	c.jobsMux.Lock() // -- lock
+	// delta can be negative (on seq retry), but FinishedJobs is unsigned,
+	// so get int of FinishedJobs to add int delta, then set back and return.
+	cur := int(c.jobChain.FinishedJobs)
+	if cur+delta < 0 { // shouldn't happen
+		panic(fmt.Sprintf("IncrementFinishedJobs cur %d + delta %d < 0", cur, delta))
+	}
+	c.jobChain.FinishedJobs = uint(cur + delta)
+	c.jobsMux.Unlock() // -- unlock
+	return
 }
 
-func (c *Chain) SetLatestRunJobTries(jobId string, tries uint) {
-	c.triesMux.Lock()
-	defer c.triesMux.Unlock()
-	c.latestRunJobTries[jobId] = tries
-}
-
-func (c *Chain) TotalTries(jobId string) uint {
-	c.triesMux.RLock()
-	defer c.triesMux.RUnlock()
-	return c.totalJobTries[jobId]
-}
-
-func (c *Chain) LatestRunTries(jobId string) uint {
-	c.triesMux.RLock()
-	defer c.triesMux.RUnlock()
-	return c.latestRunJobTries[jobId]
+func (c *Chain) FinishedJobs() uint {
+	c.jobsMux.RLock()
+	defer c.jobsMux.RUnlock()
+	return c.jobChain.FinishedJobs
 }
 
 func (c *Chain) ToSuspended() proto.SuspendedJobChain {
@@ -295,8 +281,6 @@ func (c *Chain) SetJobState(jobId string, state byte) {
 	c.runningMux.Lock()
 	defer c.runningMux.Unlock()
 	if state == proto.STATE_RUNNING {
-		c.numJobsRun += 1 // Nth job to run
-
 		jobStatus := proto.JobStatus{
 			RequestId: c.jobChain.RequestId,
 			JobId:     jobId,
@@ -305,27 +289,15 @@ func (c *Chain) SetJobState(jobId string, state byte) {
 			Args:      map[string]interface{}{},
 			StartedAt: now,
 			State:     state,
-			N:         c.numJobsRun,
 		}
 		for k, v := range j.Args {
 			jobStatus.Args[k] = v
 		}
 		c.running[jobId] = jobStatus
 	} else {
-		// STATE_RUNNING is the only running state, and it's not that, so the
-		// job must not be running.
+		// STATE_RUNNING is the only running state, and it's not that so
+		// the job must not be running
 		delete(c.running, jobId)
-	}
-
-	if state == proto.STATE_PENDING || state == proto.STATE_STOPPED {
-		// Job was stopped or job was previously done but set back to pending
-		// (i.e. on sequence retry). Decrement Chain.numJobsRun so that # of jobs
-		// run stays correct.
-		if c.numJobsRun == 0 {
-			// Don't decrement below 0 - n is unsigned
-			return
-		}
-		c.numJobsRun--
 	}
 }
 
@@ -346,64 +318,6 @@ func (c *Chain) Length() int {
 	return len(c.jobChain.Jobs)
 }
 
-// //////////////////////////////////////////////////////////////////////////
-// Implement JSON interfaces for custom (un)marshalling by chain.Repo
-// //////////////////////////////////////////////////////////////////////////
-
-type chainJSON struct {
-	RequestId         string
-	JobChain          *proto.JobChain
-	TotalJobTries     map[string]uint
-	LatestRunJobTries map[string]uint
-	SequenceTries     map[string]uint
-	Running           map[string]proto.JobStatus `json:"running"`
-	NumJobsRun        uint                       `json:"numJobsRun"`
-}
-
-func (c *Chain) MarshalJSON() ([]byte, error) {
-	c.runningMux.RLock()
-	running := c.running
-	numJobsRun := c.numJobsRun
-	c.runningMux.RUnlock()
-
-	c.triesMux.RLock()
-	seqTries := c.sequenceTries
-	totalJobTries := c.totalJobTries
-	latestTries := c.latestRunJobTries
-	c.triesMux.RUnlock()
-
-	m := chainJSON{
-		RequestId:         c.RequestId(),
-		JobChain:          c.jobChain,
-		TotalJobTries:     totalJobTries,
-		LatestRunJobTries: latestTries,
-		SequenceTries:     seqTries,
-		Running:           running,
-		NumJobsRun:        numJobsRun,
-	}
-	return json.Marshal(m)
-}
-
-func (c *Chain) UnmarshalJSON(bytes []byte) error {
-	var m chainJSON
-	err := json.Unmarshal(bytes, &m)
-	if err != nil {
-		return err
-	}
-
-	c.jobsMux = &sync.RWMutex{}
-	c.jobChain = m.JobChain
-	c.triesMux = &sync.RWMutex{}
-	c.sequenceTries = m.SequenceTries
-	c.totalJobTries = m.TotalJobTries
-	c.latestRunJobTries = m.LatestRunJobTries
-	c.numJobsRun = m.NumJobsRun
-	c.runningMux = &sync.RWMutex{}
-	c.running = m.Running
-
-	return nil
-}
-
 // -------------------------------------------------------------------------- //
 
 // isRunnable returns whether or not a job is runnable. A job is considered
@@ -417,23 +331,10 @@ func (c *Chain) UnmarshalJSON(bytes []byte) error {
 func (c *Chain) isRunnable(jobId string) bool {
 	job := c.jobChain.Jobs[jobId]
 	switch job.State {
-	case proto.STATE_PENDING:
-		// Pending job may be runnable.
-	case proto.STATE_STOPPED:
-		// Stopped job may be runnable if it has retries remaining.
-		triesDone := c.LatestRunTries(jobId)
-		if triesDone != 0 {
-			// If not already 0, subtract 1 because we don't count the try the job
-			// was stopped on.
-			triesDone--
-		}
-		if triesDone > job.Retry {
-			// no retries remaining
-			return false
-		}
+	case proto.STATE_PENDING, proto.STATE_STOPPED:
+		// Runnable (or re-runnable) states
 	default:
-		// Job isn't pending or stopped - not runnable.
-		return false
+		return false // not runnable
 	}
 
 	// Check that all previous jobs are complete.

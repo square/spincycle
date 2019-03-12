@@ -208,60 +208,52 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 	// Set the final state of the job in the chain.
 	r.chain.SetJobState(job.Id, job.State)
 
-	if job.State == proto.STATE_FAIL {
-		// Retry the sequence if possible.
-		if r.chain.CanRetrySequence(job.Id) {
-			jLogger.Info("job did not complete successfully. retrying sequence.")
-			r.prepareSequenceRetry(job)
+	switch job.State {
+	case proto.STATE_COMPLETE:
+		jLogger.Infof("job complete")
+		for _, nextJob := range r.chain.NextJobs(job.Id) {
+			nextJLogger := jLogger.WithFields(log.Fields{"next_job_id": nextJob.Id})
 
-			// Re-enqueue the first job of the sequence and increment the
-			// sequence's try count. Subsequent jobs in the sequence will be
-			// enqueued after the first job completes.
-			sequenceStartJob := r.chain.SequenceStartJob(job.Id)
-			r.chain.IncrementSequenceTries(sequenceStartJob.Id)
-			seqLogger := r.logger.WithFields(log.Fields{"sequence_id": job.SequenceId, "sequence_try": r.chain.SequenceTries(job.Id)})
-			seqLogger.Info("starting try of sequence")
-			r.runJobChan <- sequenceStartJob // re-enqueue first job in sequence
+			// Copy job data to every child job, even if it's not ready to be run yet.
+			// When a job has multiple parent jobs, it'll get job data copied from each
+			// parent, not just the last one to finish. Be careful - it's possible for
+			// parents to overwrite each other's job data if they set the same field.
+			for k, v := range job.Data {
+				nextJob.Data[k] = v
+			}
+
+			if !r.chain.IsRunnable(nextJob.Id) {
+				nextJLogger.Infof("next job is not runnable - not enqueuing it")
+				continue
+			}
+			nextJLogger.Infof("next job is runnable - enqueuing it")
+
+			// Starting a sequence, so increment sequence try count.
+			if r.chain.IsSequenceStartJob(nextJob.Id) {
+				r.chain.IncrementSequenceTries(nextJob.Id, 1)
+				seqLogger := r.logger.WithFields(log.Fields{"sequence_id": job.SequenceId, "sequence_try": r.chain.SequenceTries(job.Id)})
+				seqLogger.Info("starting try of sequence")
+			}
+
+			r.runJobChan <- nextJob
+		}
+	case proto.STATE_STOPPED:
+		jLogger.Infof("job stopped")
+	default:
+		// Job was NOT successful. The job.Runner already did job retries.
+		// Do sequence retries if possible.
+		if !r.chain.CanRetrySequence(job.Id) {
+			jLogger.Warn("job failed, no sequence tries left")
 			return
 		}
-
-		// If the failed job was stopped or is not part of a retryable
-		// sequence, then ignore subsequent jobs. For example, if job B of
-		// A -> B -> C  fails, then C is not run.
-		jLogger.Warn("job did not complete successfully.")
-		return
-	}
-
-	jLogger.Infof("job completed successfully.")
-	for _, nextJob := range r.chain.NextJobs(job.Id) {
-		nextJLogger := jLogger.WithFields(log.Fields{"next_job_id": nextJob.Id})
-
-		// Copy job data to every child job, even if it's not ready to be run yet.
-		// When a job has multiple parent jobs, it'll get job data copied from each
-		// parent, not just the last one to finish. Be careful - it's possible for
-		// parents to overwrite each other's job data if they set the same field.
-		for k, v := range job.Data {
-			nextJob.Data[k] = v
-		}
-
-		// Enqueue any runnable child jobs.
-		if !r.chain.IsRunnable(nextJob.Id) {
-			nextJLogger.Infof("next job is not runnable - not enqueuing it")
-			continue
-		}
-		nextJLogger.Infof("next job is runnable - enqueuing it")
-		if r.chain.IsSequenceStartJob(nextJob.Id) {
-			// Starting a sequence, so increment sequence try count.
-			r.chain.IncrementSequenceTries(nextJob.Id)
-			seqLogger := r.logger.WithFields(log.Fields{"sequence_id": job.SequenceId, "sequence_try": r.chain.SequenceTries(job.Id)})
-			seqLogger.Info("starting try of sequence")
-		}
-		r.runJobChan <- nextJob
+		jLogger.Warn("job failed, retrying sequence")
+		sequenceStartJob := r.prepareSequenceRetry(job)
+		seqLogger := r.logger.WithFields(log.Fields{"sequence_id": job.SequenceId, "sequence_try": r.chain.SequenceTries(job.Id)})
+		r.runJobChan <- sequenceStartJob // re-enqueue first job in sequence
 	}
 }
 
-// Finalize determines the final state of the chain and sends it to the Request
-// Manager.
+// Finalize determines the final state of the chain and sends it to the Request Manager.
 func (r *RunningChainReaper) Finalize(complete bool) {
 	finishedAt := time.Now().UTC()
 	if complete {
@@ -561,9 +553,9 @@ func (r *reaper) sendFinalState(finishedAt time.Time) {
 // prepareSequenceRetry prepares a sequence to be retried:
 //   1. Mark failed job and all previously completed jobs in sequence as PENDING.
 //   2. Decrement the number of jobs that were previously run (failed job +
-//   previously completed jobs in sequence) from the chain job count.
-//   3. Increment retry count for the sequence.
-func (r *reaper) prepareSequenceRetry(failedJob proto.Job) {
+//      previously completed jobs in sequence) from the chain job count.
+//   3. Increment sequence try count
+func (r *reaper) prepareSequenceRetry(failedJob proto.Job) proto.Job {
 	sequenceStartJob := r.chain.SequenceStartJob(failedJob.Id)
 
 	// sequenceJobsToRetry is a list containing the failed job and all previously
@@ -576,10 +568,19 @@ func (r *reaper) prepareSequenceRetry(failedJob proto.Job) {
 	sequenceJobsCompleted := r.sequenceJobsCompleted(sequenceStartJob)
 	sequenceJobsToRetry = append(sequenceJobsToRetry, sequenceJobsCompleted...)
 
-	// Mark all jobs to retry to PENDING state
+	// Roll back all the jobs in the sequence
 	for _, job := range sequenceJobsToRetry {
-		r.chain.SetJobState(job.Id, proto.STATE_PENDING)
+		cur, _ := r.chain.JobTries(job.Id)               // job try count for current seq
+		r.chain.IncrementJobTries(job.Id, -1*int(cur))   // decr job tries by ^
+		r.chain.SetJobState(job.Id, proto.STATE_PENDING) // set job back to PENDING
 	}
+
+	// Roll back the request and sequence
+	r.chain.IncrementFinishedJobs(-1 * len(sequenceJobsToRetry)) // un-finish all jobs in seq
+	r.chain.IncrementSequenceTries(sequenceStartJob.Id, 1)       // seq id = seq first job id
+
+	// Caller enqueues/re-runs first job in sequence
+	return sequenceStartJob
 }
 
 // sequenceJobsCompleted does a BFS to find all jobs in the sequence that have
