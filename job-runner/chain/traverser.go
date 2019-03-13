@@ -195,6 +195,7 @@ func NewTraverser(cfg TraverserConfig) *traverser {
 		doneJobChan:   doneJobChan,
 		doneChan:      make(chan struct{}),
 		stopChan:      make(chan struct{}),
+		pendingChan:   make(chan struct{}),
 		rmc:           cfg.RMClient,
 		stopMux:       &sync.RWMutex{},
 		stopTimeout:   cfg.StopTimeout,
@@ -211,8 +212,8 @@ func (t *traverser) Run() {
 	defer t.chainRepo.Remove(t.chain.RequestId())
 
 	// Update finished_jobs count which determines request progress. For
-	if err := t.rmc.FinishedJobs(t.chain.FinishedJobs()); err != nil {
-	}
+	//if err := t.rmc.FinishedJobs(t.chain.FinishedJobs()); err != nil {
+	//}
 
 	// Start a goroutine to run jobs. This consumes runJobChan. When jobs are done,
 	// they're sent to doneJobChan, which a reaper consumes. This goroutine returns
@@ -371,6 +372,9 @@ func (t *traverser) runJobs() {
 	// Run all jobs that come in on runJobChan. The loop exits when runJobChan
 	// is closed in the runningReaper goroutine in Run().
 	for job := range t.runJobChan {
+		// Signal to stopRunningJobs that there's +1 goroutine that's going
+		// to add itself to runnerRepo
+		atomic.AddInt64(&t.pending, 1)
 
 		// Explicitly pass the job into the func, or all goroutines would share
 		// the same loop "job" variable.
@@ -387,13 +391,12 @@ func (t *traverser) runJobs() {
 			select {
 			case <-t.stopChan:
 				jLogger.Info("traverser stopped or shutting down, not running job")
+				atomic.AddInt64(&t.pending, -1)
 				return
 			default:
 			}
 
-			// Signal to stopRunningJobs that there's +1 goroutine that's going
-			// to add itself to runnerRepo
-			atomic.AddInt64(&t.pending, 1)
+			t.chain.SetJobState(job.Id, proto.STATE_RUNNING)
 
 			// Always send the finished job to doneJobChan to be reaped. If the
 			// reaper isn't reaping any more jobs (if this job took too long to
@@ -414,7 +417,8 @@ func (t *traverser) runJobs() {
 
 			// Increment sequence try count if this is sequence start job, which
 			// currently means sequenceId == job.Id.
-			if t.chain.IsSequenceStartJob(job.Id) {
+			// @todo retry on sequence start job
+			if t.chain.IsSequenceStartJob(job.Id) && job.State != proto.STATE_STOPPED {
 				jLogger.Infof("sequence start job")
 				t.chain.IncrementSequenceTries(job.Id, 1)
 			}
@@ -455,7 +459,6 @@ func (t *traverser) runJobs() {
 
 			// Run the job. This is a blocking operation that could take a long time.
 			jLogger.Infof("running job")
-			t.chain.SetJobState(job.Id, proto.STATE_RUNNING)
 			ret := runner.Run(job.Data)
 			jLogger.Infof("job done: state=%s (%d)", proto.StateName[ret.FinalState], ret.FinalState)
 
@@ -563,12 +566,12 @@ func (t *traverser) stopRunningJobs(timeout <-chan time.Time) error {
 	// themselves to the runner repo when pending == 0.
 	//
 	// The shutdown sequence is:
-	//   1. close(stopChan): runJob goroutines (RGs) check this very first, so
-	//      new RGs return immediately, as if the job never ran. This allows
-	//      runJobChan to drain and prevents runnerRepo from blocking because
-	//      the chan is unbuffered. 2nd thing RGs do: pending+1. Therefore, all
-	//      in-flight RGs (i.e. RGs already started) are guaranteed to be added
-	//      to the pending count.
+	//   1. close(stopChan): runJob goroutines (RGs) don't run if closed. It's
+	//      as if the job never ran. This allows runJobChan to drain and prevents
+	//      runnerRepo from blocking because the chan is unbuffered. Before this
+	//      check, RGs do pending+1. So all in-flight RGs (RGs already started)
+	//      are guaranteed to be accountend for. I.e. if stopChan is closed after
+	//      an RG checks it, we'll still catch/wait for it on pending count.
 	//   2. Stop runningReaper: This stops new/next jobs into runJobChan, which
 	//      is being drained because of step 1.
 	//   3. close(runJobChan): When runningReaper.Run returns, the goroutine in
@@ -578,15 +581,11 @@ func (t *traverser) stopRunningJobs(timeout <-chan time.Time) error {
 	//   4. close(pendingChan): Given step 3 and step 1, eventually runJobChan
 	//      will drain and runJobs() will return, closing pendingChan when it does.
 	//   5. Call stopRunningJobs: This func waits for step 4, which ensures no
-	//      more RGs. And given step 1, we're assured that any in-flight RGs _must_
+	//      more RGs. And given step 1, we're assured that all in-flight RGs
 	//      have added themsevs to pending count. Therefore, this func waits for
 	//      pending count == 0 which means all RGs have added themselves to the
 	//      runner repo.
 	//   6. Stop all active runners in runner repo.
-	//
-	// Strictly speaking, there's one insane race condition. If an RG checks stopChan
-	// and it's _not_ stopped, then we do steps 1 through 5, and then the RG does
-	// pending+1, it could be missed in step 6. That race is practically impossible.
 
 	// Wait for runJobs to return
 	select {

@@ -166,7 +166,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 		jc.Jobs[jobId] = job
 	}
 	req.JobChain = jc
-	req.TotalJobs = len(jc.Jobs)
+	req.TotalJobs = uint(len(jc.Jobs))
 
 	// ----------------------------------------------------------------------
 	// Serial data for request_archives

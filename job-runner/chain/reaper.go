@@ -210,7 +210,6 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 
 	switch job.State {
 	case proto.STATE_COMPLETE:
-		jLogger.Infof("job complete")
 		r.chain.IncrementFinishedJobs(1)
 
 		for _, nextJob := range r.chain.NextJobs(job.Id) {
@@ -225,18 +224,10 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 			}
 
 			if !r.chain.IsRunnable(nextJob.Id) {
-				nextJLogger.Infof("next job is not runnable - not enqueuing it")
+				nextJLogger.Infof("next job not runnable")
 				continue
 			}
-			nextJLogger.Infof("next job is runnable - enqueuing it")
-
-			// Starting a sequence, so increment sequence try count.
-			if r.chain.IsSequenceStartJob(nextJob.Id) {
-				r.chain.IncrementSequenceTries(nextJob.Id, 1)
-				seqLogger := r.logger.WithFields(log.Fields{"sequence_id": job.SequenceId, "sequence_try": r.chain.SequenceTries(job.Id)})
-				seqLogger.Info("starting try of sequence")
-			}
-
+			nextJLogger.Infof("enqueueing next job")
 			r.runJobChan <- nextJob
 		}
 	case proto.STATE_STOPPED:
@@ -250,7 +241,6 @@ func (r *RunningChainReaper) Reap(job proto.Job) {
 		}
 		jLogger.Warn("job failed, retrying sequence")
 		sequenceStartJob := r.prepareSequenceRetry(job)
-		seqLogger := r.logger.WithFields(log.Fields{"sequence_id": job.SequenceId, "sequence_try": r.chain.SequenceTries(job.Id)})
 		r.runJobChan <- sequenceStartJob // re-enqueue first job in sequence
 	}
 }
@@ -355,14 +345,14 @@ func (r *SuspendedChainReaper) Reap(job proto.Job) {
 
 	switch job.State {
 	case proto.STATE_FAIL:
-		jLogger.Warn("job did not complete successfully.")
+		jLogger.Warn("job failed")
 		// Prepare for sequence retry but don't actually start the retry.
 		// This gets the chain ready to be resumed later on.
 		if r.chain.CanRetrySequence(job.Id) {
 			r.prepareSequenceRetry(job)
 		}
 	case proto.STATE_COMPLETE:
-		jLogger.Infof("job completed successfully.")
+		jLogger.Infof("job completed")
 		// Copy job data to all child jobs.
 		for _, nextJob := range r.chain.NextJobs(job.Id) {
 			for k, v := range job.Data {
@@ -371,7 +361,7 @@ func (r *SuspendedChainReaper) Reap(job proto.Job) {
 		}
 	default:
 		// If job isn't complete or failed, must be stopped.
-		jLogger.Infof("job was stopped.")
+		jLogger.Infof("job stopped")
 	}
 }
 
@@ -382,7 +372,8 @@ func (r *SuspendedChainReaper) Finalize() {
 	finishedAt := time.Now().UTC()
 
 	// Mark any jobs that didn't respond to Stop in time as Failed
-	for _, jobStatus := range r.chain.Running() {
+	for jobId, jobStatus := range r.chain.Running() {
+		r.logger.Infof("job %s still running, setting state to FAIL", jobId)
 		jobId := jobStatus.JobId
 		r.chain.SetJobState(jobId, proto.STATE_FAIL)
 	}
@@ -391,6 +382,13 @@ func (r *SuspendedChainReaper) Finalize() {
 	if complete {
 		r.logger.Infof("job chain complete")
 		r.chain.SetState(proto.STATE_COMPLETE)
+		r.sendFinalState(finishedAt)
+		return
+	}
+
+	if r.chain.FailedJobs() > 0 {
+		r.logger.Infof("job chain failed")
+		r.chain.SetState(proto.STATE_FAIL)
 		r.sendFinalState(finishedAt)
 		return
 	}
@@ -484,9 +482,7 @@ func (r *StoppedChainReaper) Stop() {
 // reap takes a done job and saves its state.
 func (r *StoppedChainReaper) Reap(job proto.Job) {
 	jLogger := r.logger.WithFields(log.Fields{"job_id": job.Id, "sequence_id": job.SequenceId, "sequence_try": r.chain.SequenceTries(job.Id)})
-	jLogger.Info("job was stopped.")
-
-	// Set the final state of the job in the chain.
+	jLogger.Info("job chain stopped")
 	r.chain.SetJobState(job.Id, job.State)
 	return
 }
@@ -496,7 +492,8 @@ func (r *StoppedChainReaper) Finalize() {
 	finishedAt := time.Now().UTC()
 
 	// Mark any jobs that didn't respond to Stop in time as Failed
-	for _, jobStatus := range r.chain.Running() {
+	for jobId, jobStatus := range r.chain.Running() {
+		r.logger.Infof("job %s still running, setting state to FAIL", jobId)
 		jobId := jobStatus.JobId
 		r.chain.SetJobState(jobId, proto.STATE_FAIL)
 	}
@@ -508,8 +505,13 @@ func (r *StoppedChainReaper) Finalize() {
 		r.logger.Infof("job chain complete")
 		r.chain.SetState(proto.STATE_COMPLETE)
 	} else {
-		r.logger.Infof("job chain stopped")
-		r.chain.SetState(proto.STATE_STOPPED)
+		if r.chain.FailedJobs() > 0 {
+			r.logger.Infof("job chain failed")
+			r.chain.SetState(proto.STATE_FAIL)
+		} else {
+			r.logger.Infof("job chain stopped")
+			r.chain.SetState(proto.STATE_STOPPED)
+		}
 	}
 	r.sendFinalState(finishedAt)
 }
@@ -559,20 +561,36 @@ func (r *reaper) prepareSequenceRetry(failedJob proto.Job) proto.Job {
 	// fails, then A and B are the previously completed jobs and C is the failed
 	// job. So, jobs A, B, and C will be added to sequenceJobsToRetry. D will not be
 	// added because it was never run.
-	var sequenceJobsToRetry []proto.Job
-	sequenceJobsToRetry = append(sequenceJobsToRetry, failedJob)
-	sequenceJobsCompleted := r.sequenceJobsCompleted(sequenceStartJob)
-	sequenceJobsToRetry = append(sequenceJobsToRetry, sequenceJobsCompleted...)
+	sequenceJobsToRetry := r.sequenceJobsCompleted(sequenceStartJob)
 
-	// Roll back all the jobs in the sequence
+	// @todo: fixme: sometimes we have failed job, sometimes we don't
+	haveFailedJob := false
+	for _, j := range sequenceJobsToRetry {
+		if j.Id == failedJob.Id {
+			haveFailedJob = true
+			break
+		}
+	}
+	if !haveFailedJob {
+		sequenceJobsToRetry = append(sequenceJobsToRetry, failedJob)
+	}
+
+	// Roll back completed sequence jobs
+	// @todo: SPIN-501: Sequence retries don't work right for parallel jobs in the same sequence
+	finishedJobs := 0
 	for _, job := range sequenceJobsToRetry {
+		state := r.chain.JobState(job.Id)
+		if state == proto.STATE_COMPLETE {
+			finishedJobs += 1
+		}
 		cur, _ := r.chain.JobTries(job.Id)               // job try count for current seq
 		r.chain.IncrementJobTries(job.Id, -1*int(cur))   // decr job tries by ^
 		r.chain.SetJobState(job.Id, proto.STATE_PENDING) // set job back to PENDING
 	}
 
-	// Roll back the number of finished jobs
-	r.chain.IncrementFinishedJobs(-1 * len(sequenceJobsToRetry))
+	// Roll back the number of finished jobs. The -1 accounts for failedJob
+	// which did not incr finished jobs.
+	r.chain.IncrementFinishedJobs(-1 * finishedJobs)
 
 	// Caller enqueues/re-runs first job in sequence
 	return sequenceStartJob
@@ -582,10 +600,8 @@ func (r *reaper) prepareSequenceRetry(failedJob proto.Job) proto.Job {
 // completed. You can read how BFS works here:
 // https://en.wikipedia.org/wiki/Breadth-first_search.
 func (r *reaper) sequenceJobsCompleted(sequenceStartJob proto.Job) []proto.Job {
-	// toVisit is a map of job id->job to visit
-	toVisit := map[string]proto.Job{}
-	// visited is a map of job id->job visited
-	visited := map[string]proto.Job{}
+	toVisit := map[string]proto.Job{} // job id -> job to visit
+	visited := map[string]proto.Job{} // job id -> job visited
 
 	// Process sequenceStartJob
 	for _, pJob := range r.chain.NextJobs(sequenceStartJob.Id) {

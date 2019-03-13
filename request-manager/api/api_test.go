@@ -600,9 +600,11 @@ func TestCreateJLHandlerSuccess(t *testing.T) {
 		t.Error(diff)
 	}
 
-	// Check that the IncrementFinishedJobs method on the request manager was called.
-	if rmCalled != true {
-		t.Errorf("IncrementFinishedJob on the request manager was not called, expected it to be")
+	// Used to be we incremented requests.finished_jobs on create JLE,
+	// but we stoppoed doing this because JLE shouldn't be tied to finished job
+	// count because the same job can have many JLE for job and seq retry.
+	if rmCalled {
+		t.Errorf("IncrementFinishedJobs called, shouldn't be called on create JLE")
 	}
 }
 

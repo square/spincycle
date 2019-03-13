@@ -408,9 +408,11 @@ func (api *API) versionHandler(c echo.Context) error {
 }
 
 func (api *API) updateRequestProgressHandler(c echo.Context) error {
+	reqId := c.Param("reqId")
 	if err := api.rm.IncrementFinishedJobs(reqId); err != nil {
 		return handleError(err, c)
 	}
+	return c.JSON(http.StatusOK, nil)
 }
 
 // ------------------------------------------------------------------------- //

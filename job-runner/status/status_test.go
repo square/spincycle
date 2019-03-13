@@ -85,7 +85,6 @@ func TestRunning(t *testing.T) {
 			JobId:     "job1",
 			Type:      "type1",
 			State:     proto.STATE_RUNNING,
-			N:         1,
 			Args:      map[string]interface{}{},
 		},
 		{
@@ -93,7 +92,6 @@ func TestRunning(t *testing.T) {
 			JobId:     "job2",
 			Type:      "type2",
 			State:     proto.STATE_RUNNING,
-			N:         1,
 			Args:      map[string]interface{}{},
 		},
 	}

@@ -125,7 +125,7 @@ func TestResume(t *testing.T) {
 	// Job 3 and 5 should be runnable
 	requestId := "test_resume"
 	chainRepo := chain.NewMemoryRepo()
-	var gotSkipTries uint
+	var gotTotalTries uint
 	runnersToReturn := map[string]*mock.Runner{
 		"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE, Tries: 1}},
 		"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE, Tries: 1}},
@@ -133,9 +133,9 @@ func TestResume(t *testing.T) {
 		"job6": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE, Tries: 1}},
 	}
 	rf := &mock.RunnerFactory{
-		MakeFunc: func(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (runner.Runner, error) {
+		MakeFunc: func(job proto.Job, requestId string, prevTryNo uint, totalTries uint) (runner.Runner, error) {
 			if job.Id == "job3" {
-				gotSkipTries = triesToSkip
+				gotTotalTries = totalTries
 			}
 			return runnersToReturn[job.Id], nil
 		},
@@ -188,6 +188,7 @@ func TestResume(t *testing.T) {
 			"job4": {"job6"},
 			"job5": {"job6"},
 		},
+		FinishedJobs: 2,
 	}
 	sjc := proto.SuspendedJobChain{
 		RequestId: requestId,
@@ -195,13 +196,13 @@ func TestResume(t *testing.T) {
 		TotalJobTries: map[string]uint{
 			"job1": 2, // sequence retried once (job4 failed)
 			"job2": 2,
-			"job3": 3,
+			"job3": 3, // failed on seq try 2, job try 1 (job total job try = 3)
 			"job4": 1,
 		},
 		LatestRunJobTries: map[string]uint{
 			"job1": 1,
 			"job2": 1,
-			"job3": 2, // job3 should have 2 tries left
+			"job3": 1, // job3 should have 2 tries left
 			"job4": 1,
 		},
 		SequenceTries: map[string]uint{
@@ -244,9 +245,8 @@ func TestResume(t *testing.T) {
 	// Tries to be skipped when running a stopped job should be the number of times
 	// job was tried before being stopped - 1 (don't count the try it was stopped
 	// on)
-	expectedJob3SkipTries := uint(1)
-	if gotSkipTries != expectedJob3SkipTries {
-		t.Errorf("got job3 tries before Stopped = %d, expected %d", gotSkipTries, expectedJob3SkipTries)
+	if gotTotalTries != 3 {
+		t.Errorf("got job3 tries before Stopped = %d, expected 3", gotTotalTries)
 	}
 }
 
@@ -406,8 +406,8 @@ func TestStop(t *testing.T) {
 		return
 	}
 
-	if c.State() != proto.STATE_FAIL {
-		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_FAIL)
+	if c.State() != proto.STATE_STOPPED {
+		t.Errorf("chain state = %s, expected STOPPED", proto.StateName[c.State()])
 	}
 	if c.JobState("job2") != proto.STATE_STOPPED {
 		t.Errorf("job2 state = %d, expected %d", c.JobState("job2"), proto.STATE_STOPPED)
@@ -827,7 +827,6 @@ func TestStatus(t *testing.T) {
 				JobId:     "job2",
 				State:     proto.STATE_RUNNING,
 				Status:    "job2 running",
-				N:         0, // see below
 				Args:      map[string]interface{}{},
 			},
 			proto.JobStatus{
@@ -835,7 +834,6 @@ func TestStatus(t *testing.T) {
 				JobId:     "job3",
 				State:     proto.STATE_RUNNING,
 				Status:    "job3 running",
-				N:         0, // see below
 				Args:      map[string]interface{}{},
 			},
 		},
@@ -848,17 +846,7 @@ func TestStatus(t *testing.T) {
 			t.Errorf("StartedAt <= 0: %+v", j)
 		}
 		status.JobStatuses[i].StartedAt = 0
-
-		// Don't know if job2 or job3 will run first. They're enqueued at same
-		// time, but no way to guarantee which makes in into queue and runs first.
-		// But either way, N should be only 2 or 3 because they're are the 2nd
-		// and 3rd jobs ran.
-		if j.N != 2 && j.N != 3 {
-			t.Errorf("got N = %d, expected 2 or 3", j.N)
-		}
-		status.JobStatuses[i].N = 0
 	}
-
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}

@@ -248,7 +248,7 @@ func (r *resumer) Resume(id string) error {
 		// in between saving an SJC and updating its request's state.
 		// This state can happen if an SJC has already been resumed, but
 		// the RM failed on deleting it from the db.
-		log.Errorf("cannot resume SJC %s because request is not suspended (state = %s) - deleting SJC", id, proto.StateName[state])
+		log.Errorf("cannot resume SJC %s because state = %s not SUSPENDED, deleting SJC", id, proto.StateName[state])
 		if err := r.deleteSJC(id); err != nil {
 			return fmt.Errorf("error deleting SJC: %s", err)
 		}

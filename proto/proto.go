@@ -8,20 +8,24 @@ import (
 	"time"
 )
 
+// DO NOT change the state values. The raw byte values is stored in tables,
+// so changing any value breaks everything. Add new states/values if needed.
+
 const (
-	STATE_UNKNOWN byte = iota
+	STATE_UNKNOWN byte = 0
 
 	// Normal states, in order
-	STATE_PENDING  // not started
-	STATE_RUNNING  // running
-	STATE_COMPLETE // completed successfully
+	STATE_PENDING  byte = 1 // not started
+	STATE_RUNNING  byte = 2 // running
+	STATE_COMPLETE byte = 3 // completed successfully
 
-	STATE_FAIL    // failed, job/seq retry if possible
-	STATE_STOPPED // stopped by user or API shutdown
+	STATE_FAIL     byte = 4 // failed, job/seq retry if possible
+	STATE_RESERVED byte = 5 // reserved (used to be TIMEOUT)
+	STATE_STOPPED  byte = 6 // stopped by user or API shutdown
 
 	// A request or chain can be suspended and then resumed at a later time.
 	// Jobs aren't suspended - they're stopped when a chain is suspended.
-	STATE_SUSPENDED
+	STATE_SUSPENDED byte = 7
 )
 
 var StateName = map[byte]string{
@@ -30,6 +34,7 @@ var StateName = map[byte]string{
 	STATE_RUNNING:   "RUNNING",
 	STATE_COMPLETE:  "COMPLETE",
 	STATE_FAIL:      "FAIL",
+	STATE_RESERVED:  "RESERVED",
 	STATE_STOPPED:   "STOPPED",
 	STATE_SUSPENDED: "SUSPENDED",
 }
@@ -40,6 +45,7 @@ var StateValue = map[string]byte{
 	"RUNNING":   STATE_RUNNING,
 	"COMPLETE":  STATE_COMPLETE,
 	"FAIL":      STATE_FAIL,
+	"RESERVED":  STATE_RESERVED,
 	"STOPPED":   STATE_STOPPED,
 	"SUSPENDED": STATE_SUSPENDED,
 }

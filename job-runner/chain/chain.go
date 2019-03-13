@@ -31,6 +31,12 @@ type Chain struct {
 // NewChain takes a JobChain proto and maps of sequence + jobs tries, and turns them
 // into a Chain that the JR can use.
 func NewChain(jc *proto.JobChain, sequenceTries map[string]uint, totalJobTries map[string]uint, latestRunJobTries map[string]uint) *Chain {
+	for jobName, job := range jc.Jobs {
+		if job.Data == nil {
+			job.Data = map[string]interface{}{}
+		}
+		jc.Jobs[jobName] = job
+	}
 	return &Chain{
 		jobsMux:           &sync.RWMutex{},
 		jobChain:          jc,
@@ -83,27 +89,23 @@ func (c *Chain) RunnableJobs() proto.Jobs {
 	return runnableJobs
 }
 
-// IsDoneRunning returns two booleans - the first indicates whether the chain
-// is done, and the second indicates whether the chain is complete.
+// IsDoneRunning returns two booleans: done indicates if there are running or
+// runnable jobs, and complete indicates if all jobs finished successfully
+// (STATE_COMPLETE).
 //
-// A chain is done running if there are no jobs in it running and there are no more
-// jobs in it that can be run. This happens if all of the jobs in the chain are
-// complete, or if some or all of the jobs in the chain failed. Note that one
-// failed job does not mean the chain is done - there may still be pending jobs
-// independent of this failed job that can be run. Stopped jobs are treated the
-// same as pending jobs - they can be rerun (as they are when a suspended chain is
-// resumed).
+// A chain is done running if there are no running or runnable jobs. We must
+// wait for running jobs to reap them. This happens if all jobs in the chain
+// complete, or some fail but can be retried in a sequence retry. (Job retries
+// are done in the job runner.) Failed jobs do _not_ mean the chain is done
+// because there can still be running jobs. This also means a failed job does
+// not fail the whole chain immediately; rather, the chain fails when it reaches
+// one or more pending jobs that can't run because of the previous failure.
 //
-// A chain is complete if every job in it completed successfully.
+// A chain is complete iff every job finished successfully (STATE_COMPLETE).
 func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 	c.jobsMux.RLock()
 	defer c.jobsMux.RUnlock()
-
 	complete = true
-
-	// Loop through every job in the chain and act on its state. Keep
-	// track of the jobs that aren't running or in a finished state so
-	// that we can later check to see if they are capable of running.
 	for _, job := range c.jobChain.Jobs {
 		switch job.State {
 		case proto.STATE_COMPLETE:
@@ -113,19 +115,25 @@ func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 			// If any jobs are still running, the chain isn't done or complete.
 			return false, false
 		case proto.STATE_STOPPED:
-			// If any jobs are stopped, the chain is done but not complete.
-			return true, false
+			// Stopped jobs are a special case: the chain _will be_ done and
+			// not complete, but not yet because there can be other running
+			// or runnable jobs. So do nothing here and just fall through to
+			// set complete = false below.
 		case proto.STATE_PENDING:
-			// If any job can be run, the chain is not done or complete.
+			// If any job is runnable, the chain isn't done or complete.
 			if c.isRunnable(job.Id) {
 				return false, false
 			}
-		default:
-			// Any job that matches none of the above cases is failed.
-			// If sequence can retry, then chain isn't done or complete.
+			// This job is pending but not runnable which means a previous job
+			// failed.
+		case proto.STATE_FAIL:
+			// If sequence can retry, then chain isn't done or complete,
 			if c.canRetrySequence(job.Id) {
 				return false, false
 			}
+			// Failed but no seq retry means the chain has failed
+		default:
+			panic("IsDoneRunning: invalid job state: " + proto.StateName[job.State])
 		}
 
 		// We can only arrive here if a job is not complete (pending or failed).
@@ -134,8 +142,22 @@ func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 		// ready to return yet.
 		complete = false
 	}
-
 	return true, complete
+}
+
+// FailedJobs returns the number of failed jobs. This is used by reapers to
+// determine if a chain failed, or if it can be finalized as stopped or suspended.
+func (c *Chain) FailedJobs() uint {
+	c.jobsMux.RLock()
+	defer c.jobsMux.RUnlock()
+	n := uint(0)
+	for _, job := range c.jobChain.Jobs {
+		if job.State != proto.STATE_FAIL {
+			continue
+		}
+		n++
+	}
+	return n
 }
 
 func (c *Chain) SequenceStartJob(jobId string) proto.Job {
@@ -296,8 +318,8 @@ func (c *Chain) SetJobState(jobId string, state byte) {
 		}
 		c.running[jobId] = jobStatus
 	} else {
-		// STATE_RUNNING is the only running state, and it's not that so
-		// the job must not be running
+		// STATE_RUNNING is the only running state, and it's not that, so the
+		// job must not be running.
 		delete(c.running, jobId)
 	}
 }

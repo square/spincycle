@@ -62,7 +62,7 @@ func (c *Ps) Run() error {
 
 	for _, r := range status.Jobs {
 		runtime := fmt.Sprintf("%.1f", now.Sub(time.Unix(0, r.StartedAt)).Seconds())
-		nJobs := 0
+		nJobs := uint(0)
 		requestName := ""
 		owner := ""
 		args := map[string]interface{}{}
