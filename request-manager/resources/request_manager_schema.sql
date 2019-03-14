@@ -30,8 +30,6 @@ CREATE TABLE IF NOT EXISTS `job_log` (
   `job_id`        BINARY(4)        NOT NULL,
   `name`          VARBINARY(100)   NOT NULL,
   `try`           SMALLINT         NOT NULL DEFAULT 0,
-  `sequence_try`  SMALLINT         NOT NULL DEFAULT 0,
-  `sequence_id`   VARBINARY(100)   NOT NULL,
   `type`          VARBINARY(75)    NOT NULL,
   `state`         TINYINT UNSIGNED NOT NULL DEFAULT 0,
   `started_at`    BIGINT UNSIGNED  NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
