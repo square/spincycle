@@ -56,14 +56,23 @@ func Validate(jobChain proto.JobChain, new bool) error {
 					proto.StateName[job.State], job.State, job.Name, job.Id)
 			}
 		}
+		if jobChain.FinishedJobs != 0 {
+			return fmt.Errorf("FinishedJobs = %d, expected 0 for new job chain", jobChain.FinishedJobs)
+		}
 	} else {
+		completedJobs := uint(0)
 		for _, job := range jobChain.Jobs {
 			switch job.State {
-			case proto.STATE_PENDING, proto.STATE_COMPLETE, proto.STATE_STOPPED:
+			case proto.STATE_COMPLETE:
+				completedJobs += 1
+			case proto.STATE_PENDING, proto.STATE_STOPPED:
 			default:
 				return fmt.Errorf("invalid job state for existing job chain: %s (%d), job %s (ID %s); all job states must be PENDING, COMPLETE, or STOPPED",
 					proto.StateName[job.State], job.State, job.Name, job.Id)
 			}
+		}
+		if jobChain.FinishedJobs != completedJobs {
+			return fmt.Errorf("FinishedJobs = %d but there are %d jobs with state = COMPLETE", jobChain.FinishedJobs, completedJobs)
 		}
 	}
 

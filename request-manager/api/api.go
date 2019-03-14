@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 
@@ -39,6 +40,7 @@ var (
 type API struct {
 	appCtx       app.Context
 	rm           request.Manager
+	sm           status.Manager
 	rr           request.Resumer
 	jls          joblog.Store
 	shutdownChan chan struct{}
@@ -52,6 +54,7 @@ func NewAPI(appCtx app.Context) *API {
 	api := &API{
 		appCtx:       appCtx,
 		rm:           appCtx.RM,
+		sm:           appCtx.Status,
 		jls:          appCtx.JLS,
 		rr:           appCtx.RR,
 		shutdownChan: appCtx.ShutdownChan,
@@ -64,15 +67,15 @@ func NewAPI(appCtx app.Context) *API {
 	// //////////////////////////////////////////////////////////////////////
 
 	// Request
-	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)                        // create
-	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                     // get
-	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)             // start
-	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)           // finish
-	api.echo.PUT(API_ROOT+"requests/:reqId/stop", api.stopRequestHandler)               // stop
-	api.echo.PUT(API_ROOT+"requests/:reqId/suspend", api.suspendRequestHandler)         // suspend
-	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)           // status
-	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler)      // job chain
-	api.echo.PUT(API_ROOT+"requests/:reqId/progress", api.updateRequestProgressHandler) // progress
+	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)                   // create
+	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                // get
+	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)        // start
+	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)      // finish
+	api.echo.PUT(API_ROOT+"requests/:reqId/stop", api.stopRequestHandler)          // stop
+	api.echo.PUT(API_ROOT+"requests/:reqId/suspend", api.suspendRequestHandler)    // suspend
+	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)      // status
+	api.echo.PUT(API_ROOT+"requests/:reqId/progress", api.requestProgressHandler)  // progress
+	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler) // job chain
 
 	// Job Log
 	api.echo.POST(API_ROOT+"requests/:reqId/log", api.createJLHandler)    // create
@@ -318,6 +321,28 @@ func (api *API) statusRequestHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, reqStatus)
 }
 
+func (api *API) requestProgressHandler(c echo.Context) error {
+	reqId := c.Param("reqId")
+	var prg proto.RequestProgress
+	if err := c.Bind(&prg); err != nil {
+		return err
+	}
+	// Validate
+	if prg.RequestId == "" {
+		errMsg := "invalid proto.StatusProgress: RequestId is empty, must be set"
+		return handleError(serr.ValidationError{Message: errMsg}, c)
+	}
+	if prg.RequestId != reqId {
+		errMsg := fmt.Sprintf("invalid proto.StatusProgress: RequestId=%s does not match request ID in URL: %s", prg.RequestId, reqId)
+		return handleError(serr.ValidationError{Message: errMsg}, c)
+	}
+	// Update
+	if err := api.sm.UpdateProgress(prg); err != nil {
+		return handleError(err, c)
+	}
+	return c.JSON(http.StatusOK, nil)
+}
+
 // GET <API_ROOT>/requests/{reqId}/job-chain
 // Get the job chain for a request.
 func (api *API) jobChainRequestHandler(c echo.Context) error {
@@ -394,7 +419,7 @@ func (api *API) requestListHandler(c echo.Context) error {
 // GET <API_ROOT>/status/running
 // Report all requests that are running.
 func (api *API) statusRunningHandler(c echo.Context) error {
-	running, err := api.appCtx.Status.Running(status.NoFilter)
+	running, err := api.sm.Running(status.NoFilter)
 	if err != nil {
 		return handleError(err, c)
 	}
@@ -405,14 +430,6 @@ func (api *API) statusRunningHandler(c echo.Context) error {
 
 func (api *API) versionHandler(c echo.Context) error {
 	return c.String(http.StatusOK, v.Version())
-}
-
-func (api *API) updateRequestProgressHandler(c echo.Context) error {
-	reqId := c.Param("reqId")
-	if err := api.rm.IncrementFinishedJobs(reqId); err != nil {
-		return handleError(err, c)
-	}
-	return c.JSON(http.StatusOK, nil)
 }
 
 // ------------------------------------------------------------------------- //
@@ -427,6 +444,8 @@ func handleError(err error, c echo.Context) error {
 	case serr.RequestNotFound, serr.JobNotFound:
 		ret.HTTPStatus = http.StatusNotFound
 	case serr.ErrInvalidCreateRequest:
+		ret.HTTPStatus = http.StatusBadRequest
+	case serr.ValidationError:
 		ret.HTTPStatus = http.StatusBadRequest
 	}
 

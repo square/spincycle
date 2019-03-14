@@ -726,36 +726,6 @@ func TestStatusJobRetried(t *testing.T) {
 	}
 }
 
-func TestIncrementFinishedJobs(t *testing.T) {
-	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
-	defer teardownManager(t, dbName)
-
-	reqId := "454ae2f98a05cv16sdwt" // request is running
-	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
-		DBConnector:    dbc,
-		JRClient:       &mock.JRClient{},
-		ShutdownChan:   shutdownChan,
-		DefaultJRURL:   "http://defaulturl:1111",
-	}
-	m := request.NewManager(cfg)
-	err := m.IncrementFinishedJobs(reqId)
-	if err != nil {
-		t.Errorf("error = %s, expected nil", err)
-	}
-
-	// Get the request from the db and make sure its FinishedJobs counter was incremented.
-	req, err := m.Get(reqId)
-	if err != nil {
-		t.Error(err)
-	}
-
-	expectedCount := testdb.SavedRequests[reqId].FinishedJobs + 1
-	if req.FinishedJobs != expectedCount {
-		t.Errorf("request FinishedJobs = %d, expected %d", req.FinishedJobs, expectedCount)
-	}
-}
-
 func TestJobChainNotFound(t *testing.T) {
 	dbName := setupManager(t, rmtest.DataPath+"/jc-default.sql")
 	defer teardownManager(t, dbName)

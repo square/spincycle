@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/go-sql-driver/mysql"
 	"github.com/rs/xid"
 
@@ -56,10 +57,6 @@ type Manager interface {
 	// Finish marks a request as being finished. It gets the request's final
 	// state from the proto.FinishRequest argument.
 	Finish(requestId string, finishParams proto.FinishRequest) error
-
-	// IncrementFinishedJobs increments the count of the FinishedJobs field
-	// on the request and saves it to the db.
-	IncrementFinishedJobs(requestId string) error
 
 	// Specs returns a list of all the request specs the the RM knows about.
 	Specs() []proto.RequestSpec
@@ -469,10 +466,13 @@ func (m *manager) Finish(requestId string, finishParams proto.FinishRequest) err
 	if err != nil {
 		return err
 	}
+	log.Infof("finish request: %+v", finishParams)
 
-	req.FinishedAt = &finishParams.FinishedAt
 	prevState := req.State
+
 	req.State = finishParams.State
+	req.FinishedAt = &finishParams.FinishedAt
+	req.FinishedJobs = finishParams.FinishedJobs
 	req.JobRunnerURL = ""
 
 	// This will only update the request if the current state is RUNNING.
@@ -486,37 +486,6 @@ func (m *manager) Finish(requestId string, finishParams proto.FinishRequest) err
 	}
 
 	return nil
-}
-
-func (m *manager) IncrementFinishedJobs(requestId string) error {
-	ctx := context.TODO()
-
-	q := "UPDATE requests SET finished_jobs = finished_jobs + 1 WHERE request_id = ?"
-	var res sql.Result
-	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
-		var err error
-		res, err = m.dbc.ExecContext(ctx, q, requestId)
-		return err
-	}, nil)
-	if err != nil {
-		return serr.NewDbError(err, "UPDATE requests")
-	}
-
-	cnt, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-
-	switch cnt {
-	case 0:
-		return ErrNotUpdated
-	case 1:
-		return nil
-	default:
-		// This should be impossible since we specify the primary key
-		// in the WHERE clause of the update.
-		return ErrMultipleUpdated
-	}
 }
 
 var requestList []proto.RequestSpec

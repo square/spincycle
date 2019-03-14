@@ -18,8 +18,11 @@ func (s *JRStatus) Running() ([]proto.JobStatus, error) {
 	return []proto.JobStatus{}, nil
 }
 
+// --------------------------------------------------------------------------
+
 type RMStatus struct {
-	RunningFunc func(status.Filter) (proto.RunningStatus, error)
+	RunningFunc        func(status.Filter) (proto.RunningStatus, error)
+	UpdateProgressFunc func(proto.RequestProgress) error
 }
 
 func (s *RMStatus) Running(f status.Filter) (proto.RunningStatus, error) {
@@ -27,4 +30,11 @@ func (s *RMStatus) Running(f status.Filter) (proto.RunningStatus, error) {
 		return s.RunningFunc(f)
 	}
 	return proto.RunningStatus{}, nil
+}
+
+func (s *RMStatus) UpdateProgress(prg proto.RequestProgress) error {
+	if s.UpdateProgressFunc != nil {
+		return s.UpdateProgressFunc(prg)
+	}
+	return nil
 }

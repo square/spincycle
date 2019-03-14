@@ -173,7 +173,6 @@ type JobStatus struct {
 	StartedAt int64                  `json:"startedAt"` // when job started (UnixNano)
 	State     byte                   `json:"state"`     // usually proto.STATE_RUNNING
 	Status    string                 `json:"status"`    // real-time status, if running
-	N         uint                   `json:"n"`         // Nth job ran in chain
 	Try       uint                   `json:"try"`       // try number, can be >1+retry on sequence retry
 }
 
@@ -191,7 +190,8 @@ type RequestStatus struct {
 
 // RequestProgress updates request progress from the Job Runner.
 type RequestProgress struct {
-	FinishedJobs uint `json:"finishedJobs"`
+	RequestId    string `json:"requestId"`
+	FinishedJobs uint   `json:"finishedJobs"`
 }
 
 type RunningStatus struct {
@@ -208,8 +208,10 @@ type CreateRequest struct {
 
 // FinishRequest represents the payload to tell the RM that a request has finished.
 type FinishRequest struct {
-	State      byte      // the final state of the chain
-	FinishedAt time.Time // when the Job Runner finished the request
+	RequestId    string    `json:"requestId"`
+	State        byte      `json:"state"`      // the final state of the chain
+	FinishedAt   time.Time `json:"finishedAt"` // when the Job Runner finished the request
+	FinishedJobs uint      `json:"finishedJobs"`
 }
 
 // JobStatuses are a list of job status sorted by job id.

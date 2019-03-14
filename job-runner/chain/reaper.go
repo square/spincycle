@@ -353,6 +353,7 @@ func (r *SuspendedChainReaper) Reap(job proto.Job) {
 		}
 	case proto.STATE_COMPLETE:
 		jLogger.Infof("job completed")
+		r.chain.IncrementFinishedJobs(1)
 		// Copy job data to all child jobs.
 		for _, nextJob := range r.chain.NextJobs(job.Id) {
 			for k, v := range job.Data {
@@ -484,6 +485,9 @@ func (r *StoppedChainReaper) Reap(job proto.Job) {
 	jLogger := r.logger.WithFields(log.Fields{"job_id": job.Id, "sequence_id": job.SequenceId, "sequence_try": r.chain.SequenceTries(job.Id)})
 	jLogger.Info("job chain stopped")
 	r.chain.SetJobState(job.Id, job.State)
+	if job.State == proto.STATE_COMPLETE {
+		r.chain.IncrementFinishedJobs(1)
+	}
 	return
 }
 
@@ -537,9 +541,14 @@ type reaper struct {
 // if sending fails. It returns true if the final state was successfully sent;
 // else false.
 func (r *reaper) sendFinalState(finishedAt time.Time) {
+	fr := proto.FinishRequest{
+		State:        r.chain.State(),
+		FinishedAt:   finishedAt,
+		FinishedJobs: r.chain.FinishedJobs(),
+	}
 	err := retry.Do(r.finalizeTries, r.finalizeRetryWait,
 		func() error {
-			return r.rmc.FinishRequest(r.chain.RequestId(), r.chain.State(), finishedAt)
+			return r.rmc.FinishRequest(fr)
 		},
 		nil,
 	)

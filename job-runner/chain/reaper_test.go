@@ -301,9 +301,9 @@ func TestRunningReaper(t *testing.T) {
 	sent := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sent = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 	}
@@ -424,9 +424,9 @@ func TestRunningReaperResume(t *testing.T) {
 	sent := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sent = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 	}
@@ -575,9 +575,9 @@ func TestStoppedReaper(t *testing.T) {
 	sent := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sent = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 	}
@@ -679,9 +679,9 @@ func TestStoppedReaperStop(t *testing.T) {
 	sent := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sent = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 	}
@@ -941,7 +941,7 @@ func TestSuspendedReaper(t *testing.T) {
 	sentSJC := false
 	var receivedSJC proto.SuspendedJobChain
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
 			return nil
 		},
@@ -1059,9 +1059,9 @@ func TestSuspendedReaperCompleted(t *testing.T) {
 	sentSJC := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 		SuspendRequestFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
@@ -1144,9 +1144,9 @@ func TestSuspendedReaperStop(t *testing.T) {
 	sentSJC := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 		SuspendRequestFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
@@ -1230,7 +1230,7 @@ func TestSuspendedFinalize(t *testing.T) {
 	sentSJC := false
 	var receivedSJC proto.SuspendedJobChain
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
 			return nil
 		},
@@ -1295,9 +1295,9 @@ func TestSuspendedFinalizeFinished(t *testing.T) {
 	sentSJC := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 		SuspendRequestFunc: func(reqId string, sjc proto.SuspendedJobChain) error {

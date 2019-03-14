@@ -223,7 +223,8 @@ func (c *Chain) SequenceTries(jobId string) uint {
 // IncrementFinishedJobs increments the finished jobs count by delta. Negative delta
 // is given on sequence retry. Returns the new finished jobs count.
 func (c *Chain) IncrementFinishedJobs(delta int) {
-	c.jobsMux.Lock() // -- lock
+	c.jobsMux.Lock()
+	defer c.jobsMux.Unlock()
 	// delta can be negative (on seq retry), but FinishedJobs is unsigned,
 	// so get int of FinishedJobs to add int delta, then set back and return.
 	cur := int(c.jobChain.FinishedJobs)
@@ -231,7 +232,6 @@ func (c *Chain) IncrementFinishedJobs(delta int) {
 		panic(fmt.Sprintf("IncrementFinishedJobs cur %d + delta %d < 0", cur, delta))
 	}
 	c.jobChain.FinishedJobs = uint(cur + delta)
-	c.jobsMux.Unlock() // -- unlock
 	return
 }
 

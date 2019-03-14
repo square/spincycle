@@ -63,6 +63,7 @@ func (c *Ps) Run() error {
 	for _, r := range status.Jobs {
 		runtime := fmt.Sprintf("%.1f", now.Sub(time.Unix(0, r.StartedAt)).Seconds())
 		nJobs := uint(0)
+		finishedJobs := uint(0)
 		requestName := ""
 		owner := ""
 		args := map[string]interface{}{}
@@ -70,6 +71,7 @@ func (c *Ps) Run() error {
 		if status.Requests != nil {
 			if r, ok := status.Requests[r.RequestId]; ok {
 				nJobs = r.TotalJobs
+				finishedJobs = r.FinishedJobs
 				owner = r.User
 				if c.ctx.Options.Verbose {
 					requestName = r.Type
@@ -109,9 +111,9 @@ func (c *Ps) Run() error {
 				}
 				argString = argString + k + "=" + val + " "
 			}
-			fmt.Fprintf(w, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name, requestName, argString)
+			fmt.Fprintf(w, line, r.RequestId, finishedJobs, nJobs, runtime, owner, r.Name, requestName, argString)
 		} else {
-			fmt.Fprintf(w, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name)
+			fmt.Fprintf(w, line, r.RequestId, finishedJobs, nJobs, runtime, owner, r.Name)
 		}
 	}
 

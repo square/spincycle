@@ -44,16 +44,16 @@ func TestPs(t *testing.T) {
 				Type:      "jobtype",
 				Name:      "jobname",
 				StartedAt: time.Now().Add(-3 * time.Second).UnixNano(),
-				N:         1,
 				Status:    "jobstatus",
 			},
 		},
 		Requests: map[string]proto.Request{
 			"b9uvdi8tk9kahl8ppvbg": proto.Request{
-				Id:        "b9uvdi8tk9kahl8ppvbg",
-				TotalJobs: 9,
-				Type:      "requestname",
-				User:      "owner",
+				Id:           "b9uvdi8tk9kahl8ppvbg",
+				TotalJobs:    9,
+				Type:         "requestname",
+				User:         "owner",
+				FinishedJobs: 1,
 			},
 		},
 	}
@@ -105,16 +105,16 @@ func TestPsVerbose(t *testing.T) {
 				Type:      "jobtype",
 				Name:      "jobname",
 				StartedAt: time.Now().Add(-3 * time.Second).UnixNano(),
-				N:         1,
 				Status:    "jobstatus",
 			},
 		},
 		Requests: map[string]proto.Request{
 			"b9uvdi8tk9kahl8ppvbg": proto.Request{
-				Id:        "b9uvdi8tk9kahl8ppvbg",
-				TotalJobs: 9,
-				Type:      "requestname",
-				User:      "owner",
+				Id:           "b9uvdi8tk9kahl8ppvbg",
+				TotalJobs:    9,
+				Type:         "requestname",
+				User:         "owner",
+				FinishedJobs: 2,
 			},
 		},
 	}
@@ -149,7 +149,7 @@ func TestPsVerbose(t *testing.T) {
 	// There's a trailing space after "val2 ". Only required args in list order
 	// because that matches spec order.
 	expectOutput := `ID                  	   N	NJOBS	  TIME	OWNER	JOB	REQUEST
-b9uvdi8tk9kahl8ppvbg	   1	    9	   3.0	owner	jobname	requestname  key=value key2=val2 
+b9uvdi8tk9kahl8ppvbg	   2	    9	   3.0	owner	jobname	requestname  key=value key2=val2 
 `
 	if output.String() != expectOutput {
 		fmt.Printf("got output:\n%s\nexpected:\n%s\n", output, expectOutput)

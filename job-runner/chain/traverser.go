@@ -9,6 +9,7 @@ import (
 	"time"
 
 	log "github.com/Sirupsen/logrus"
+
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 	rm "github.com/square/spincycle/request-manager"
@@ -211,10 +212,6 @@ func (t *traverser) Run() {
 
 	defer t.chainRepo.Remove(t.chain.RequestId())
 
-	// Update finished_jobs count which determines request progress. For
-	//if err := t.rmc.FinishedJobs(t.chain.FinishedJobs()); err != nil {
-	//}
-
 	// Start a goroutine to run jobs. This consumes runJobChan. When jobs are done,
 	// they're sent to doneJobChan, which a reaper consumes. This goroutine returns
 	// when runJobChan is closed below.
@@ -285,8 +282,7 @@ func (t *traverser) Stop() error {
 	defer t.stopMux.Unlock()
 	if t.stopped {
 		return nil
-	}
-	if t.suspended {
+	} else if t.suspended {
 		return ErrShuttingDown
 	}
 	close(t.stopChan)
@@ -295,7 +291,7 @@ func (t *traverser) Stop() error {
 
 	// Stop the runningReaper and start the stoppedReaper which saves jobs' states
 	// but doesn't enqueue any more jobs to run. It sends the chain's final state
-	// to teh RM when all jobs have stopped running.
+	// to the RM when all jobs have stopped running.
 	t.reaper.Stop() // blocks until runningReaper stops
 	stoppedReaperChan := make(chan struct{})
 	t.reaper = t.reaperFactory.MakeStopped() // t.reaper = stoppedReaper
@@ -372,6 +368,25 @@ func (t *traverser) runJobs() {
 	// Run all jobs that come in on runJobChan. The loop exits when runJobChan
 	// is closed in the runningReaper goroutine in Run().
 	for job := range t.runJobChan {
+		// Don't run the job if traverser stopped or shutting down. In this case,
+		// drain runJobChan to prevent runningReaper from blocking (the chan is
+		// unbuffered). As long as we do not add job to runner repo, or do anything
+		// to the job, it's like the job never ran; it stays pending and tries=0.
+		//
+		// Must check before running goroutine because Run() closes runJobChan
+		// when the runningReaper is done. Then this loop will end and close
+		// pendingChan which stopRunningJobs blocks on. Since this check happens
+		// in loop not goroutine, a closed pendingChan means it's been checked
+		// for all jobs and either the job did not run or it did with pending+1
+		// because the loop want finish until running all code before the goroutine
+		// is launched.
+		select {
+		case <-t.stopChan:
+			log.Infof("not running job %s: traverser stopped or shutting down", job.Id)
+			continue
+		default:
+		}
+
 		// Signal to stopRunningJobs that there's +1 goroutine that's going
 		// to add itself to runnerRepo
 		atomic.AddInt64(&t.pending, 1)
@@ -380,23 +395,6 @@ func (t *traverser) runJobs() {
 		// the same loop "job" variable.
 		go func(job proto.Job) {
 			jLogger := t.logger.WithFields(log.Fields{"job_id": job.Id, "sequence_id": job.SequenceId, "sequence_try": t.chain.SequenceTries(job.Id)})
-
-			// Don't run the job if traverser stopped or shutting down. We can't
-			// do this check before running this goroutine because runJobChan is
-			// unbuffered, so runningReaper would block trying to enqueue next jobs.
-			// As long as we do not add job to runner repo (or do anything else
-			// to job), we can simply return from the goroutine and it's the same
-			// as never having run the job. If/when chain resumes, the job will
-			// still be PENDING and tries=0.
-			select {
-			case <-t.stopChan:
-				jLogger.Info("traverser stopped or shutting down, not running job")
-				atomic.AddInt64(&t.pending, -1)
-				return
-			default:
-			}
-
-			t.chain.SetJobState(job.Id, proto.STATE_RUNNING)
 
 			// Always send the finished job to doneJobChan to be reaped. If the
 			// reaper isn't reaping any more jobs (if this job took too long to
@@ -459,6 +457,7 @@ func (t *traverser) runJobs() {
 
 			// Run the job. This is a blocking operation that could take a long time.
 			jLogger.Infof("running job")
+			t.chain.SetJobState(job.Id, proto.STATE_RUNNING)
 			ret := runner.Run(job.Data)
 			jLogger.Infof("job done: state=%s (%d)", proto.StateName[ret.FinalState], ret.FinalState)
 
@@ -568,10 +567,12 @@ func (t *traverser) stopRunningJobs(timeout <-chan time.Time) error {
 	// The shutdown sequence is:
 	//   1. close(stopChan): runJob goroutines (RGs) don't run if closed. It's
 	//      as if the job never ran. This allows runJobChan to drain and prevents
-	//      runnerRepo from blocking because the chan is unbuffered. Before this
-	//      check, RGs do pending+1. So all in-flight RGs (RGs already started)
-	//      are guaranteed to be accountend for. I.e. if stopChan is closed after
-	//      an RG checks it, we'll still catch/wait for it on pending count.
+	//      runnerRepo from blocking because the chan is unbuffered. This is done
+	//      in the for loop, before launching the goroutine, so that a closed
+	//      pendingChan (step 4) guarantees that runJobs either didn't run an
+	//      RG or it did and added it to pending count (because the loop won't
+	//      exit until running pre-goroutine code, and pendingChan is only closed
+	//      after loop exits).
 	//   2. Stop runningReaper: This stops new/next jobs into runJobChan, which
 	//      is being drained because of step 1.
 	//   3. close(runJobChan): When runningReaper.Run returns, the goroutine in
