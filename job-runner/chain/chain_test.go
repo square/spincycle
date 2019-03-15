@@ -248,8 +248,8 @@ func TestIsRunnable(t *testing.T) {
 	}
 }
 
-// The chain is not done or complete - a job is running.
-func TestIsDoneJobRunning(t *testing.T) {
+func TestIsDoneRunning(t *testing.T) {
+	// A chain is not done (and not complete) if any job is running
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -270,8 +270,8 @@ func TestIsDoneJobRunning(t *testing.T) {
 	}
 }
 
-// The chain is not done or complete - more jobs can be run.
-func TestIsDoneJobCanBeRun(t *testing.T) {
+func TestIsDoneCompleteAndPending(t *testing.T) {
+	// A chain is not done (and not complete) if any job is pending and runnable
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -295,8 +295,8 @@ func TestIsDoneJobCanBeRun(t *testing.T) {
 	}
 }
 
-// The chain is not done or complete - more jobs can be run.
-func TestIsDoneJobRetry(t *testing.T) {
+func TestIsDoneFailAndPending(t *testing.T) {
+	// A chain is not done (and not complete) if any job is pending and runnable
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -309,7 +309,9 @@ func TestIsDoneJobRetry(t *testing.T) {
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_FAIL)
-	// ^ Job 4 can still be run
+	// ^ Job 4 is pending and runnable because job2 is complete
+	// The job3 fail doesn't matter because, currently, we don't fail the chain
+	// immediately when a job fails
 
 	expectedDone := false
 	expectedComplete := false
@@ -320,8 +322,8 @@ func TestIsDoneJobRetry(t *testing.T) {
 	}
 }
 
-// When the chain is done but not complete.
-func TestIsDoneNotComplete(t *testing.T) {
+func TestIsDoneFailNoSeqRetry(t *testing.T) {
+	// A chain is done (and not complete) if any job is failed and can't retry seq
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -333,7 +335,7 @@ func TestIsDoneNotComplete(t *testing.T) {
 	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
-	c.SetJobState("job2", proto.STATE_FAIL)
+	c.SetJobState("job2", proto.STATE_FAIL) // can't retry seq
 	c.SetJobState("job3", proto.STATE_COMPLETE)
 	c.SetJobState("job4", proto.STATE_PENDING)
 
@@ -346,8 +348,8 @@ func TestIsDoneNotComplete(t *testing.T) {
 	}
 }
 
-// When the chain is done and complete.
 func TestIsDoneComplete(t *testing.T) {
+	// A chain is done and complete if all jobs are complete
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -371,8 +373,8 @@ func TestIsDoneComplete(t *testing.T) {
 	}
 }
 
-func TestIsDoneJobStopped(t *testing.T) {
-	// Ay stopped jobs means the chain is done but not complete
+func TestIsDoneStoppedAndComplete(t *testing.T) {
+	// A chain is done (and not complete) if all jobs are complete and stopped
 	jc := &proto.JobChain{
 		Jobs: testutil.InitJobs(4),
 		AdjacencyList: map[string][]string{
@@ -388,11 +390,137 @@ func TestIsDoneJobStopped(t *testing.T) {
 	c.SetJobState("job4", proto.STATE_COMPLETE)
 
 	done, complete := c.IsDoneRunning()
-	if done != true {
+	if done != true { // expect done = true
 		t.Errorf("done is false, expected true")
 	}
-	if complete != false {
+	if complete != false { // expect complete = false
 		t.Errorf("complete is true, exepcted false")
+	}
+}
+
+func TestIsDoneStoppedAndRunning(t *testing.T) {
+	// A chain is not done (and not complete) if any job is running
+	jc := &proto.JobChain{
+		Jobs: testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+		},
+		FinishedJobs: 3,
+	}
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_COMPLETE)
+	c.SetJobState("job3", proto.STATE_STOPPED)
+	c.SetJobState("job4", proto.STATE_RUNNING)
+
+	done, complete := c.IsDoneRunning()
+	if done != false { // expect done = false
+		t.Errorf("done is true, expected false")
+	}
+	if complete != false { // expect complete = false
+		t.Errorf("complete is true, exepcted false")
+	}
+}
+
+func TestIsDoneSuspendedJobChain(t *testing.T) {
+	//   2-4
+	// 1<
+	//   3
+
+	// A chain is not done (and not complete) if any job is pending and runnable
+	jc := &proto.JobChain{
+		Jobs: testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+		},
+		FinishedJobs: 3,
+	}
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+
+	// This is how a suspended job chain will look: some complete, some stopped,
+	// and the one's not ran are still pending. So we expect done = true because
+	// nothing is runnable.
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_STOPPED) // block job4 from being runnable
+	c.SetJobState("job3", proto.STATE_COMPLETE)
+	c.SetJobState("job4", proto.STATE_PENDING) // not runnable because job2 is not complete
+
+	done, complete := c.IsDoneRunning()
+	if done != true { // expect done = true
+		t.Errorf("done is true, expected false")
+	}
+	if complete != false { // expect complete = false
+		t.Errorf("complete is true, exepcted false")
+	}
+
+	// Another variation: the stopped job isn't blocking another job.
+	// So now we expect done = false because job4 is runnable.
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_COMPLETE)
+	c.SetJobState("job3", proto.STATE_STOPPED) // nothing depends on this job
+	c.SetJobState("job4", proto.STATE_PENDING) // runnable because job2 is complete
+
+	done, complete = c.IsDoneRunning()
+	if done != false { // expect done = false
+		t.Errorf("done is true, expected false")
+	}
+	if complete != false { // expect complete = false
+		t.Errorf("complete is true, exepcted false")
+	}
+}
+
+func TestIsRunnableSuspendedJobChain(t *testing.T) {
+	//   2-4
+	// 1<
+	//   3
+	jc := &proto.JobChain{
+		Jobs: testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+		},
+		FinishedJobs: 3,
+	}
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+
+	// First variation from prev test ^
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_STOPPED) // block job4 from being runnable
+	c.SetJobState("job3", proto.STATE_COMPLETE)
+	c.SetJobState("job4", proto.STATE_PENDING) // not runnable because job2 is not complete
+
+	if c.IsRunnable("job1") != false {
+		t.Error("job1 runnable, expected false because it's complete")
+	}
+	if c.IsRunnable("job2") != true {
+		t.Error("job2 not runnable, expected true because it's stopped")
+	}
+	if c.IsRunnable("job3") != false {
+		t.Error("job3 runnable, expected false because it's complete")
+	}
+	if c.IsRunnable("job4") != false {
+		t.Error("job4 runnable, expected false because job2 isn't complete")
+	}
+
+	// Another variation (see prev test)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_COMPLETE)
+	c.SetJobState("job3", proto.STATE_STOPPED) // nothing depends on this job
+	c.SetJobState("job4", proto.STATE_PENDING) // runnable because job2 is complete
+
+	if c.IsRunnable("job1") != false {
+		t.Error("job1 runnable, expected false because it's complete")
+	}
+	if c.IsRunnable("job2") != false {
+		t.Error("job1 runnable, expected false because it's complete")
+	}
+	if c.IsRunnable("job3") != true {
+		t.Error("job3 not runnable, expected true because it's stopped")
+	}
+	if c.IsRunnable("job4") != true {
+		t.Error("job4 not runnable, expected true because job2 is complete")
 	}
 }
 

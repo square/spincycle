@@ -65,10 +65,8 @@ func (c *Chain) NextJobs(jobId string) proto.Jobs {
 	return nextJobs
 }
 
-// IsRunnable returns whether or not a job is runnable. A job is considered
-// runnable if it is Pending or Stopped with some retry attempts remaining,
-// and all of its previous jobs are complete. If any previous jobs are not
-// complete, the job is not runnable.
+// IsRunnable returns true if the job is runnable. A job is runnable if its
+// state is PENDING or STOPPED and all immediately previous jobs are state COMPLETE.
 func (c *Chain) IsRunnable(jobId string) bool {
 	c.jobsMux.RLock()
 	defer c.jobsMux.RUnlock()
@@ -77,7 +75,7 @@ func (c *Chain) IsRunnable(jobId string) bool {
 
 // RunnableJobs returns a list of all jobs that are runnable. A job is
 // runnable if all of its previous jobs are complete and it is Pending
-// or Stopped with some retries still remaining.
+// or Stopped.
 func (c *Chain) RunnableJobs() proto.Jobs {
 	var runnableJobs proto.Jobs
 	for jobId, job := range c.jobChain.Jobs {
@@ -93,15 +91,25 @@ func (c *Chain) RunnableJobs() proto.Jobs {
 // runnable jobs, and complete indicates if all jobs finished successfully
 // (STATE_COMPLETE).
 //
-// A chain is done running if there are no running or runnable jobs. We must
-// wait for running jobs to reap them. This happens if all jobs in the chain
-// complete, or some fail but can be retried in a sequence retry. (Job retries
-// are done in the job runner.) Failed jobs do _not_ mean the chain is done
-// because there can still be running jobs. This also means a failed job does
-// not fail the whole chain immediately; rather, the chain fails when it reaches
-// one or more pending jobs that can't run because of the previous failure.
-//
 // A chain is complete iff every job finished successfully (STATE_COMPLETE).
+//
+// A chain is done running if there are no running or runnable jobs.
+// We wait for running jobs to reap them. Reapers roll back failed jobs if the
+// sequence can be retried. Consequently, failed jobs do not mean the chain is done,
+// and they do not immediately fail the whole chain.
+//
+// Stopped jobs are not runnable in this context (i.e. chain context). This
+// function applies to the current chain run. Once a job is stopped, it cannot
+// be re-ran in the current chain run. If the chain is re-ran (i.e. resumed),
+// IsRunnable will return true for stopped jobs because stopped jobs are runnable
+// in that context (i.e. job context).
+//
+// IsDoneRunning and IsRunnable are closely related but differ on stopped jobs.
+// For chain A -> B -> C, if B is stopped, C is not runnable; the chain is done.
+// But add job D off A (A -> D) and although B is stopped, if D is pending then
+// the chain is not done. This is a side-effect of not stopping/failing
+// the whole chain when a job stops/fails. Instead, the chain continues to run
+// independent sequences.
 func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 	c.jobsMux.RLock()
 	defer c.jobsMux.RUnlock()
@@ -115,10 +123,8 @@ func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 			// If any jobs are still running, the chain isn't done or complete.
 			return false, false
 		case proto.STATE_STOPPED:
-			// Stopped jobs are a special case: the chain _will be_ done and
-			// not complete, but not yet because there can be other running
-			// or runnable jobs. So do nothing here and just fall through to
-			// set complete = false below.
+			// Stopped jobs are not runnable in this context (i.e. chain context).
+			// Do not return early here; we need to keep checking other jobs.
 		case proto.STATE_PENDING:
 			// If any job is runnable, the chain isn't done or complete.
 			if c.isRunnable(job.Id) {
@@ -343,19 +349,18 @@ func (c *Chain) Length() int {
 
 // -------------------------------------------------------------------------- //
 
-// isRunnable returns whether or not a job is runnable. A job is considered
-// runnable if it is Pending or Stopped with some retry attempts remaining,
-// and all of its previous jobs are complete. If any previous jobs are not
-// complete, the job is not runnable.
-//
-// isRunnable doesn't lock jobsMux, so it's only safe to call if you've already
-// locked that mutex. Call it instead of IsRunnable within other Chain methods that
-// lock jobsMux to avoid recursive locks.
+// isRunnable returns true if the job is runnable. A job is runnable if it is
+// state PENDING or STOPPED and all immediately previous jobs are state COMPLETE.
 func (c *Chain) isRunnable(jobId string) bool {
+	// CALLER MUST LOCK c.jobsMux!
 	job := c.jobChain.Jobs[jobId]
 	switch job.State {
 	case proto.STATE_PENDING, proto.STATE_STOPPED:
-		// Runnable (or re-runnable) states
+		// Runnable (or re-runnable) states. Stopped jobs are runnable because
+		// stopped isn't a failure, it means it was running but it was stopped
+		// before it finished. This happens for suspended and resumed job chains.
+		// The stopped try is logged to record that it did run but was stopped,
+		// and the try is rolled back in traverser.runJobs.
 	default:
 		return false // not runnable
 	}

@@ -135,7 +135,7 @@ TRY_LOOP:
 		// because it failed but because we stopped it, so log then overwrite
 		// the state = stopped. This also sets finalState below.
 		if r.stopped() {
-			if jobRet.State != proto.STATE_STOPPED {
+			if jobRet.State != proto.STATE_STOPPED && jobRet.State != proto.STATE_COMPLETE {
 				tryLogger.Errorf("job stoped: changing state %s (%d) to STATE_STOPPED", proto.StateName[jobRet.State], jobRet.State)
 				jobRet.State = proto.STATE_STOPPED
 			}

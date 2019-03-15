@@ -415,18 +415,25 @@ func (t *traverser) runJobs() {
 
 			// Increment sequence try count if this is sequence start job, which
 			// currently means sequenceId == job.Id.
-			// @todo retry on sequence start job
-			if t.chain.IsSequenceStartJob(job.Id) && job.State != proto.STATE_STOPPED {
-				jLogger.Infof("sequence start job")
-				t.chain.IncrementSequenceTries(job.Id, 1)
+			if t.chain.IsSequenceStartJob(job.Id) {
+				if job.State != proto.STATE_STOPPED {
+					t.chain.IncrementSequenceTries(job.Id, 1)
+					jLogger.Infof("sequence try %d", t.chain.SequenceTries(job.Id))
+				} else {
+					// If seq start job is stopped, the seq try count could be
+					// rolled back by one, but since we also increment it here
+					// we don't roll back instead of doing -1 then +1.
+					jLogger.Infof("sequence try %d (resumed)", t.chain.SequenceTries(job.Id))
+				}
 			}
 
-			// If job state is STOPPED, it's most likely because we're resuming
-			// this chain. Stopped jobs are re-runnable. Its current try count
-			// is the job try on which it was stopped, but stopping isn't a failure
-			// (retry only applies to failure), so roll back the try count by 1.
+			// If job state is STOPPED, we're resuming the chain. Stopped jobs
+			// are re-runable. Its current try count is the job try on which it
+			// was stopped. We -1 that count because the runner does current+1.
+			// E.g.: if tries=2 here (stopped on 2nd try), we'll send tries=1 to
+			// runner and it'll re-run as try=2.
 			if job.State == proto.STATE_STOPPED {
-				t.chain.IncrementJobTries(job.Id, -1) // negative only decr current tries
+				t.chain.IncrementJobTries(job.Id, -1)
 			}
 
 			// Job tries for current sequence try and total tries for all seq tries.
