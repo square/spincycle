@@ -548,6 +548,7 @@ type reaper struct {
 // else false.
 func (r *reaper) sendFinalState(finishedAt time.Time) {
 	fr := proto.FinishRequest{
+		RequestId:    r.chain.RequestId(),
 		State:        r.chain.State(),
 		FinishedAt:   finishedAt,
 		FinishedJobs: r.chain.FinishedJobs(),
@@ -580,7 +581,9 @@ func (r *reaper) prepareSequenceRetry(failedJob proto.Job) proto.Job {
 	// added because it was never run.
 	sequenceJobsToRetry := r.sequenceJobsCompleted(sequenceStartJob)
 
-	// @todo: fixme: sometimes we have failed job, sometimes we don't
+	// @todo: fixme: sometimes we have failed job, sometimes we don't. The list
+	//        must be unique, but depending on the job chain, sometimes the
+	//        failed job is put in the list twice.
 	haveFailedJob := false
 	for _, j := range sequenceJobsToRetry {
 		if j.Id == failedJob.Id {

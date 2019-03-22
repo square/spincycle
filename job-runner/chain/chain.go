@@ -142,7 +142,8 @@ func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 			panic("IsDoneRunning: invalid job state: " + proto.StateName[job.State])
 		}
 
-		// We can only arrive here if a job is not complete (pending or failed).
+		// We can only arrive here if a job is not complete, stopped, or failed
+		// and sequence cannot be retried.
 		// If there is at least one job that is not complete, the whole chain
 		// is not complete. The chain could still be done, though, so we aren't
 		// ready to return yet.
