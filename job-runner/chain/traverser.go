@@ -114,6 +114,13 @@ func (f *traverserFactory) MakeFromSJC(sjc *proto.SuspendedJobChain) (Traverser,
 		chain.IncrementJobTries(job.Id, -1)
 		chain.SetJobState(job.Id, proto.STATE_PENDING)
 		logger.Infof("resuming from job %s (%s)", job.Name, job.Id)
+
+		// Same applies to seq tries. If this is seq start job, then previous
+		// run would have +1 the count, so we need to -1 it because it's going
+		// to +1 again in runJobs.
+		if chain.IsSequenceStartJob(job.Id) {
+			chain.IncrementSequenceTries(job.Id, -1)
+		}
 	}
 
 	return f.make(chain)
