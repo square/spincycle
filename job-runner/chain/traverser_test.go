@@ -156,7 +156,7 @@ func TestResume(t *testing.T) {
 			State:      proto.STATE_COMPLETE,
 			SequenceId: "job1",
 		},
-		"job3": proto.Job{ // can be run
+		"job3": proto.Job{ // can be run, set back to PENDING
 			Id:         "job3",
 			State:      proto.STATE_STOPPED,
 			SequenceId: "job1",
@@ -217,6 +217,11 @@ func TestResume(t *testing.T) {
 	c, err := chainRepo.Get(requestId) // get the chain before running
 	if err != nil {
 		t.Errorf("got error retrieving chain from chain repo: %s", err)
+	}
+
+	job3State := c.JobState("job3")
+	if job3State != proto.STATE_PENDING {
+		t.Errorf("job3 state %s (%d), expected it to be reset to PENDING", proto.StateName[job3State], job3State)
 	}
 
 	traverser.Run()

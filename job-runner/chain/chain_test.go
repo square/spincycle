@@ -88,7 +88,7 @@ func TestRunnableJobs(t *testing.T) {
 			State:      proto.STATE_COMPLETE,
 			SequenceId: "job1",
 		},
-		"job3": proto.Job{ // can be run
+		"job3": proto.Job{ // cannot be run
 			Id:         "job3",
 			State:      proto.STATE_STOPPED,
 			SequenceId: "job1",
@@ -99,7 +99,7 @@ func TestRunnableJobs(t *testing.T) {
 			State:      proto.STATE_PENDING,
 			SequenceId: "job1",
 		},
-		"job5": proto.Job{ // can be run
+		"job5": proto.Job{ // cTestIsRunnablean be run
 			Id:         "job5",
 			State:      proto.STATE_PENDING,
 			SequenceId: "job1",
@@ -135,7 +135,7 @@ func TestRunnableJobs(t *testing.T) {
 	}
 	c := NewChain(sjc.JobChain, sjc.SequenceTries, sjc.TotalJobTries, sjc.LatestRunJobTries)
 
-	expectedJobs := proto.Jobs{jc.Jobs["job3"], jc.Jobs["job5"]}
+	expectedJobs := proto.Jobs{jc.Jobs["job5"]}
 	sort.Sort(expectedJobs)
 	runnableJobs := c.RunnableJobs()
 	sort.Sort(runnableJobs)
@@ -239,8 +239,8 @@ func TestIsRunnable(t *testing.T) {
 		t.Errorf("runnable = %t, want %t", runnable, expectedRunnable)
 	}
 
-	// Job 6 can run (stopped but can be retried)
-	expectedRunnable = true
+	// Job 6 can run (stopped)
+	expectedRunnable = false
 	runnable = c.IsRunnable("job6")
 
 	if runnable != expectedRunnable {
@@ -487,15 +487,15 @@ func TestIsRunnableSuspendedJobChain(t *testing.T) {
 
 	// First variation from prev test ^
 	c.SetJobState("job1", proto.STATE_COMPLETE)
-	c.SetJobState("job2", proto.STATE_STOPPED) // block job4 from being runnable
+	c.SetJobState("job2", proto.STATE_STOPPED) // not runnable
 	c.SetJobState("job3", proto.STATE_COMPLETE)
 	c.SetJobState("job4", proto.STATE_PENDING) // not runnable because job2 is not complete
 
 	if c.IsRunnable("job1") != false {
 		t.Error("job1 runnable, expected false because it's complete")
 	}
-	if c.IsRunnable("job2") != true {
-		t.Error("job2 not runnable, expected true because it's stopped")
+	if c.IsRunnable("job2") != false {
+		t.Error("job2 runnable, expected false because it's stopped")
 	}
 	if c.IsRunnable("job3") != false {
 		t.Error("job3 runnable, expected false because it's complete")
@@ -507,7 +507,7 @@ func TestIsRunnableSuspendedJobChain(t *testing.T) {
 	// Another variation (see prev test)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
-	c.SetJobState("job3", proto.STATE_STOPPED) // nothing depends on this job
+	c.SetJobState("job3", proto.STATE_STOPPED) // not runnable
 	c.SetJobState("job4", proto.STATE_PENDING) // runnable because job2 is complete
 
 	if c.IsRunnable("job1") != false {
@@ -516,8 +516,8 @@ func TestIsRunnableSuspendedJobChain(t *testing.T) {
 	if c.IsRunnable("job2") != false {
 		t.Error("job1 runnable, expected false because it's complete")
 	}
-	if c.IsRunnable("job3") != true {
-		t.Error("job3 not runnable, expected true because it's stopped")
+	if c.IsRunnable("job3") != false {
+		t.Error("job3 runnable, expected false because it's stopped")
 	}
 	if c.IsRunnable("job4") != true {
 		t.Error("job4 not runnable, expected true because job2 is complete")

@@ -350,22 +350,14 @@ func (c *Chain) Length() int {
 
 // -------------------------------------------------------------------------- //
 
-// isRunnable returns true if the job is runnable. A job is runnable if it is
-// state PENDING or STOPPED and all immediately previous jobs are state COMPLETE.
+// isRunnable returns true if the job is runnable. A job is runnable iff its
+// state is PENDING and all immediately previous jobs are state COMPLETE.
 func (c *Chain) isRunnable(jobId string) bool {
 	// CALLER MUST LOCK c.jobsMux!
 	job := c.jobChain.Jobs[jobId]
-	switch job.State {
-	case proto.STATE_PENDING, proto.STATE_STOPPED:
-		// Runnable (or re-runnable) states. Stopped jobs are runnable because
-		// stopped isn't a failure, it means it was running but it was stopped
-		// before it finished. This happens for suspended and resumed job chains.
-		// The stopped try is logged to record that it did run but was stopped,
-		// and the try is rolled back in traverser.runJobs.
-	default:
-		return false // not runnable
+	if job.State != proto.STATE_PENDING {
+		return false
 	}
-
 	// Check that all previous jobs are complete.
 	for _, job := range c.previousJobs(jobId) {
 		if job.State != proto.STATE_COMPLETE {

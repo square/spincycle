@@ -96,6 +96,26 @@ func (f *traverserFactory) Make(jobChain *proto.JobChain) (Traverser, error) {
 func (f *traverserFactory) MakeFromSJC(sjc *proto.SuspendedJobChain) (Traverser, error) {
 	// Convert/wrap chain from proto to Go object.
 	chain := NewChain(sjc.JobChain, sjc.SequenceTries, sjc.TotalJobTries, sjc.LatestRunJobTries)
+	logger := log.WithFields(log.Fields{"request_id": sjc.RequestId})
+	logger.Infof("resuming request")
+
+	// Change all STOPPED jobs to PENDING. Traverser expects a ready-to-run chain.
+	// We used to change stopped -> running runJobs, but if two jobs are stopped
+	// and the first is ran and reaped before the 2nd starts, the reaper will call
+	// IsDoneRunning which will return done=true because of the 2nd stopped job.
+	for _, job := range sjc.JobChain.Jobs {
+		if job.State != proto.STATE_STOPPED {
+			continue
+		}
+		// Current job try count is the job try on which it was stopped.
+		// We -1 that count because the runner does current+1. E.g.: if tries=2
+		// here (stopped on 2nd try), we'll send tries=1 to runner and it'll
+		// re-run as try=2.
+		chain.IncrementJobTries(job.Id, -1)
+		chain.SetJobState(job.Id, proto.STATE_PENDING)
+		logger.Infof("resuming from job %s (%s)", job.Name, job.Id)
+	}
+
 	return f.make(chain)
 }
 
@@ -165,7 +185,7 @@ type TraverserConfig struct {
 
 func NewTraverser(cfg TraverserConfig) *traverser {
 	// Include request id in all logging.
-	logger := log.WithFields(log.Fields{"requestId": cfg.Chain.RequestId()})
+	logger := log.WithFields(log.Fields{"request_id": cfg.Chain.RequestId()})
 
 	// Channels used to communicate between traverser + reaper(s)
 	doneJobChan := make(chan proto.Job)
@@ -207,8 +227,8 @@ func NewTraverser(cfg TraverserConfig) *traverser {
 // Run runs all jobs in the chain and blocks until the chain finishes running, is
 // stopped, or is suspended.
 func (t *traverser) Run() {
-	t.logger.Infof("chain traverser started")
-	defer t.logger.Infof("chain traverser done")
+	t.logger.Infof("traverser.Run call")
+	defer t.logger.Infof("traverser.Run return")
 
 	defer t.chainRepo.Remove(t.chain.RequestId())
 
@@ -221,7 +241,7 @@ func (t *traverser) Run() {
 	// this'll be the first job in the chain. For a resumed job chain, it'll be
 	// stopped jobs (see Chain.isRunnable).
 	for _, job := range t.chain.RunnableJobs() {
-		t.logger.Infof("sending initial job (%s) to runJobChan", job.Id)
+		t.logger.Infof("initial job: %s (%s)", job.Name, job.Id)
 		t.runJobChan <- job
 	}
 
@@ -361,8 +381,8 @@ func (t *traverser) Status() (proto.JobChainStatus, error) {
 // channel. When the job is done, it sends the job out through the doneJobChan
 // which is being consumed by a reaper.
 func (t *traverser) runJobs() {
-	t.logger.Infof("runJobs call")
-	defer t.logger.Infof("runJobs return")
+	t.logger.Info("runJobs call")
+	defer t.logger.Info("runJobs return")
 	defer close(t.pendingChan)
 
 	// Run all jobs that come in on runJobChan. The loop exits when runJobChan
@@ -416,24 +436,8 @@ func (t *traverser) runJobs() {
 			// Increment sequence try count if this is sequence start job, which
 			// currently means sequenceId == job.Id.
 			if t.chain.IsSequenceStartJob(job.Id) {
-				if job.State != proto.STATE_STOPPED {
-					t.chain.IncrementSequenceTries(job.Id, 1)
-					jLogger.Infof("sequence try %d", t.chain.SequenceTries(job.Id))
-				} else {
-					// If seq start job is stopped, the seq try count could be
-					// rolled back by one, but since we also increment it here
-					// we don't roll back instead of doing -1 then +1.
-					jLogger.Infof("sequence try %d (resumed)", t.chain.SequenceTries(job.Id))
-				}
-			}
-
-			// If job state is STOPPED, we're resuming the chain. Stopped jobs
-			// are re-runable. Its current try count is the job try on which it
-			// was stopped. We -1 that count because the runner does current+1.
-			// E.g.: if tries=2 here (stopped on 2nd try), we'll send tries=1 to
-			// runner and it'll re-run as try=2.
-			if job.State == proto.STATE_STOPPED {
-				t.chain.IncrementJobTries(job.Id, -1)
+				t.chain.IncrementSequenceTries(job.Id, 1)
+				jLogger.Infof("sequence try %d", t.chain.SequenceTries(job.Id))
 			}
 
 			// Job tries for current sequence try and total tries for all seq tries.
