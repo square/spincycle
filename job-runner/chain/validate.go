@@ -18,6 +18,9 @@ func (e ErrInvalidChain) Error() string {
 }
 
 // Validate checks if a job chain is valid. It returns an error if it's not.
+// new indicates if the job chain is new (true) or suspended (false). New job
+// chains can have only PENDING jobs, but suspended jobs chains can have PENDING
+// or STOPPED jobs.
 func Validate(jobChain proto.JobChain, new bool) error {
 	// Make sure the adjacency list is valid.
 	if !adjacencyListIsValid(jobChain) {

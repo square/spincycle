@@ -379,9 +379,8 @@ func (r *SuspendedChainReaper) Finalize() {
 	defer log.Infof("SuspendedChainReaper.Finalize: return")
 
 	// Mark any jobs that didn't respond to Stop in time as Failed
-	for jobId, jobStatus := range r.chain.Running() {
+	for jobId := range r.chain.Running() {
 		r.logger.Infof("job %s still running, setting state to FAIL", jobId)
-		jobId := jobStatus.JobId
 		r.chain.SetJobState(jobId, proto.STATE_FAIL)
 	}
 
@@ -615,8 +614,7 @@ func (r *reaper) prepareSequenceRetry(failedJob proto.Job) proto.Job {
 		r.chain.SetJobState(job.Id, proto.STATE_PENDING)
 	}
 
-	// Roll back finished job count. The -1 accounts for failedJob which did
-	// not incr finished jobs.
+	// Roll back finished job count
 	r.chain.IncrementFinishedJobs(-1 * finishedJobs)
 	seqLogger.Infof("rolled back %d finished jobs", finishedJobs)
 

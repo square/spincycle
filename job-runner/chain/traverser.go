@@ -100,7 +100,7 @@ func (f *traverserFactory) MakeFromSJC(sjc *proto.SuspendedJobChain) (Traverser,
 	logger.Infof("resuming request")
 
 	// Change all STOPPED jobs to PENDING. Traverser expects a ready-to-run chain.
-	// We used to change stopped -> running runJobs, but if two jobs are stopped
+	// We used to change stopped -> running in runJobs, but if two jobs are stopped
 	// and the first is ran and reaped before the 2nd starts, the reaper will call
 	// IsDoneRunning which will return done=true because of the 2nd stopped job.
 	for _, job := range sjc.JobChain.Jobs {
@@ -244,9 +244,7 @@ func (t *traverser) Run() {
 	// when runJobChan is closed below.
 	go t.runJobs()
 
-	// Enqueue all the first runnable jobs. For a new job chain (not suspended),
-	// this'll be the first job in the chain. For a resumed job chain, it'll be
-	// stopped jobs (see Chain.isRunnable).
+	// Enqueue all the first runnable jobs
 	for _, job := range t.chain.RunnableJobs() {
 		t.logger.Infof("initial job: %s (%s)", job.Name, job.Id)
 		t.runJobChan <- job
@@ -405,7 +403,7 @@ func (t *traverser) runJobs() {
 		// pendingChan which stopRunningJobs blocks on. Since this check happens
 		// in loop not goroutine, a closed pendingChan means it's been checked
 		// for all jobs and either the job did not run or it did with pending+1
-		// because the loop want finish until running all code before the goroutine
+		// because the loop won't finish until running all code before the goroutine
 		// is launched.
 		select {
 		case <-t.stopChan:

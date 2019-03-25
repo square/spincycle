@@ -65,17 +65,16 @@ func (c *Chain) NextJobs(jobId string) proto.Jobs {
 	return nextJobs
 }
 
-// IsRunnable returns true if the job is runnable. A job is runnable if its
-// state is PENDING or STOPPED and all immediately previous jobs are state COMPLETE.
+// IsRunnable returns true if the job is runnable. A job is runnable iff its
+// state is PENDING and all immediately previous jobs are state COMPLETE.
 func (c *Chain) IsRunnable(jobId string) bool {
 	c.jobsMux.RLock()
 	defer c.jobsMux.RUnlock()
 	return c.isRunnable(jobId)
 }
 
-// RunnableJobs returns a list of all jobs that are runnable. A job is
-// runnable if all of its previous jobs are complete and it is Pending
-// or Stopped.
+// RunnableJobs returns a list of all jobs that are runnable. A job is runnable
+// iff its state is PENDING and all immediately previous jobs are state COMPLETE.
 func (c *Chain) RunnableJobs() proto.Jobs {
 	var runnableJobs proto.Jobs
 	for jobId, job := range c.jobChain.Jobs {
@@ -94,17 +93,16 @@ func (c *Chain) RunnableJobs() proto.Jobs {
 // A chain is complete iff every job finished successfully (STATE_COMPLETE).
 //
 // A chain is done running if there are no running or runnable jobs.
-// We wait for running jobs to reap them. Reapers roll back failed jobs if the
-// sequence can be retried. Consequently, failed jobs do not mean the chain is done,
-// and they do not immediately fail the whole chain.
+// The reaper waits for running jobs to reap them. Reapers roll back failed jobs
+// if the sequence can be retried. Consequently, failed jobs do not mean the chain
+// is done, and they do not immediately fail the whole chain.
 //
 // Stopped jobs are not runnable in this context (i.e. chain context). This
 // function applies to the current chain run. Once a job is stopped, it cannot
-// be re-ran in the current chain run. If the chain is re-ran (i.e. resumed),
+// be re-run in the current chain run. If the chain is re-run (i.e. resumed),
 // IsRunnable will return true for stopped jobs because stopped jobs are runnable
 // in that context (i.e. job context).
 //
-// IsDoneRunning and IsRunnable are closely related but differ on stopped jobs.
 // For chain A -> B -> C, if B is stopped, C is not runnable; the chain is done.
 // But add job D off A (A -> D) and although B is stopped, if D is pending then
 // the chain is not done. This is a side-effect of not stopping/failing
@@ -142,11 +140,10 @@ func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 			panic("IsDoneRunning: invalid job state: " + proto.StateName[job.State])
 		}
 
-		// We can only arrive here if a job is not complete, stopped, or failed
-		// and sequence cannot be retried.
-		// If there is at least one job that is not complete, the whole chain
-		// is not complete. The chain could still be done, though, so we aren't
-		// ready to return yet.
+		// We can only arrive here if a job is pending but not runnable, stopped,
+		// or failed but its sequence is not retriable. If there is at least one
+		// job that is not complete, the whole chain is not complete. The chain
+		// could still be done, though, so we aren't ready to return yet.
 		complete = false
 	}
 	return true, complete
@@ -193,7 +190,7 @@ func (c *Chain) IncrementJobTries(jobId string, delta int) {
 		// that's monotonically increasing across all sequence retries.
 		c.totalJobTries[jobId] += uint(delta)
 	}
-	// Job count wrt current sequnce try can reset to zero
+	// Job count wrt current sequence try can reset to zero
 	cur := int(c.latestRunJobTries[jobId])
 	if cur+delta < 0 { // shouldn't happen
 		panic(fmt.Sprintf("IncrementJobTries jobId %s: cur %d + delta %d < 0", jobId, cur, delta))
@@ -228,7 +225,7 @@ func (c *Chain) SequenceTries(jobId string) uint {
 }
 
 // IncrementFinishedJobs increments the finished jobs count by delta. Negative delta
-// is given on sequence retry. Returns the new finished jobs count.
+// is given on sequence retry.
 func (c *Chain) IncrementFinishedJobs(delta int) {
 	c.jobsMux.Lock()
 	defer c.jobsMux.Unlock()

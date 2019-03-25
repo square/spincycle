@@ -271,3 +271,40 @@ func TestRunPanic(t *testing.T) {
 		t.Errorf("expected real value for job log StartedAt, got placeholder 0")
 	}
 }
+
+func TestRunResumed(t *testing.T) {
+	t.Skip("@todo @fixme")
+	// When a chain is resuemd and the job re-runs, the JLE.Try should be
+	// monotonically increasing: past runs + current tries with no gaps.
+	mJob := &mock.Job{
+		RunFunc: func(jobData map[string]interface{}) (job.Return, error) {
+			return job.Return{State: proto.STATE_COMPLETE}, nil
+		},
+	}
+	pJob := proto.Job{
+		Id:    "successJob",
+		Type:  "jtype",
+		Bytes: []byte{},
+		Retry: 2,
+	}
+	var gotJLE proto.JobLog
+	rmc := &mock.RMClient{
+		CreateJLFunc: func(reqId string, jle proto.JobLog) error {
+			gotJLE = jle
+			return nil
+		},
+	}
+	// 2 = current tries, 3 = past/total tries
+	jr := runner.NewRunner(pJob, mJob, "abc", 2, 3, rmc)
+
+	ret := jr.Run(noJobData)
+	if ret.FinalState != proto.STATE_COMPLETE {
+		t.Errorf("final state = %d, expected %d", ret.FinalState, proto.STATE_COMPLETE)
+	}
+	if ret.Tries != 3 {
+		t.Errorf("tries = %d, expected 1", ret.Tries)
+	}
+	if gotJLE.Try != 4 {
+		t.Errorf("jle.Try = %d, expected 3", gotJLE.Try)
+	}
+}

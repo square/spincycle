@@ -78,7 +78,7 @@ type JobChain struct {
 	Jobs          map[string]Job      `json:"jobs"`          // Job.Id => job
 	AdjacencyList map[string][]string `json:"adjacencyList"` // Job.Id => next []Job.Id
 	State         byte                `json:"state"`         // STATE_* const
-	FinishedJobs  uint                `json:"finishedJobs"`
+	FinishedJobs  uint                `json:"finishedJobs"`  // number of jobs that ran and finished with state = STATE_COMPLETE
 }
 
 // Request represents something that a user asks Spin Cycle to do.
@@ -94,8 +94,8 @@ type Request struct {
 	FinishedAt *time.Time `json:"finishedAt"` // when the job runner finished the request. doesn't indicate success/failure
 
 	JobChain     *JobChain `json:",omitempty"`   // job chain (request_archives.job_chain)
-	TotalJobs    uint      `json:"totalJobs"`    // the number of jobs in the request's job chain
-	FinishedJobs uint      `json:"finishedJobs"` // the number of finished jobs in the request
+	TotalJobs    uint      `json:"totalJobs"`    // number of jobs in the request's job chain
+	FinishedJobs uint      `json:"finishedJobs"` // number of jobs that ran and finished with state = STATE_COMPLETE
 
 	JobRunnerURL string `json:"jrURL,omitempty"` // URL of the job runner running the request
 }
@@ -191,7 +191,7 @@ type RequestStatus struct {
 // RequestProgress updates request progress from the Job Runner.
 type RequestProgress struct {
 	RequestId    string `json:"requestId"`
-	FinishedJobs uint   `json:"finishedJobs"`
+	FinishedJobs uint   `json:"finishedJobs"` // number of jobs that ran and finished with state = STATE_COMPLETE
 }
 
 type RunningStatus struct {
@@ -209,9 +209,9 @@ type CreateRequest struct {
 // FinishRequest represents the payload to tell the RM that a request has finished.
 type FinishRequest struct {
 	RequestId    string    `json:"requestId"`
-	State        byte      `json:"state"`      // the final state of the chain
-	FinishedAt   time.Time `json:"finishedAt"` // when the Job Runner finished the request
-	FinishedJobs uint      `json:"finishedJobs"`
+	State        byte      `json:"state"`        // the final state of the chain
+	FinishedAt   time.Time `json:"finishedAt"`   // when the Job Runner finished the request
+	FinishedJobs uint      `json:"finishedJobs"` // number of jobs that ran and finished with state = STATE_COMPLETE
 }
 
 // JobStatuses are a list of job status sorted by job id.

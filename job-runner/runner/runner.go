@@ -99,7 +99,8 @@ func (r *runner) Run(jobData map[string]interface{}) Return {
 	// the run fails.
 	finalState := proto.STATE_PENDING
 	r.startTime = time.Now().UTC()
-	tryNo := r.tries + 1
+	tryNo := r.tries + 1           // +1 for this try
+	totalTries := r.totalTries + 1 // +1 for this try
 TRY_LOOP:
 	for tryNo <= r.maxTries {
 		tryLogger := r.logger.WithFields(log.Fields{
@@ -147,7 +148,7 @@ TRY_LOOP:
 			JobId:      r.jobId,
 			Name:       r.jobName,
 			Type:       r.jobType,
-			Try:        r.totalTries + tryNo, // job_log.try is monotonically increasing across all seq tries
+			Try:        totalTries,
 			StartedAt:  startedAt,
 			FinishedAt: finishedAt,
 			State:      jobRet.State,
@@ -191,6 +192,7 @@ TRY_LOOP:
 			break TRY_LOOP
 		}
 		tryNo++ // see next comment...
+		totalTries++
 
 		// Wait between retries. Can be stopped while waiting which is why we
 		// need to increment tryNo first. At this point, we're effectively on
@@ -200,6 +202,7 @@ TRY_LOOP:
 		case <-time.After(r.retryWait):
 		case <-r.stopChan:
 			tryLogger.Infof("job stopped while waiting to run try %d", tryNo)
+			finalState = proto.STATE_STOPPED
 			break TRY_LOOP
 		}
 	}
