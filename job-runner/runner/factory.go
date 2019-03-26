@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package runner
 
@@ -8,11 +8,19 @@ import (
 	rm "github.com/square/spincycle/request-manager"
 )
 
-// A Factory takes a proto.Job, creates a corresponding job.Job interface for
-// it, and passes both to NewRunner to make a Runner.
+// A Factory makes a Runner for one job. There are two try counts: prevTries and
+// totalTries. prevTries is a gauge from [0, 1+retry], where retry is the retry
+// count from the request spec. The prevTries count is per-sequence try, which is
+// why it can reset to zero on sequence retry (handled by a chain.Reaper).
+// On suspend/resume, jobs are stopped and the try on which it's stopped doesn't count,
+// so prevTries is decremented by 1 on resume to retry. The totalTries count is
+// a monotonically increasing global counter of how many times the job was run.
+// This count is used for the proto.JobLog.Try field which cannot repeat a number
+// because the job_log table primary key is <request_id, job_id, try>.
 type Factory interface {
 	Make(job proto.Job, requestId string, prevTries, totalTries uint) (Runner, error)
 }
+
 type factory struct {
 	jf  job.Factory
 	rmc rm.Client

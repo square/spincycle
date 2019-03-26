@@ -273,16 +273,16 @@ func TestRunPanic(t *testing.T) {
 }
 
 func TestRunResumed(t *testing.T) {
-	t.Skip("@todo @fixme")
 	// When a chain is resuemd and the job re-runs, the JLE.Try should be
 	// monotonically increasing: past runs + current tries with no gaps.
+	// See code comment on type Factory interface.
 	mJob := &mock.Job{
 		RunFunc: func(jobData map[string]interface{}) (job.Return, error) {
-			return job.Return{State: proto.STATE_COMPLETE}, nil
+			return job.Return{State: proto.STATE_FAIL}, nil
 		},
 	}
 	pJob := proto.Job{
-		Id:    "successJob",
+		Id:    "resume_job",
 		Type:  "jtype",
 		Bytes: []byte{},
 		Retry: 2,
@@ -294,14 +294,16 @@ func TestRunResumed(t *testing.T) {
 			return nil
 		},
 	}
-	// 2 = current tries, 3 = past/total tries
+	// 2 = current tries, 3 = total tries. So this is re-run on try=4,
+	// i.e. always total tries + 1. But since current tries = 2, it'll
+	// only run once (ret.Tries=1) because Retry:2 == max tries = 3.
 	jr := runner.NewRunner(pJob, mJob, "abc", 2, 3, rmc)
 
 	ret := jr.Run(noJobData)
-	if ret.FinalState != proto.STATE_COMPLETE {
+	if ret.FinalState != proto.STATE_FAIL {
 		t.Errorf("final state = %d, expected %d", ret.FinalState, proto.STATE_COMPLETE)
 	}
-	if ret.Tries != 3 {
+	if ret.Tries != 1 {
 		t.Errorf("tries = %d, expected 1", ret.Tries)
 	}
 	if gotJLE.Try != 4 {
