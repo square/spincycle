@@ -199,7 +199,13 @@ func TestFinishRequestError(t *testing.T) {
 	defer cleanup()
 	c := rm.NewClient(&http.Client{}, ts.URL)
 
-	err := c.FinishRequest(reqId, proto.STATE_COMPLETE, time.Now())
+	fr := proto.FinishRequest{
+		RequestId:    reqId,
+		State:        proto.STATE_COMPLETE,
+		FinishedAt:   time.Now(),
+		FinishedJobs: 10,
+	}
+	err := c.FinishRequest(fr)
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -214,16 +220,18 @@ func TestFinishRequestSuccess(t *testing.T) {
 	c := rm.NewClient(&http.Client{}, ts.URL)
 
 	finishTime := time.Now()
-	err := c.FinishRequest(reqId, proto.STATE_COMPLETE, finishTime)
+	fr := proto.FinishRequest{
+		RequestId:    reqId,
+		State:        proto.STATE_COMPLETE,
+		FinishedAt:   finishTime,
+		FinishedJobs: 10,
+	}
+	err := c.FinishRequest(fr)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
-	expectedPayload := proto.FinishRequest{
-		State:      proto.STATE_COMPLETE,
-		FinishedAt: finishTime,
-	}
-	if diff := deep.Equal(payload, expectedPayload); diff != nil {
+	if diff := deep.Equal(payload, fr); diff != nil {
 		t.Error(diff)
 	}
 

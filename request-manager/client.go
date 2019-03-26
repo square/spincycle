@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	"github.com/square/spincycle/proto"
 )
@@ -27,10 +26,8 @@ type Client interface {
 	// (by sending it to the job runner).
 	StartRequest(string) error
 
-	// FinishRequest takes a request id, a state, and a finish time, and marks the
-	// corresponding request as being finished with the provided state, at the
-	// provided time.
-	FinishRequest(string, byte, time.Time) error
+	// FinishRequest marks a request as finished.
+	FinishRequest(proto.FinishRequest) error
 
 	// StopRequest takes a request id and stops the corresponding request.
 	// If the request is not running, it returns an error.
@@ -59,6 +56,9 @@ type Client interface {
 
 	// SysStatRunning returns a list of running jobs, sorted by runtime.
 	SysStatRunning() (proto.RunningStatus, error)
+
+	// UpdateProgress updates request progress from Job Runner.
+	UpdateProgress(proto.RequestProgress) error
 }
 
 type client struct {
@@ -108,17 +108,19 @@ func (c *client) StartRequest(requestId string) error {
 	return c.makeRequest("PUT", url, nil, nil)
 }
 
-func (c *client) FinishRequest(requestId string, state byte, finishedAt time.Time) error {
+func (c *client) FinishRequest(fr proto.FinishRequest) error {
 	// PUT /api/v1/requests/${requestId}/finish
-	url := c.baseUrl + "/api/v1/requests/" + requestId + "/finish"
-
-	// Create the payload struct.
-	finishParams := proto.FinishRequest{
-		State:      state,
-		FinishedAt: finishedAt,
+	url := c.baseUrl + "/api/v1/requests/" + fr.RequestId + "/finish"
+	if fr.RequestId == "" {
+		return fmt.Errorf("RequestId is empty")
 	}
-
-	return c.makeRequest("PUT", url, finishParams, nil)
+	if _, ok := proto.StateName[fr.State]; !ok {
+		return fmt.Errorf("invalid State value: %d", fr.State)
+	}
+	if fr.FinishedAt.IsZero() {
+		return fmt.Errorf("FinishedAt is zero")
+	}
+	return c.makeRequest("PUT", url, fr, nil)
 }
 
 func (c *client) StopRequest(requestId string) error {
@@ -183,6 +185,12 @@ func (c *client) SysStatRunning() (proto.RunningStatus, error) {
 	var req proto.RunningStatus
 	err := c.makeRequest("GET", url, nil, &req)
 	return req, err
+}
+
+func (c *client) UpdateProgress(prg proto.RequestProgress) error {
+	// GET /api/v1/requests/${requestId}/status
+	url := c.baseUrl + "/api/v1/requests/" + prg.RequestId + "/progress"
+	return c.makeRequest("PUT", url, prg, nil)
 }
 
 // ------------------------------------------------------------------------- //

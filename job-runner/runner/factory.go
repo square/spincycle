@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package runner
 
@@ -8,11 +8,19 @@ import (
 	rm "github.com/square/spincycle/request-manager"
 )
 
-// A Factory takes a proto.Job, creates a corresponding job.Job interface for
-// it, and passes both to NewRunner to make a Runner.
+// A Factory makes a Runner for one job. There are two try counts: prevTries and
+// totalTries. prevTries is a gauge from [0, 1+retry], where retry is the retry
+// count from the request spec. The prevTries count is per-sequence try, which is
+// why it can reset to zero on sequence retry (handled by a chain.Reaper).
+// On suspend/resume, jobs are stopped and the try on which it's stopped doesn't count,
+// so prevTries is decremented by 1 on resume to retry. The totalTries count is
+// a monotonically increasing global counter of how many times the job was run.
+// This count is used for the proto.JobLog.Try field which cannot repeat a number
+// because the job_log table primary key is <request_id, job_id, try>.
 type Factory interface {
-	Make(job proto.Job, requestId string, prevTries uint, prevSeqTries uint, sequenceRetry uint) (Runner, error)
+	Make(job proto.Job, requestId string, prevTries, totalTries uint) (Runner, error)
 }
+
 type factory struct {
 	jf  job.Factory
 	rmc rm.Client
@@ -27,12 +35,7 @@ func NewFactory(jf job.Factory, rmc rm.Client) Factory {
 }
 
 // Make a runner for a new job.
-func (f *factory) Make(pJob proto.Job, requestId string, prevTries uint, prevSeqTries uint, sequenceRetry uint) (Runner, error) {
-	// Subtract the number of times the job was already tried within this
-	// sequence try (i.e. before being stopped). Used when resuming a
-	// previously stopped job.
-	pJob.Retry -= prevSeqTries
-
+func (f *factory) Make(pJob proto.Job, requestId string, prevTries, totalTries uint) (Runner, error) {
 	// Instantiate a "blank" job of the given type.
 	realJob, err := f.jf.Make(job.NewIdWithRequestId(pJob.Type, pJob.Name, pJob.Id, requestId))
 	if err != nil {
@@ -46,5 +49,5 @@ func (f *factory) Make(pJob proto.Job, requestId string, prevTries uint, prevSeq
 	}
 
 	// Job should be ready to run. Create and return a runner for it.
-	return NewRunner(pJob, realJob, requestId, prevTries, sequenceRetry, f.rmc), nil
+	return NewRunner(pJob, realJob, requestId, prevTries, totalTries, f.rmc), nil
 }

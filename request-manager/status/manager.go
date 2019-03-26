@@ -6,17 +6,26 @@ package status
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"sort"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 
 	serr "github.com/square/spincycle/errors"
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/retry"
+)
+
+const (
+	DB_TRIES      = 3
+	DB_RETRY_WAIT = time.Duration(500 * time.Millisecond)
 )
 
 type Manager interface {
 	Running(Filter) (proto.RunningStatus, error)
+	UpdateProgress(proto.RequestProgress) error
 }
 
 type Filter struct {
@@ -161,4 +170,35 @@ func inList(vals []string) string {
 		}
 	}
 	return in
+}
+
+func (m *manager) UpdateProgress(prg proto.RequestProgress) error {
+	ctx := context.TODO()
+	q := "UPDATE requests SET finished_jobs = ? WHERE request_id = ? AND state = ?"
+	var res sql.Result
+	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		var err error
+		res, err = m.dbc.ExecContext(ctx, q, prg.FinishedJobs, prg.RequestId, proto.STATE_RUNNING)
+		return err
+	}, nil)
+	if err != nil {
+		return serr.NewDbError(err, "UPDATE requests")
+	}
+
+	cnt, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	switch cnt {
+	case 0:
+		// @todo: check if it didn't match because state != RUNNING
+		return serr.RequestNotFound{prg.RequestId}
+	case 1:
+		return nil
+	default:
+		// This should be impossible since we specify the primary key
+		// in the WHERE clause of the update.
+		return fmt.Errorf("UpdateProgress: request_id = %s matched %d rows, expected 1", prg.RequestId, cnt)
+	}
 }

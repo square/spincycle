@@ -45,6 +45,7 @@ type Job struct {
 	RunReturn       job.Return
 	RunErr          error
 	RunFunc         func(jobData map[string]interface{}) (job.Return, error) // can use this instead of RunErr and RunFunc for more involved mocks
+	StopFunc        func() error
 	StopErr         error
 	StatusResp      string
 	CreatedWithArgs map[string]interface{}
@@ -81,6 +82,9 @@ func (j *Job) Run(jobData map[string]interface{}) (job.Return, error) {
 }
 
 func (j *Job) Stop() error {
+	if j.StopFunc != nil {
+		return j.StopFunc()
+	}
 	return j.StopErr
 }
 

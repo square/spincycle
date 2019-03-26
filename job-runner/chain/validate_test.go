@@ -19,7 +19,7 @@ func TestValidateJobChain(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
-	if err := Validate(jc); err != nil {
+	if err := Validate(jc, true); err != nil {
 		t.Error(err)
 	}
 
@@ -31,7 +31,7 @@ func TestValidateJobChain(t *testing.T) {
 			"job7": {},
 		},
 	}
-	if err := Validate(jc); err == nil {
+	if err := Validate(jc, true); err == nil {
 		t.Error("no error, expected error on invalid chain")
 	}
 
@@ -43,7 +43,7 @@ func TestValidateJobChain(t *testing.T) {
 			"job2": {"job3"}, // first job
 		},
 	}
-	if err := Validate(jc); err == nil {
+	if err := Validate(jc, true); err == nil {
 		t.Error("no error, expected error on invalid chain")
 	}
 }

@@ -3,6 +3,8 @@
 package chain
 
 import (
+	"fmt"
+
 	"github.com/square/spincycle/proto"
 )
 
@@ -16,7 +18,10 @@ func (e ErrInvalidChain) Error() string {
 }
 
 // Validate checks if a job chain is valid. It returns an error if it's not.
-func Validate(jobChain proto.JobChain) error {
+// new indicates if the job chain is new (true) or suspended (false). New job
+// chains can have only PENDING jobs, but suspended jobs chains can have PENDING
+// or STOPPED jobs.
+func Validate(jobChain proto.JobChain, new bool) error {
 	// Make sure the adjacency list is valid.
 	if !adjacencyListIsValid(jobChain) {
 		return ErrInvalidChain{
@@ -42,6 +47,36 @@ func Validate(jobChain proto.JobChain) error {
 	// Make sure there are no cycles.
 	if !isAcyclic(jobChain) {
 		return ErrInvalidChain{Message: "chain is cyclic"}
+	}
+
+	// Validate job states. For new job chains, all jobs must be PENDING.
+	// For suspended/resumed (not-new) chains, jobs must be PENDING, COMPLETE,
+	// or STOPPED.
+	if new {
+		for _, job := range jobChain.Jobs {
+			if job.State != proto.STATE_PENDING {
+				return fmt.Errorf("invalid job state for new job chain: %s (%d), job %s (ID %s); all job states must be PENDING",
+					proto.StateName[job.State], job.State, job.Name, job.Id)
+			}
+		}
+		if jobChain.FinishedJobs != 0 {
+			return fmt.Errorf("FinishedJobs = %d, expected 0 for new job chain", jobChain.FinishedJobs)
+		}
+	} else {
+		completedJobs := uint(0)
+		for _, job := range jobChain.Jobs {
+			switch job.State {
+			case proto.STATE_COMPLETE:
+				completedJobs += 1
+			case proto.STATE_PENDING, proto.STATE_STOPPED:
+			default:
+				return fmt.Errorf("invalid job state for existing job chain: %s (%d), job %s (ID %s); all job states must be PENDING, COMPLETE, or STOPPED",
+					proto.StateName[job.State], job.State, job.Name, job.Id)
+			}
+		}
+		if jobChain.FinishedJobs != completedJobs {
+			return fmt.Errorf("FinishedJobs = %d but there are %d jobs with state = COMPLETE", jobChain.FinishedJobs, completedJobs)
+		}
 	}
 
 	return nil

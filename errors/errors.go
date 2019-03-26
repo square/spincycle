@@ -86,3 +86,15 @@ func NewErrInvalidState(expectedState, actualState string) ErrInvalidState {
 func (e ErrInvalidState) Error() string {
 	return fmt.Sprintf("request in state %s, expected state %s", e.actualState, e.expectedState)
 }
+
+// --------------------------------------------------------------------------
+
+var _ error = ValidationError{}
+
+type ValidationError struct {
+	Message string
+}
+
+func (e ValidationError) Error() string {
+	return e.Message
+}
