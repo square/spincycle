@@ -5,6 +5,7 @@ package proto
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -165,27 +166,14 @@ type JobLog struct {
 
 // JobStatus represents the status of one job in a job chain.
 type JobStatus struct {
-	RequestId string                 `json:"requestId"`
-	JobId     string                 `json:"jobId"`
-	Type      string                 `json:"type"`
-	Name      string                 `json:"name"`
-	Args      map[string]interface{} `json:"jobArgs"`
-	StartedAt int64                  `json:"startedAt"` // when job started (UnixNano)
-	State     byte                   `json:"state"`     // usually proto.STATE_RUNNING
-	Status    string                 `json:"status"`    // real-time status, if running
-	Try       uint                   `json:"try"`       // try number, can be >1+retry on sequence retry
-}
-
-// JobChainStatus represents the status of a job chain reported by the Job Runner.
-type JobChainStatus struct {
-	RequestId   string      `json:"requestId"`
-	JobStatuses JobStatuses `json:"jobStatuses"`
-}
-
-// RequestStatus represents the status of a request reported by the Request Manager.
-type RequestStatus struct {
-	Request        `json:"request"`
-	JobChainStatus JobChainStatus `json:"jobChainStatus"`
+	RequestId string `json:"requestId"`
+	JobId     string `json:"jobId"`
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	StartedAt int64  `json:"startedAt"`        // when job started (UnixNano)
+	State     byte   `json:"state"`            // usually proto.STATE_RUNNING
+	Status    string `json:"status,omitempty"` // real-time status, if running
+	Try       uint   `json:"try"`              // try number, can be >1+retry on sequence retry
 }
 
 // RequestProgress updates request progress from the Job Runner.
@@ -194,9 +182,31 @@ type RequestProgress struct {
 	FinishedJobs uint   `json:"finishedJobs"` // number of jobs that ran and finished with state = STATE_COMPLETE
 }
 
+// RunningStatus represents running jobs and their requests. It is returned by
+// GET /api/v1/status/running.
 type RunningStatus struct {
-	Jobs     []JobStatus        `json:"jobs,omitempty"`
-	Requests map[string]Request `json:"requests,omitempty"` // keyed on RequestId
+	Jobs     []JobStatus        `json:"jobs"`
+	Requests map[string]Request `json:"requests"` // keyed on RequestId
+}
+
+// StatusFilter represents optional filters for status requests.
+type StatusFilter struct {
+	RequestId string
+	OrderBy   string // startTime
+}
+
+func (f StatusFilter) String() string {
+	q := []string{}
+	if f.RequestId != "" {
+		q = append(q, "requestId="+f.RequestId)
+	}
+	if f.OrderBy != "" {
+		q = append(q, "orderBy="+strings.ToLower(f.OrderBy))
+	}
+	if len(q) == 0 {
+		return ""
+	}
+	return "?" + strings.Join(q, "&")
 }
 
 // CreateRequest represents the payload to create and start a new request.

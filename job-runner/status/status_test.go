@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package status_test
 
@@ -9,9 +9,11 @@ import (
 
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/job-runner/chain"
+	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job-runner/status"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/test"
+	"github.com/square/spincycle/test/mock"
 )
 
 func TestRunning(t *testing.T) {
@@ -66,9 +68,22 @@ func TestRunning(t *testing.T) {
 		t.Fatalf("error in Add: %v", err)
 	}
 
-	m := status.NewManager(repo)
+	rr := mock.RunnerRepo{
+		GetFunc: func(jobId string) runner.Runner {
+			switch jobId {
+			case "job1":
+				return &mock.Runner{StatusResp: "job1 status"}
+			case "job2":
+				return &mock.Runner{StatusResp: "job2 status"}
+			default:
+				return nil
+			}
+		},
+	}
 
-	got, err := m.Running()
+	m := status.NewManager(repo, rr)
+
+	got, err := m.Running(proto.StatusFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,14 +100,16 @@ func TestRunning(t *testing.T) {
 			JobId:     "job1",
 			Type:      "type1",
 			State:     proto.STATE_RUNNING,
-			Args:      map[string]interface{}{},
+			Try:       1,
+			Status:    "job1 status",
 		},
 		{
 			RequestId: "chain2",
 			JobId:     "job2",
 			Type:      "type2",
 			State:     proto.STATE_RUNNING,
-			Args:      map[string]interface{}{},
+			Try:       1,
+			Status:    "job2 status",
 		},
 	}
 

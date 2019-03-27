@@ -30,7 +30,7 @@ func (c *Running) Prepare() error {
 }
 
 func (c *Running) Run() error {
-	status, err := c.ctx.RMClient.RequestStatus(c.reqId)
+	status, err := c.ctx.RMClient.GetRequest(c.reqId)
 	if err != nil {
 		return err
 	}

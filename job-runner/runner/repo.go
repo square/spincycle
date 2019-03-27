@@ -12,6 +12,7 @@ import (
 // store and retrieve Runners in a thread-safe way.
 type Repo interface {
 	Set(jobId string, runner Runner)
+	Get(jobId string) Runner
 	Remove(jobId string)
 	Items() (map[string]Runner, error)
 	Count() int
@@ -30,6 +31,14 @@ func NewRepo() Repo {
 // Set sets a Runner in the repo.
 func (r *repo) Set(jobId string, runner Runner) {
 	r.c.Set(jobId, runner)
+}
+
+func (r *repo) Get(jobId string) Runner {
+	v, ok := r.c.Get(jobId)
+	if !ok {
+		return nil
+	}
+	return v.(Runner)
 }
 
 // Remove removes a runner from the repo.

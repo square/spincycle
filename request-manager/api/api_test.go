@@ -406,46 +406,6 @@ func TestSuspendRequestHandlerRMError(t *testing.T) {
 	}
 }
 
-func TestStatusRequestHandlerSuccess(t *testing.T) {
-	reqId := "abcd1234"
-	reqStatus := proto.RequestStatus{
-		Request: proto.Request{
-			Id: reqId,
-		},
-		JobChainStatus: proto.JobChainStatus{
-			JobStatuses: proto.JobStatuses{
-				proto.JobStatus{JobId: "j1", Status: "status1", State: proto.STATE_RUNNING},
-				proto.JobStatus{JobId: "j2", Status: "status2", State: proto.STATE_FAIL},
-			},
-		},
-	}
-	// Create a mock request manager that will return a request status.
-	rm := &mock.RequestManager{
-		StatusFunc: func(r string) (proto.RequestStatus, error) {
-			return reqStatus, nil
-		},
-	}
-	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
-	defer cleanup()
-
-	// Make the HTTP request.
-	var actualReqStatus proto.RequestStatus
-	statusCode, _, err := testutil.MakeHTTPRequest("GET", baseURL()+"requests/"+reqId+"/status", []byte{}, &actualReqStatus)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Check that the status code is what we expect.
-	if statusCode != http.StatusOK {
-		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
-	}
-
-	// Check that the request status is what we expect.
-	if diff := deep.Equal(actualReqStatus, reqStatus); diff != nil {
-		t.Error(diff)
-	}
-}
-
 func TestGetJobChainRequestHandlerSuccess(t *testing.T) {
 	reqId := "abcd1234"
 	jc := proto.JobChain{
@@ -565,16 +525,8 @@ func TestCreateJLHandlerSuccess(t *testing.T) {
 			return jl, nil
 		},
 	}
-	// Create a mock request manager that will record if it is called.
-	var rmCalled bool
-	rm := &mock.RequestManager{
-		IncrementFinishedJobsFunc: func(r string) error {
-			rmCalled = true
-			return nil
-		},
-	}
 
-	setup(rm, &mock.RequestResumer{}, jls, make(chan struct{}))
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, jls, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -599,13 +551,6 @@ func TestCreateJLHandlerSuccess(t *testing.T) {
 	if diff := deep.Equal(rmjl, jl); diff != nil {
 		t.Error(diff)
 	}
-
-	// Used to be we incremented requests.finished_jobs on create JLE,
-	// but we stoppoed doing this because JLE shouldn't be tied to finished job
-	// count because the same job can have many JLE for job and seq retry.
-	if rmCalled {
-		t.Errorf("IncrementFinishedJobs called, shouldn't be called on create JLE")
-	}
 }
 
 func TestCreateJLHandlerJobFailed(t *testing.T) {
@@ -621,16 +566,8 @@ func TestCreateJLHandlerJobFailed(t *testing.T) {
 			return jl, nil
 		},
 	}
-	// Create a mock request manager that will record if it is called.
-	var rmCalled bool
-	rm := &mock.RequestManager{
-		IncrementFinishedJobsFunc: func(r string) error {
-			rmCalled = true
-			return nil
-		},
-	}
 
-	setup(rm, &mock.RequestResumer{}, jls, make(chan struct{}))
+	setup(&mock.RequestManager{}, &mock.RequestResumer{}, jls, make(chan struct{}))
 	defer cleanup()
 
 	// Make the HTTP request.
@@ -644,11 +581,6 @@ func TestCreateJLHandlerJobFailed(t *testing.T) {
 	// Check that the status code is what we expect.
 	if statusCode != http.StatusCreated {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusCreated)
-	}
-
-	// Check that the IncrementFinishedJobs method on the request manager was NOT called.
-	if rmCalled != false {
-		t.Errorf("IncrementFinishedJob on the request manager was called, expected it not to be")
 	}
 }
 

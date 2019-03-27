@@ -313,12 +313,9 @@ func (c *Chain) SetJobState(jobId string, state byte) {
 			JobId:     jobId,
 			Type:      j.Type,
 			Name:      j.Name,
-			Args:      map[string]interface{}{},
 			StartedAt: now,
 			State:     state,
-		}
-		for k, v := range j.Args {
-			jobStatus.Args[k] = v
+			// Try and Status come from Runner.Status()
 		}
 		c.running[jobId] = jobStatus
 	} else {

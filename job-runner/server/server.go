@@ -30,6 +30,7 @@ type Server struct {
 	api           *api.API
 	traverserRepo cmap.ConcurrentMap
 	chainRepo     chain.Repo
+	runnerRepo    runner.Repo
 	rmc           rm.Client
 
 	shutdownChan chan struct{}
@@ -156,8 +157,12 @@ func (s *Server) Boot() error {
 	// to report status back to RM (then back to user).
 	s.chainRepo = chain.NewMemoryRepo()
 
+	// Runner repo holds running runner.Runner instances in memory, i.e. jobs
+	// running for a chain
+	s.runnerRepo = runner.NewRepo()
+
 	// Status Manager reports what's happening in the JR
-	stat := status.NewManager(s.chainRepo)
+	stat := status.NewManager(s.chainRepo, s.runnerRepo)
 
 	// Runner Factory makes a job.Runner to run one job. It's used by chain.Traversers
 	// to run jobs.
@@ -166,7 +171,7 @@ func (s *Server) Boot() error {
 	// Traverser Factory is used by API to make a new chain.Traverser to run a
 	// job chain. These are stored in a Traverser Repo (just a map) so API can
 	// keep track of what's running.
-	trFactory := chain.NewTraverserFactory(s.chainRepo, rf, rmc, s.shutdownChan)
+	trFactory := chain.NewTraverserFactory(s.chainRepo, s.runnerRepo, rf, rmc, s.shutdownChan)
 	s.traverserRepo = cmap.New()
 
 	// Base URL is what this JR reports itself as, e.g. https://spin-jr.prod.local:32307

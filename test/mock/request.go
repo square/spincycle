@@ -16,16 +16,14 @@ var (
 )
 
 type RequestManager struct {
-	CreateFunc                func(proto.CreateRequest) (proto.Request, error)
-	GetFunc                   func(string) (proto.Request, error)
-	GetWithJCFunc             func(string) (proto.Request, error)
-	StartFunc                 func(string) error
-	StopFunc                  func(string) error
-	FinishFunc                func(string, proto.FinishRequest) error
-	StatusFunc                func(string) (proto.RequestStatus, error)
-	IncrementFinishedJobsFunc func(string) error
-	SpecsFunc                 func() []proto.RequestSpec
-	JobChainFunc              func(string) (proto.JobChain, error)
+	CreateFunc    func(proto.CreateRequest) (proto.Request, error)
+	GetFunc       func(string) (proto.Request, error)
+	GetWithJCFunc func(string) (proto.Request, error)
+	StartFunc     func(string) error
+	StopFunc      func(string) error
+	FinishFunc    func(string, proto.FinishRequest) error
+	SpecsFunc     func() []proto.RequestSpec
+	JobChainFunc  func(string) (proto.JobChain, error)
 }
 
 func (r *RequestManager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
@@ -66,20 +64,6 @@ func (r *RequestManager) Finish(reqId string, finishParams proto.FinishRequest) 
 func (r *RequestManager) Stop(reqId string) error {
 	if r.StopFunc != nil {
 		return r.StopFunc(reqId)
-	}
-	return nil
-}
-
-func (r *RequestManager) Status(reqId string) (proto.RequestStatus, error) {
-	if r.StatusFunc != nil {
-		return r.StatusFunc(reqId)
-	}
-	return proto.RequestStatus{}, nil
-}
-
-func (r *RequestManager) IncrementFinishedJobs(reqId string) error {
-	if r.IncrementFinishedJobsFunc != nil {
-		return r.IncrementFinishedJobsFunc(reqId)
 	}
 	return nil
 }

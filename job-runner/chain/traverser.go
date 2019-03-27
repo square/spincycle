@@ -51,15 +51,6 @@ type Traverser interface {
 	//
 	// It returns an error if it fails to stop all running jobs.
 	Stop() error
-
-	// Status gets the status of all running and failed jobs. Since a job can only
-	// run when all of its ancestors have completed, the state of the entire chain
-	// can be inferred from this information - every job in the chain before a
-	// running or failed job must be complete, and every job in the chain after a
-	// running or failed job must be pending.
-	//
-	// It returns an error if it fails to get the status of all running jobs.
-	Status() (proto.JobChainStatus, error)
 }
 
 // A TraverserFactory makes a new Traverser.
@@ -70,14 +61,16 @@ type TraverserFactory interface {
 
 type traverserFactory struct {
 	chainRepo    Repo
+	runnerRepo   runner.Repo
 	rf           runner.Factory
 	rmc          rm.Client
 	shutdownChan chan struct{}
 }
 
-func NewTraverserFactory(cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) TraverserFactory {
+func NewTraverserFactory(chainRepo Repo, runnerRepo runner.Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) TraverserFactory {
 	return &traverserFactory{
-		chainRepo:    cr,
+		chainRepo:    chainRepo,
+		runnerRepo:   runnerRepo,
 		rf:           rf,
 		rmc:          rmc,
 		shutdownChan: shutdownChan,
@@ -142,6 +135,7 @@ func (f *traverserFactory) make(chain *Chain) (Traverser, error) {
 	cfg := TraverserConfig{
 		Chain:         chain,
 		ChainRepo:     f.chainRepo,
+		RunnerRepo:    f.runnerRepo,
 		RunnerFactory: f.rf,
 		RMClient:      f.rmc,
 		ShutdownChan:  f.shutdownChan,
@@ -183,6 +177,7 @@ type traverser struct {
 type TraverserConfig struct {
 	Chain         *Chain
 	ChainRepo     Repo
+	RunnerRepo    runner.Repo
 	RunnerFactory runner.Factory
 	RMClient      rm.Client
 	ShutdownChan  chan struct{}
@@ -198,17 +193,16 @@ func NewTraverser(cfg TraverserConfig) *traverser {
 	doneJobChan := make(chan proto.Job)
 	runJobChan := make(chan proto.Job)
 
-	runnerRepo := runner.NewRepo() // needed for traverser + reaper factory
 	reaperFactory := &ChainReaperFactory{
 		Chain:        cfg.Chain,
 		ChainRepo:    cfg.ChainRepo,
+		RunnerRepo:   cfg.RunnerRepo,
 		RMClient:     cfg.RMClient,
 		RMCTries:     reaperTries,
 		RMCRetryWait: reaperRetryWait,
 		Logger:       logger,
 		DoneJobChan:  doneJobChan,
 		RunJobChan:   runJobChan,
-		RunnerRepo:   runnerRepo,
 	}
 
 	return &traverser{
@@ -216,8 +210,8 @@ func NewTraverser(cfg TraverserConfig) *traverser {
 		logger:        logger,
 		chain:         cfg.Chain,
 		chainRepo:     cfg.ChainRepo,
+		runnerRepo:    cfg.RunnerRepo,
 		rf:            cfg.RunnerFactory,
-		runnerRepo:    runnerRepo,
 		shutdownChan:  cfg.ShutdownChan,
 		runJobChan:    runJobChan,
 		doneJobChan:   doneJobChan,
@@ -347,37 +341,6 @@ func (t *traverser) Stop() error {
 	}
 	close(t.doneChan)
 	return err
-}
-
-// Status returns the status of currently running jobs in the chain.
-func (t *traverser) Status() (proto.JobChainStatus, error) {
-	t.logger.Infof("getting the status of all running jobs")
-
-	activeRunners, err := t.runnerRepo.Items()
-	if err != nil {
-		return proto.JobChainStatus{}, err
-	}
-
-	runningJobs := t.chain.Running()
-	status := make([]proto.JobStatus, len(runningJobs))
-	i := 0
-	for jobId, jobStatus := range runningJobs {
-		runner := activeRunners[jobId]
-		if runner == nil {
-			// The job finished between the call to chain.Running() and now,
-			// so it's runner no longer exists in the runner.Repo.
-			jobStatus.Status = "(finished)"
-		} else {
-			jobStatus.Status = runner.Status()
-		}
-		status[i] = jobStatus
-		i++
-	}
-	jcStatus := proto.JobChainStatus{
-		RequestId:   t.chain.RequestId(),
-		JobStatuses: status,
-	}
-	return jcStatus, nil
 }
 
 // -------------------------------------------------------------------------- //

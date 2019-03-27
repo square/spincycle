@@ -17,8 +17,7 @@ Once `addr` is set, run `spinc` (no arguments) to list available requests:
 
 ```sh
 $ spinc
-spinc help  <request>
-spinc start <request>
+Request Manager address: https://mycorp.local:32308
 
 Requests:
   checksum-mysql-metacluster
@@ -29,22 +28,26 @@ Requests:
   test
   update-mysql-ibp
 
-'spinc help' for more
+spinc help  <request>
+spinc start <request>
 ```
 
-This queries the RM to obtain the list of requests.
+This queries the Request Manager to obtain the list of requests.
 
 ## Commands
 
-The main spinc commands are:
+The spinc commands are:
 
 | Command | Purpose | 
 | ------- | -------- |
-| start | Start new request |
-| stop  | Stop request |
-| status | Print status of request |
-| log | Print job log of request |
-| ps | Show all running requests and jobs |
+| help [command] | Print general help and command-specific help |
+| info \<ID\>      | Print complete request information |
+| log \<ID\>       | Print job log (hint: pipe output to less) |
+| ps \[ID\]        | Show running requests and jobs. Request ID is optional. |
+| running        | Exit 0 if request is running or pending, else exit 1 |
+| start \<ID\>     | Start new request |
+| status \<ID\>    | Print request status and basic information |
+| stop \<ID\>      | Stop request |
 
 Run `spinc start <request>` to start a request by name. It will prompt you for request arguments (args) in the order listed in the request spec, required then optional args.
 
