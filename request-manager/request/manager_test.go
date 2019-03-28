@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/go-test/deep"
 
@@ -526,11 +527,8 @@ func TestFinishNotRunning(t *testing.T) {
 func TestFinish(t *testing.T) {
 	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
 	defer teardownManager(t, dbName)
+	reqId := "454ae2f98a05cv16sdwt"
 
-	reqId := "454ae2f98a05cv16sdwt" // request is running
-	params := proto.FinishRequest{
-		State: proto.STATE_COMPLETE,
-	}
 	cfg := request.ManagerConfig{
 		GrapherFactory: grf,
 		DBConnector:    dbc,
@@ -539,19 +537,47 @@ func TestFinish(t *testing.T) {
 		DefaultJRURL:   "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
-	err := m.Finish(reqId, params)
-	if err != nil {
-		t.Errorf("error = %s, expected nil", err)
-	}
 
-	// Get the request from the db and make sure its state was updated.
+	// Verify initial request state
 	req, err := m.Get(reqId)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
+	if req.State != proto.STATE_RUNNING {
+		t.Errorf("request state = %s, expected RUNNING", proto.StateName[req.State])
+	}
+	if req.FinishedJobs != 1 {
+		t.Errorf("got FinishedJobs = %d, expected 1", req.FinishedJobs)
+	}
+	if req.FinishedAt != nil && !req.FinishedAt.IsZero() {
+		t.Errorf("got FinishedAt = %s, expected nil/NULL", req.FinishedAt)
+	}
 
+	// Send a proto.FinishRequest to finish the request
+	now := time.Now()
+	params := proto.FinishRequest{
+		State:        proto.STATE_COMPLETE,
+		FinishedJobs: 3,
+		FinishedAt:   now,
+	}
+	err = m.Finish(reqId, params)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	// Verify post-finish request state
+	req, err = m.Get(reqId)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
 	if req.State != params.State {
 		t.Errorf("request state = %d, expected %d", req.State, params.State)
+	}
+	if req.FinishedJobs != params.FinishedJobs {
+		t.Errorf("got FinishedJobs = %d, expected %d", req.FinishedJobs, params.FinishedJobs)
+	}
+	if req.FinishedAt.IsZero() {
+		t.Errorf("got FinishedAt = nil/NULL, expected a value")
 	}
 }
 

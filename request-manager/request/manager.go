@@ -508,7 +508,7 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 	}
 
 	// Fields that should never be updated by this package are not listed in this query.
-	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_url = ? WHERE request_id = ? AND state = ?"
+	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, finished_jobs = ?, jr_url = ?  WHERE request_id = ? AND state = ?"
 	var res sql.Result
 	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
 		var err error
@@ -516,6 +516,7 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 			req.State,
 			req.StartedAt,
 			req.FinishedAt,
+			req.FinishedJobs,
 			jrURL,
 			req.Id,
 			curState,
