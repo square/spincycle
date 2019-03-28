@@ -1,11 +1,6 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
-// Package example provides an example job and job factory. The job type is
-// "shell-command", and the factory only build this job type. By default, this
-
-///
-// factory is imported in ../external/factory.go, which allows Spin Cycle to be
-// build without external jobs.
+// Example/development jobs repo.
 package jobs
 
 import (
@@ -23,8 +18,7 @@ import (
 // Factory is a job.Factory that makes "shell-command" type jobs.
 var Factory job.Factory = factory{}
 
-type factory struct {
-}
+type factory struct{}
 
 // Make makes a job of the given type, with the given name. This factory only
 // makes "shell-command" type jobs. If jobType is any other value, a job.ErrUnknownJobType

@@ -17,7 +17,7 @@ services:
       - mysql
     environment:
       INIT_SPINCYCLE_DB: "yes"
-      SPINCYCLE_SERVER_ADDR: "0.0.0.0:32308"
+      SPINCYCLE_SERVER_ADDR: "request-manager:32308"
       SPINCYCLE_MYSQL_DSN: "root:@tcp(mysql:3306)/spincycle_development"
       SPINCYCLE_JR_CLIENT_URL: "http://job-runner:32307"
   job-runner:
@@ -27,6 +27,7 @@ services:
     depends_on:
       - mysql
     environment:
+      SPINCYCLE_SERVER_ADDR: "job-runner:32307"
       SPINCYCLE_RM_CLIENT_URL: "http://request-manager:32308"
     expose:
       - "32307"
