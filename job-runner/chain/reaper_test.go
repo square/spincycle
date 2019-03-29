@@ -1213,7 +1213,21 @@ func TestSuspendedFinalize(t *testing.T) {
 	//      3
 
 	reqId := "test_suspended_finalize"
-	factory := defaultFactory(reqId)
+	factory := &chain.ChainReaperFactory{
+		Chain:        chain.NewChain(&proto.JobChain{}, make(map[string]uint), make(map[string]uint), make(map[string]uint)),
+		RMClient:     &mock.RMClient{},
+		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
+		RMCTries:     5,
+		RMCRetryWait: 50 * time.Millisecond,
+		DoneJobChan:  make(chan proto.Job),
+		RunJobChan:   make(chan proto.Job),
+		RunnerRepo:   runner.NewRepo(),
+	}
+
+	// Reapers check the runnerRepo for running jobs, so this makes it look like
+	// job3 didn't respond to Stop and is still running in Finalize
+	factory.RunnerRepo.Set("job3", &mock.Runner{})
+
 	jc := &proto.JobChain{
 		RequestId: reqId,
 		Jobs:      testutil.InitJobs(5),

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/orcaman/concurrent-map"
+
 	"github.com/go-test/deep"
-	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job-runner/status"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/test"
@@ -17,120 +17,105 @@ import (
 )
 
 func TestRunning(t *testing.T) {
-	now := time.Now().UnixNano()
+	// The status manager uses traversers to get running job status. All traversers
+	// are added to the global traverser repo (in api). So we just create some mock
+	// traverers that return mock job status info. Request-traverser-chain is 1:1:1.
+	trRepo := cmap.New()
 
-	jc1 := &proto.JobChain{
-		RequestId: "chain1",
-		AdjacencyList: map[string][]string{
-			"job1": []string{"job2", "job3"},
-		},
-		Jobs: map[string]proto.Job{
-			"job1": proto.Job{
-				Id:            "job1",
-				Type:          "type1",
-				State:         proto.STATE_PENDING,
-				SequenceId:    "job1",
-				SequenceRetry: 0,
+	t1 := time.Now().Add(-2 * time.Second).UnixNano()
+	t2 := time.Now().Add(-1 * time.Second).UnixNano()
+
+	tr1 := &mock.Traverser{
+		JobStatus: []proto.JobStatus{
+			{
+				RequestId: "req1",
+				JobId:     "job1",
+				Type:      "job1Type",
+				Name:      "job1Name",
+				StartedAt: t1,
+				State:     proto.STATE_RUNNING,
+				Status:    "job1 status",
+				Try:       1,
 			},
 		},
 	}
-	c1 := chain.NewChain(jc1, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	c1.SetJobState("job1", proto.STATE_RUNNING) // sets runtime start ts
+	trRepo.Set("req1", tr1)
 
-	// Any short delay to make Runtime differ. chain1/job1 will have a runtime
-	// roughly equal to this delay, and chain2/job2 will have a runtime closer
-	// to zero.
-	time.Sleep(250 * time.Millisecond)
-
-	jc2 := &proto.JobChain{
-		RequestId: "chain2",
-		AdjacencyList: map[string][]string{
-			"job2": []string{"job2"},
-		},
-		Jobs: map[string]proto.Job{
-			"job2": proto.Job{
-				Id:            "job2",
-				Type:          "type2",
-				State:         proto.STATE_PENDING,
-				SequenceId:    "job2",
-				SequenceRetry: 0,
+	tr2 := &mock.Traverser{
+		JobStatus: []proto.JobStatus{
+			{
+				RequestId: "req2",
+				JobId:     "job2",
+				Type:      "job2Type",
+				Name:      "job2Name",
+				StartedAt: t2,
+				State:     proto.STATE_RUNNING,
+				Status:    "job2 status",
+				Try:       2,
 			},
 		},
 	}
-	c2 := chain.NewChain(jc2, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	c2.SetJobState("job2", proto.STATE_RUNNING) // sets runtime start ts
+	trRepo.Set("req2", tr2)
 
-	repo := chain.NewMemoryRepo()
-	if err := repo.Add(c1); err != nil {
-		t.Fatalf("error in Add: %v", err)
-	}
-	if err := repo.Add(c2); err != nil {
-		t.Fatalf("error in Add: %v", err)
-	}
-
-	rr := mock.RunnerRepo{
-		GetFunc: func(jobId string) runner.Runner {
-			switch jobId {
-			case "job1":
-				return &mock.Runner{StatusResp: "job1 status"}
-			case "job2":
-				return &mock.Runner{StatusResp: "job2 status"}
-			default:
-				return nil
-			}
-		},
-	}
-
-	m := status.NewManager(repo, rr)
+	m := status.NewManager(trRepo)
 
 	got, err := m.Running(proto.StatusFilter{})
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if len(got) != 2 {
 		t.Fatalf("got %d proto.JobStatus, expected 2", len(got))
 	}
-
-	sort.Sort(proto.JobStatuses(got))
-
+	sort.Sort(proto.JobStatusByStartTime(got))
 	expect := []proto.JobStatus{
 		{
-			RequestId: "chain1", // longer runtime because of delay ^
+			RequestId: "req1",
 			JobId:     "job1",
-			Type:      "type1",
+			Type:      "job1Type",
+			Name:      "job1Name",
 			State:     proto.STATE_RUNNING,
 			Try:       1,
 			Status:    "job1 status",
+			StartedAt: t1,
 		},
 		{
-			RequestId: "chain2",
+			RequestId: "req2",
 			JobId:     "job2",
-			Type:      "type2",
+			Type:      "job2Type",
+			Name:      "job2Name",
 			State:     proto.STATE_RUNNING,
-			Try:       1,
+			Try:       2,
 			Status:    "job2 status",
+			StartedAt: t2,
 		},
 	}
-
-	if got[0].StartedAt < now {
-		t.Errorf("job1 started %d < %d", got[0].StartedAt, now)
-	}
-	if got[1].StartedAt <= 0 {
-		t.Errorf("job2 runtime %d, expected > 0", got[1].StartedAt)
-	}
-
-	// StartedAt is nondeterministic
-	expect[0].StartedAt = got[0].StartedAt
-	expect[1].StartedAt = got[1].StartedAt
-
 	if diff := deep.Equal(got, expect); diff != nil {
 		test.Dump(got)
 		t.Error(diff)
 	}
 
-	// chain1 should before chain2
-	if got[0].StartedAt >= got[1].StartedAt {
-		t.Errorf("started chain1 %d >= chain2 %d", got[0].StartedAt, got[1].StartedAt)
+	// Filter by request ID
+	got, err = m.Running(proto.StatusFilter{RequestId: "req2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d proto.JobStatus, expected 1", len(got))
+	}
+	expect = []proto.JobStatus{
+		{
+			RequestId: "req2",
+			JobId:     "job2",
+			Type:      "job2Type",
+			Name:      "job2Name",
+			State:     proto.STATE_RUNNING,
+			Try:       2,
+			Status:    "job2 status",
+			StartedAt: t2,
+		},
+	}
+	if diff := deep.Equal(got, expect); diff != nil {
+		test.Dump(got)
+		t.Error(diff)
 	}
 }

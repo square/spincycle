@@ -179,22 +179,37 @@ func TestRunStop(t *testing.T) {
 }
 
 func TestRunStatus(t *testing.T) {
-	expectedStatus := "in progress"
-	mJob := &mock.Job{
-		StatusResp: expectedStatus,
-	}
 	pJob := proto.Job{
-		Id:    "j1",
-		Type:  "jtype",
-		Bytes: []byte{},
+		Id:   "j1",
+		Type: "jtype",
+		Name: "jname",
 	}
-	rmc := &mock.RMClient{}
-	jr := runner.NewRunner(pJob, mJob, "abc", 0, 0, rmc)
+	realJob := &mock.Job{
+		StatusResp: "foo",
+	}
+	expectStatus := runner.Status{
+		Job:       pJob,
+		StartedAt: time.Time{},
+		Try:       1,
+		Status:    "foo",
+		Sleeping:  false,
+	}
 
-	// Ignored first ret val is try, which is always 1 from mock
-	_, status := jr.Status()
-	if status != expectedStatus {
-		t.Errorf("status = %s, expected %s", status, expectedStatus)
+	now := time.Now()
+	jr := runner.NewRunner(pJob, realJob, "abc", 0, 0, &mock.RMClient{})
+	gotStatus := jr.Status()
+
+	startTime := gotStatus.StartedAt
+	if startTime.IsZero() {
+		t.Error("StartedAt is zero, expected value")
+	}
+	if !startTime.After(now) {
+		t.Errorf("StartedAt %s after now %s", startTime, now)
+	}
+	gotStatus.StartedAt = time.Time{}
+
+	if diff := deep.Equal(gotStatus, expectStatus); diff != nil {
+		t.Error(diff)
 	}
 }
 

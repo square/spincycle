@@ -35,7 +35,7 @@ type Runner struct {
 	RunWg        *sync.WaitGroup                           // WaitGroup that gets released from when a runner starts running.
 	RunBlock     chan struct{}                             // Channel that runner.Run() will block on, if defined.
 	IgnoreStop   bool                                      // false: return immediately after Stop, true: keep running after Stop
-	StatusResp   string
+	StatusResp   runner.Status
 
 	stopped bool // if Stop was called
 }
@@ -75,11 +75,11 @@ func (r *Runner) Stop() error {
 	return nil
 }
 
-func (r *Runner) Status() (uint, string) {
+func (r *Runner) Status() runner.Status {
 	if r.RunBlock != nil {
 		close(r.RunBlock)
 	}
-	return 1, r.StatusResp
+	return r.StatusResp
 }
 
 // --------------------------------------------------------------------------

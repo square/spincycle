@@ -5,9 +5,10 @@ package status
 
 import (
 	log "github.com/Sirupsen/logrus"
+	"github.com/orcaman/concurrent-map"
 
+	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager"
 )
@@ -17,48 +18,39 @@ type Manager interface {
 }
 
 type manager struct {
-	cr chain.Repo
-	rr runner.Repo
+	traverserRepo cmap.ConcurrentMap
 }
 
-func NewManager(cr chain.Repo, rr runner.Repo) *manager {
+func NewManager(traverserRepo cmap.ConcurrentMap) *manager {
 	m := &manager{
-		cr: cr,
-		rr: rr,
+		traverserRepo: traverserRepo,
 	}
 	return m
 }
 
 func (m *manager) Running(f proto.StatusFilter) ([]proto.JobStatus, error) {
-	var chains []*chain.Chain
-	var err error
+	var traversers []chain.Traverser
 
-	// If filter by request ID, get only that request's chain; else, get all chains
+	// If filter by request ID, get only that request; else, get all
 	if f.RequestId == "" {
-		chains, err = m.cr.GetAll()
-		if err != nil {
-			return nil, err
+		items := m.traverserRepo.Items() // returns map[reqId]interface{}
+		traversers = make([]chain.Traverser, 0, len(items))
+		for _, v := range items {
+			traversers = append(traversers, v.(chain.Traverser))
 		}
 	} else {
-		c, err := m.cr.Get(f.RequestId)
-		if err != nil {
-			return nil, err
+		v, ok := m.traverserRepo.Get(f.RequestId) // returns interface{}
+		if !ok {
+			return nil, serr.RequestNotFound{f.RequestId}
 		}
-		chains = []*chain.Chain{c}
+		traversers = []chain.Traverser{v.(chain.Traverser)}
 	}
 
-	// Get currently running jobs in each chain
+	// Get currently running jobs in each traverser/chain
 	running := []proto.JobStatus{}
-	for _, c := range chains {
-		for jobId, jobStatus := range c.Running() {
-			r := m.rr.Get(jobId)
-			if r == nil {
-				continue // job completed, ignore it
-			}
-			// Get real-time job status and current try
-			jobStatus.Try, jobStatus.Status = r.Status()
-			running = append(running, jobStatus)
-		}
+	for _, tr := range traversers {
+		status := tr.Running()
+		running = append(running, status...)
 	}
 
 	return running, nil

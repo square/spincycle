@@ -3,6 +3,7 @@
 package chain_test
 
 import (
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -50,7 +51,7 @@ func TestRunComplete(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	traverser.Run()
 
@@ -96,7 +97,7 @@ func TestRunNotComplete(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	traverser.Run()
 
@@ -141,7 +142,7 @@ func TestResume(t *testing.T) {
 	}
 	rmc := &mock.RMClient{}
 	shutdownChan := make(chan struct{})
-	tf := chain.NewTraverserFactory(chainRepo, runner.NewRepo(), rf, rmc, shutdownChan)
+	tf := chain.NewTraverserFactory(chainRepo, rf, rmc, shutdownChan)
 
 	jobs := map[string]proto.Job{
 		"job1": proto.Job{
@@ -282,7 +283,7 @@ func TestJobUnknownState(t *testing.T) {
 	for _, j := range jc.Jobs {
 		j.State = proto.STATE_UNKNOWN
 	}
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	traverser.Run()
 
@@ -324,7 +325,7 @@ func TestRunJobsRunnerError(t *testing.T) {
 		Jobs:      testutil.InitJobs(1),
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	traverser.Run()
 
@@ -384,7 +385,7 @@ func TestStop(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -468,7 +469,7 @@ func TestStopRunnerHangs(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	// Start the traverser.
 	go func() {
@@ -546,7 +547,7 @@ func TestStopDoneRunning(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	traverser.Run()
 
@@ -594,7 +595,7 @@ func TestStopAfterSuspend(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	go func() {
 		traverser.Run()
@@ -681,7 +682,7 @@ func TestSuspend(t *testing.T) {
 		},
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, runner.NewRepo(), rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -778,5 +779,112 @@ func TestSuspend(t *testing.T) {
 	expectedJob5Data := map[string]interface{}{}
 	if diff := deep.Equal(jc.Jobs["job5"].Data, expectedJob5Data); diff != nil {
 		t.Error(diff)
+	}
+}
+
+func TestRunning(t *testing.T) {
+	requestId := "test_status"
+	chainRepo := chain.NewMemoryRepo()
+	var runWg sync.WaitGroup
+	runWg.Add(2)
+	job1Status := runner.Status{
+		Job:       proto.Job{},
+		StartedAt: time.Now().Add(-3 * time.Second),
+		Try:       1,
+		Status:    "job1 DONE",
+	}
+	job2Status := runner.Status{
+		Job: proto.Job{
+			Id:   "job2",
+			Type: "j2type",
+			Name: "j2name",
+		},
+		StartedAt: time.Now().Add(-2 * time.Second),
+		Try:       2,
+		Status:    "job2 running",
+	}
+	job3Status := runner.Status{
+		Job: proto.Job{
+			Id:   "job3",
+			Type: "j3type",
+			Name: "j3name",
+		},
+		StartedAt: time.Now().Add(-1 * time.Second),
+		Try:       3,
+		Status:    "job3 running",
+	}
+	rf := &mock.RunnerFactory{
+		RunnersToReturn: map[string]*mock.Runner{
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: job1Status},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: job2Status, RunBlock: make(chan struct{}), RunWg: &runWg},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: job3Status, RunBlock: make(chan struct{}), RunWg: &runWg},
+		},
+	}
+
+	jc := &proto.JobChain{
+		RequestId: requestId,
+		Jobs:      testutil.InitJobs(3),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+		},
+	}
+	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, &mock.RMClient{}, make(chan struct{}), timeout, timeout})
+
+	// Start the traverser.
+	doneChan := make(chan struct{})
+	go func() {
+		traverser.Run()
+		close(doneChan)
+	}()
+
+	// Wait until jobs 2 and 3 are running (until they call wg.Done()). They will
+	// run until Status is called (which will close their RunBlock channels).
+	runWg.Wait()
+
+	expectedStatus := []proto.JobStatus{
+		{
+			RequestId: requestId,
+			JobId:     "job2",
+			Type:      "j2type",
+			Name:      "j2name",
+			State:     proto.STATE_RUNNING,
+			Status:    "job2 running",
+			Try:       2,
+		},
+		{
+			RequestId: requestId,
+			JobId:     "job3",
+			Type:      "j3type",
+			Name:      "j3name",
+			State:     proto.STATE_RUNNING,
+			Status:    "job3 running",
+			Try:       3,
+		},
+	}
+	gotRunning := traverser.Running()
+	sort.Sort(proto.JobStatusByStartTime(gotRunning))
+
+	for i, j := range gotRunning {
+		if j.StartedAt == 0 {
+			t.Errorf("StartedAt is zero for job %s", j.JobId)
+		}
+		gotRunning[i].StartedAt = 0
+	}
+
+	if diff := deep.Equal(gotRunning, expectedStatus); diff != nil {
+		t.Error(diff)
+	}
+
+	// Wait for the traverser to finish.
+	select {
+	case <-doneChan:
+	case <-time.After(time.Second):
+		t.Error("traverser did not finish running within 1 second")
+		return
+	}
+
+	if c.State() != proto.STATE_COMPLETE {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_COMPLETE)
 	}
 }

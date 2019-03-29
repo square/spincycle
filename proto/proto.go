@@ -164,6 +164,14 @@ type JobLog struct {
 	Stderr string `json:"stderr"` // stderr output
 }
 
+type JobLogById []JobLog
+
+func (jls JobLogById) Len() int { return len(jls) }
+func (jls JobLogById) Less(i, j int) bool {
+	return jls[i].RequestId+jls[i].JobId < jls[j].RequestId+jls[j].JobId
+}
+func (jls JobLogById) Swap(i, j int) { jls[i], jls[j] = jls[j], jls[i] }
+
 // JobStatus represents the status of one job in a job chain.
 type JobStatus struct {
 	RequestId string `json:"requestId"`
@@ -175,6 +183,13 @@ type JobStatus struct {
 	Status    string `json:"status,omitempty"` // real-time status, if running
 	Try       uint   `json:"try"`              // try number, can be >1+retry on sequence retry
 }
+
+// JobStatusByStartTime sorts []JobStatus by StartedAt ascending (oldest jobs first).
+type JobStatusByStartTime []JobStatus
+
+func (js JobStatusByStartTime) Len() int           { return len(js) }
+func (js JobStatusByStartTime) Less(i, j int) bool { return js[i].StartedAt < js[j].StartedAt }
+func (js JobStatusByStartTime) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
 
 // RequestProgress updates request progress from the Job Runner.
 type RequestProgress struct {
@@ -223,28 +238,6 @@ type FinishRequest struct {
 	FinishedAt   time.Time `json:"finishedAt"`   // when the Job Runner finished the request
 	FinishedJobs uint      `json:"finishedJobs"` // number of jobs that ran and finished with state = STATE_COMPLETE
 }
-
-// JobStatuses are a list of job status sorted by job id.
-type JobStatuses []JobStatus
-
-func (js JobStatuses) Len() int           { return len(js) }
-func (js JobStatuses) Less(i, j int) bool { return js[i].JobId < js[j].JobId }
-func (js JobStatuses) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
-
-type JobStatusByStartTime []JobStatus
-
-func (js JobStatusByStartTime) Len() int           { return len(js) }
-func (js JobStatusByStartTime) Less(i, j int) bool { return js[i].StartedAt > js[j].StartedAt }
-func (js JobStatusByStartTime) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
-
-// JobLogById is a slice of job logs sorted by request id + job id.
-type JobLogById []JobLog
-
-func (jls JobLogById) Len() int { return len(jls) }
-func (jls JobLogById) Less(i, j int) bool {
-	return jls[i].RequestId+jls[i].JobId < jls[j].RequestId+jls[j].JobId
-}
-func (jls JobLogById) Swap(i, j int) { jls[i], jls[j] = jls[j], jls[i] }
 
 // Jobs are a list of jobs sorted by id.
 type Jobs []Job

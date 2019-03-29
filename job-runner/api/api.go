@@ -159,9 +159,6 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 		return handleError(ErrDuplicateTraverser)
 	}
 
-	// Set the location in the response header to point to this server.
-	c.Response().Header().Set("Location", api.chainLocation(jc.RequestId))
-
 	// Start the traverser, and remove it from the repo when it's
 	// done running. This could take a very long time to return,
 	// so we run it in a goroutine.
@@ -169,6 +166,9 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 		defer api.traverserRepo.Remove(jc.RequestId)
 		t.Run()
 	}()
+
+	// Set the location in the response header to point to this server.
+	c.Response().Header().Set("Location", api.chainLocation(jc.RequestId))
 
 	return nil
 }
