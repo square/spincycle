@@ -68,12 +68,11 @@ func NewAPI(appCtx app.Context) *API {
 
 	// Request
 	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)                   // create
-	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                // get
+	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                // get -> proto.Request
 	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)        // start
 	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)      // finish
 	api.echo.PUT(API_ROOT+"requests/:reqId/stop", api.stopRequestHandler)          // stop
 	api.echo.PUT(API_ROOT+"requests/:reqId/suspend", api.suspendRequestHandler)    // suspend
-	api.echo.GET(API_ROOT+"requests/:reqId/status", api.statusRequestHandler)      // status
 	api.echo.PUT(API_ROOT+"requests/:reqId/progress", api.requestProgressHandler)  // progress
 	api.echo.GET(API_ROOT+"requests/:reqId/job-chain", api.jobChainRequestHandler) // job chain
 
@@ -84,7 +83,7 @@ func NewAPI(appCtx app.Context) *API {
 
 	// Meta
 	api.echo.GET(API_ROOT+"request-list", api.requestListHandler)     // request list
-	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler) // running requests
+	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler) // running requests/jobs -> proto.RunningStatus
 	api.echo.GET("/version", api.versionHandler)                      // return version.VERSION
 
 	// //////////////////////////////////////////////////////////////////////
@@ -306,21 +305,6 @@ func (api *API) suspendRequestHandler(c echo.Context) error {
 	return nil
 }
 
-// GET <API_ROOT>/requests/{reqId}/status
-// Get the high-level status of a request, as well as the live status of any
-// jobs that are running.
-func (api *API) statusRequestHandler(c echo.Context) error {
-	reqId := c.Param("reqId")
-
-	reqStatus, err := api.rm.Status(reqId)
-	if err != nil {
-		return handleError(err, c)
-	}
-
-	// Return the RequestStatus struct.
-	return c.JSON(http.StatusOK, reqStatus)
-}
-
 func (api *API) requestProgressHandler(c echo.Context) error {
 	reqId := c.Param("reqId")
 	var prg proto.RequestProgress
@@ -419,12 +403,14 @@ func (api *API) requestListHandler(c echo.Context) error {
 // GET <API_ROOT>/status/running
 // Report all requests that are running.
 func (api *API) statusRunningHandler(c echo.Context) error {
-	running, err := api.sm.Running(status.NoFilter)
+	f := proto.StatusFilter{
+		RequestId: c.QueryParam("requestId"),
+		OrderBy:   c.QueryParam("orderBy"),
+	}
+	running, err := api.sm.Running(f)
 	if err != nil {
 		return handleError(err, c)
 	}
-
-	// Return the RequestStatus struct.
 	return c.JSON(http.StatusOK, running)
 }
 

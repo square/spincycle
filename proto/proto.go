@@ -5,6 +5,7 @@ package proto
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -163,30 +164,32 @@ type JobLog struct {
 	Stderr string `json:"stderr"` // stderr output
 }
 
+type JobLogById []JobLog
+
+func (jls JobLogById) Len() int { return len(jls) }
+func (jls JobLogById) Less(i, j int) bool {
+	return jls[i].RequestId+jls[i].JobId < jls[j].RequestId+jls[j].JobId
+}
+func (jls JobLogById) Swap(i, j int) { jls[i], jls[j] = jls[j], jls[i] }
+
 // JobStatus represents the status of one job in a job chain.
 type JobStatus struct {
-	RequestId string                 `json:"requestId"`
-	JobId     string                 `json:"jobId"`
-	Type      string                 `json:"type"`
-	Name      string                 `json:"name"`
-	Args      map[string]interface{} `json:"jobArgs"`
-	StartedAt int64                  `json:"startedAt"` // when job started (UnixNano)
-	State     byte                   `json:"state"`     // usually proto.STATE_RUNNING
-	Status    string                 `json:"status"`    // real-time status, if running
-	Try       uint                   `json:"try"`       // try number, can be >1+retry on sequence retry
+	RequestId string `json:"requestId"`
+	JobId     string `json:"jobId"`
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	StartedAt int64  `json:"startedAt"`        // when job started (UnixNano)
+	State     byte   `json:"state"`            // usually proto.STATE_RUNNING
+	Status    string `json:"status,omitempty"` // real-time status, if running
+	Try       uint   `json:"try"`              // try number, can be >1+retry on sequence retry
 }
 
-// JobChainStatus represents the status of a job chain reported by the Job Runner.
-type JobChainStatus struct {
-	RequestId   string      `json:"requestId"`
-	JobStatuses JobStatuses `json:"jobStatuses"`
-}
+// JobStatusByStartTime sorts []JobStatus by StartedAt ascending (oldest jobs first).
+type JobStatusByStartTime []JobStatus
 
-// RequestStatus represents the status of a request reported by the Request Manager.
-type RequestStatus struct {
-	Request        `json:"request"`
-	JobChainStatus JobChainStatus `json:"jobChainStatus"`
-}
+func (js JobStatusByStartTime) Len() int           { return len(js) }
+func (js JobStatusByStartTime) Less(i, j int) bool { return js[i].StartedAt < js[j].StartedAt }
+func (js JobStatusByStartTime) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
 
 // RequestProgress updates request progress from the Job Runner.
 type RequestProgress struct {
@@ -194,9 +197,31 @@ type RequestProgress struct {
 	FinishedJobs uint   `json:"finishedJobs"` // number of jobs that ran and finished with state = STATE_COMPLETE
 }
 
+// RunningStatus represents running jobs and their requests. It is returned by
+// Request Manager GET /api/v1/status/running
 type RunningStatus struct {
-	Jobs     []JobStatus        `json:"jobs,omitempty"`
-	Requests map[string]Request `json:"requests,omitempty"` // keyed on RequestId
+	Jobs     []JobStatus        `json:"jobs"`
+	Requests map[string]Request `json:"requests"` // keyed on RequestId
+}
+
+// StatusFilter represents optional filters for status requests.
+type StatusFilter struct {
+	RequestId string
+	OrderBy   string // startTime
+}
+
+func (f StatusFilter) String() string {
+	q := []string{}
+	if f.RequestId != "" {
+		q = append(q, "requestId="+f.RequestId)
+	}
+	if f.OrderBy != "" {
+		q = append(q, "orderBy="+strings.ToLower(f.OrderBy))
+	}
+	if len(q) == 0 {
+		return ""
+	}
+	return "?" + strings.Join(q, "&")
 }
 
 // CreateRequest represents the payload to create and start a new request.
@@ -213,28 +238,6 @@ type FinishRequest struct {
 	FinishedAt   time.Time `json:"finishedAt"`   // when the Job Runner finished the request
 	FinishedJobs uint      `json:"finishedJobs"` // number of jobs that ran and finished with state = STATE_COMPLETE
 }
-
-// JobStatuses are a list of job status sorted by job id.
-type JobStatuses []JobStatus
-
-func (js JobStatuses) Len() int           { return len(js) }
-func (js JobStatuses) Less(i, j int) bool { return js[i].JobId < js[j].JobId }
-func (js JobStatuses) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
-
-type JobStatusByStartTime []JobStatus
-
-func (js JobStatusByStartTime) Len() int           { return len(js) }
-func (js JobStatusByStartTime) Less(i, j int) bool { return js[i].StartedAt > js[j].StartedAt }
-func (js JobStatusByStartTime) Swap(i, j int)      { js[i], js[j] = js[j], js[i] }
-
-// JobLogById is a slice of job logs sorted by request id + job id.
-type JobLogById []JobLog
-
-func (jls JobLogById) Len() int { return len(jls) }
-func (jls JobLogById) Less(i, j int) bool {
-	return jls[i].RequestId+jls[i].JobId < jls[j].RequestId+jls[j].JobId
-}
-func (jls JobLogById) Swap(i, j int) { jls[i], jls[j] = jls[j], jls[i] }
 
 // Jobs are a list of jobs sorted by id.
 type Jobs []Job

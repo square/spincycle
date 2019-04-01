@@ -4,6 +4,8 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/spinc/app"
@@ -22,54 +24,44 @@ func NewStatus(ctx app.Context) *Status {
 
 func (c *Status) Prepare() error {
 	if len(c.ctx.Command.Args) == 0 {
-		return fmt.Errorf("Usage: spinc status <id>\n")
+		return fmt.Errorf("Usage: spinc status <request ID>\n")
 	}
 	c.reqId = c.ctx.Command.Args[0]
 	return nil
 }
 
 func (c *Status) Run() error {
-	status, err := c.ctx.RMClient.RequestStatus(c.reqId)
+	r, err := c.ctx.RMClient.GetRequest(c.reqId)
 	if err != nil {
 		return err
 	}
 	if c.ctx.Options.Debug {
-		app.Debug("status: %#v", status)
+		app.Debug("request: %#v", r)
 	}
-
 	if c.ctx.Hooks.CommandRunResult != nil {
-		c.ctx.Hooks.CommandRunResult(status, err)
+		c.ctx.Hooks.CommandRunResult(r, err)
 		return nil
 	}
 
-	jobStatuses := status.JobChainStatus.JobStatuses
-	running := []proto.JobStatus{}
-	for _, js := range jobStatuses {
-		if js.State == proto.STATE_RUNNING {
-			running = append(running, js)
-		}
+	runtime := "not started"
+	if r.StartedAt != nil && !r.StartedAt.IsZero() {
+		runtime = time.Now().Sub(*r.StartedAt).Round(time.Second).String()
 	}
 
-	fmt.Printf("state:      %s\n", proto.StateName[status.State])
-	fmt.Printf("running jobs: \n")
-	for _, js := range running {
-		fmt.Printf("\t%s\n", js.Name)
-	}
-	fmt.Printf("jobs done:  %d\n", status.FinishedJobs)
-	fmt.Printf("jobs total: %d\n", status.TotalJobs)
-	fmt.Printf("created:    %s\n", status.CreatedAt)
-	fmt.Printf("started:    %s\n", status.StartedAt)
-	fmt.Printf("finished:   %s\n", status.FinishedAt)
-	fmt.Printf("user:       %s\n", status.User)
-	fmt.Printf("type:       %s\n", status.Type)
-	fmt.Printf("id:         %s\n", status.Id)
-
-	if c.ctx.Options.Verbose {
-		fmt.Printf("live status:\n")
-		for _, js := range running {
-			fmt.Printf("            %s: %s\n", js.Name, js.Status)
+	args := []string{}
+	for _, arg := range r.Args {
+		if arg.Type != "required" {
+			continue
 		}
+		args = append(args, fmt.Sprintf("%s=%s", arg.Name, arg.Value))
 	}
+
+	fmt.Fprintf(c.ctx.Out, "   state: %s\n", proto.StateName[r.State])
+	fmt.Fprintf(c.ctx.Out, "progress: %s\n", fmt.Sprintf("%.0f%%", float64(r.FinishedJobs)/float64(r.TotalJobs)*100))
+	fmt.Fprintf(c.ctx.Out, " runtime: %s\n", runtime)
+	fmt.Fprintf(c.ctx.Out, " request: %s\n", r.Type)
+	fmt.Fprintf(c.ctx.Out, "  caller: %s\n", r.User)
+	fmt.Fprintf(c.ctx.Out, "    args: %s\n", strings.Join(args, " "))
 
 	return nil
 }
@@ -79,5 +71,6 @@ func (c *Status) Cmd() string {
 }
 
 func (c *Status) Help() string {
-	return "'spinc status <request ID>' prints the status of the request.\n"
+	return "'spinc status <request ID>' prints request status and basic information.\n" +
+		"For complete request information, use 'spinc info <request ID>'.\n"
 }

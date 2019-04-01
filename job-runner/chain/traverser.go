@@ -52,14 +52,9 @@ type Traverser interface {
 	// It returns an error if it fails to stop all running jobs.
 	Stop() error
 
-	// Status gets the status of all running and failed jobs. Since a job can only
-	// run when all of its ancestors have completed, the state of the entire chain
-	// can be inferred from this information - every job in the chain before a
-	// running or failed job must be complete, and every job in the chain after a
-	// running or failed job must be pending.
-	//
-	// It returns an error if it fails to get the status of all running jobs.
-	Status() (proto.JobChainStatus, error)
+	// Running returns all currently running jobs. The status.Manager uses this
+	// to report running status.
+	Running() []proto.JobStatus
 }
 
 // A TraverserFactory makes a new Traverser.
@@ -75,9 +70,9 @@ type traverserFactory struct {
 	shutdownChan chan struct{}
 }
 
-func NewTraverserFactory(cr Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) TraverserFactory {
+func NewTraverserFactory(chainRepo Repo, rf runner.Factory, rmc rm.Client, shutdownChan chan struct{}) TraverserFactory {
 	return &traverserFactory{
-		chainRepo:    cr,
+		chainRepo:    chainRepo,
 		rf:           rf,
 		rmc:          rmc,
 		shutdownChan: shutdownChan,
@@ -191,14 +186,19 @@ type TraverserConfig struct {
 }
 
 func NewTraverser(cfg TraverserConfig) *traverser {
-	// Include request id in all logging.
 	logger := log.WithFields(log.Fields{"request_id": cfg.Chain.RequestId()})
 
 	// Channels used to communicate between traverser + reaper(s)
 	doneJobChan := make(chan proto.Job)
 	runJobChan := make(chan proto.Job)
 
-	runnerRepo := runner.NewRepo() // needed for traverser + reaper factory
+	// Each traverser has its own runner repo because it's keyed on job ID and
+	// job IDs are unique per-chain, not globally.
+	runnerRepo := runner.NewRepo()
+
+	// Reaper factory makes one of three reapers: running, stopped, or suspended
+	// reaper. Normally, only the running reaper is used. Its swapped out for
+	// one of the other two if the request is stopped or suspended, respectively.
 	reaperFactory := &ChainReaperFactory{
 		Chain:        cfg.Chain,
 		ChainRepo:    cfg.ChainRepo,
@@ -349,35 +349,25 @@ func (t *traverser) Stop() error {
 	return err
 }
 
-// Status returns the status of currently running jobs in the chain.
-func (t *traverser) Status() (proto.JobChainStatus, error) {
-	t.logger.Infof("getting the status of all running jobs")
-
-	activeRunners, err := t.runnerRepo.Items()
-	if err != nil {
-		return proto.JobChainStatus{}, err
-	}
-
-	runningJobs := t.chain.Running()
-	status := make([]proto.JobStatus, len(runningJobs))
-	i := 0
-	for jobId, jobStatus := range runningJobs {
-		runner := activeRunners[jobId]
-		if runner == nil {
-			// The job finished between the call to chain.Running() and now,
-			// so it's runner no longer exists in the runner.Repo.
-			jobStatus.Status = "(finished)"
-		} else {
-			jobStatus.Status = runner.Status()
+func (t *traverser) Running() []proto.JobStatus {
+	runners := t.runnerRepo.Items()                       // map[string]Runner keyed on jobId
+	jobStatus := make([]proto.JobStatus, 0, len(runners)) // for each runner
+	reqId := t.chain.RequestId()
+	for _, r := range runners {
+		rs := r.Status() // real-time status and more
+		js := proto.JobStatus{
+			RequestId: reqId,
+			JobId:     rs.Job.Id,
+			Type:      rs.Job.Type,
+			Name:      rs.Job.Name,
+			State:     t.chain.JobState(rs.Job.Id),
+			StartedAt: rs.StartedAt.UnixNano(),
+			Try:       rs.Try,
+			Status:    rs.Status,
 		}
-		status[i] = jobStatus
-		i++
+		jobStatus = append(jobStatus, js)
 	}
-	jcStatus := proto.JobChainStatus{
-		RequestId:   t.chain.RequestId(),
-		JobStatuses: status,
-	}
-	return jcStatus, nil
+	return jobStatus
 }
 
 // -------------------------------------------------------------------------- //
@@ -623,15 +613,9 @@ func (t *traverser) stopRunningJobs(timeout <-chan time.Time) error {
 		}
 	}
 
-	// Get all of the active runners for this traverser from the repo. Only runners
-	// that are in the repo will be stopped.
-	activeRunners, err := t.runnerRepo.Items()
-	if err != nil {
-		return fmt.Errorf("problem retrieving job runners from repo: %s", err)
-	}
-	t.logger.Printf("stopping %d active job runners", len(activeRunners))
-
 	// Stop all runners in parallel in case some jobs don't stop quickly
+	activeRunners := t.runnerRepo.Items()
+	t.logger.Printf("stopping %d active job runners", len(activeRunners))
 	var wg sync.WaitGroup
 	hadError := false
 	for jobId, activeRunner := range activeRunners {

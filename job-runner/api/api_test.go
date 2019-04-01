@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-test/deep"
 	"github.com/orcaman/concurrent-map"
 
 	"github.com/square/spincycle/job-runner/api"
@@ -426,59 +425,6 @@ func TestStopJobChainHandlerSuccess(t *testing.T) {
 
 	if statusCode != http.StatusOK {
 		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
-	}
-}
-
-func TestStatusJobChainHandlerStatusError(t *testing.T) {
-	requestId := "abcd1234"
-	setup(&mock.TraverserFactory{})
-	defer cleanup()
-
-	// Insert a mock traverser into the repo that will return an error on Stop.
-	trav := &mock.Traverser{StatusErr: mock.ErrTraverser}
-	traverserRepo.Set(requestId, trav)
-
-	statusCode, _, err := testutil.MakeHTTPRequest("GET", baseURL()+"job-chains/"+requestId+"/status", nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if statusCode != http.StatusInternalServerError {
-		t.Errorf("response status = %d, expected %d", statusCode, http.StatusInternalServerError)
-	}
-}
-
-func TestStatusJobChainHandlerSuccess(t *testing.T) {
-	requestId := "abcd1234"
-	setup(&mock.TraverserFactory{})
-	defer cleanup()
-
-	chainStatus := proto.JobChainStatus{
-		RequestId: requestId,
-		JobStatuses: proto.JobStatuses{
-			proto.JobStatus{JobId: "job2", Status: "", State: proto.STATE_FAIL},
-			proto.JobStatus{JobId: "job3", Status: "95% complete", State: proto.STATE_RUNNING},
-		},
-	}
-
-	// Insert a mock traverser into the repo that will return a status object on Status.
-	trav := &mock.Traverser{
-		StatusResp: chainStatus,
-	}
-	traverserRepo.Set(requestId, trav)
-
-	var actualStatus proto.JobChainStatus
-	statusCode, _, err := testutil.MakeHTTPRequest("GET", baseURL()+"job-chains/"+requestId+"/status", nil, &actualStatus)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if statusCode != http.StatusOK {
-		t.Errorf("response status = %d, expected %d", statusCode, http.StatusOK)
-	}
-
-	if diff := deep.Equal(actualStatus, chainStatus); diff != nil {
-		t.Error(diff)
 	}
 }
 

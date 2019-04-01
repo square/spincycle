@@ -156,9 +156,6 @@ func (s *Server) Boot() error {
 	// to report status back to RM (then back to user).
 	s.chainRepo = chain.NewMemoryRepo()
 
-	// Status Manager reports what's happening in the JR
-	stat := status.NewManager(s.chainRepo)
-
 	// Runner Factory makes a job.Runner to run one job. It's used by chain.Traversers
 	// to run jobs.
 	rf := runner.NewFactory(jobs.Factory, rmc)
@@ -168,6 +165,9 @@ func (s *Server) Boot() error {
 	// keep track of what's running.
 	trFactory := chain.NewTraverserFactory(s.chainRepo, rf, rmc, s.shutdownChan)
 	s.traverserRepo = cmap.New()
+
+	// Status Manager reports what's happening in the JR
+	stat := status.NewManager(s.traverserRepo)
 
 	// Base URL is what this JR reports itself as, e.g. https://spin-jr.prod.local:32307
 	// The RM saves this so it knows which JR to query to get the status of a

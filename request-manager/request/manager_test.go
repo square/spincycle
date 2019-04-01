@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"sort"
 	"testing"
 	"time"
 
@@ -528,11 +527,8 @@ func TestFinishNotRunning(t *testing.T) {
 func TestFinish(t *testing.T) {
 	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
 	defer teardownManager(t, dbName)
+	reqId := "454ae2f98a05cv16sdwt"
 
-	reqId := "454ae2f98a05cv16sdwt" // request is running
-	params := proto.FinishRequest{
-		State: proto.STATE_COMPLETE,
-	}
 	cfg := request.ManagerConfig{
 		GrapherFactory: grf,
 		DBConnector:    dbc,
@@ -541,188 +537,47 @@ func TestFinish(t *testing.T) {
 		DefaultJRURL:   "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
-	err := m.Finish(reqId, params)
-	if err != nil {
-		t.Errorf("error = %s, expected nil", err)
-	}
 
-	// Get the request from the db and make sure its state was updated.
+	// Verify initial request state
 	req, err := m.Get(reqId)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
+	if req.State != proto.STATE_RUNNING {
+		t.Errorf("request state = %s, expected RUNNING", proto.StateName[req.State])
+	}
+	if req.FinishedJobs != 1 {
+		t.Errorf("got FinishedJobs = %d, expected 1", req.FinishedJobs)
+	}
+	if req.FinishedAt != nil && !req.FinishedAt.IsZero() {
+		t.Errorf("got FinishedAt = %s, expected nil/NULL", req.FinishedAt)
+	}
 
+	// Send a proto.FinishRequest to finish the request
+	now := time.Now()
+	params := proto.FinishRequest{
+		State:        proto.STATE_COMPLETE,
+		FinishedJobs: 3,
+		FinishedAt:   now,
+	}
+	err = m.Finish(reqId, params)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	// Verify post-finish request state
+	req, err = m.Get(reqId)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
 	if req.State != params.State {
 		t.Errorf("request state = %d, expected %d", req.State, params.State)
 	}
-}
-
-func TestStatusRunning(t *testing.T) {
-	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
-	defer teardownManager(t, dbName)
-
-	reqId := "454ae2f98a05cv16sdwt" // request is running and has JLs
-
-	// Create a mock JR client that returns live status for some jobs.
-	var recvdHost string
-	mockJRc := &mock.JRClient{
-		RequestStatusFunc: func(baseURL string, reqId string) (proto.JobChainStatus, error) {
-			recvdHost = baseURL
-			return proto.JobChainStatus{
-				RequestId: reqId,
-				JobStatuses: proto.JobStatuses{
-					proto.JobStatus{
-						RequestId: reqId,
-						JobId:     "ldfi",
-						State:     proto.STATE_RUNNING,
-						Status:    "in progress",
-					},
-				},
-			}, nil
-		},
+	if req.FinishedJobs != params.FinishedJobs {
+		t.Errorf("got FinishedJobs = %d, expected %d", req.FinishedJobs, params.FinishedJobs)
 	}
-
-	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
-		DBConnector:    dbc,
-		JRClient:       mockJRc,
-		ShutdownChan:   shutdownChan,
-		DefaultJRURL:   "http://defaulturl:1111",
-	}
-	m := request.NewManager(cfg)
-	actual, err := m.Status(reqId)
-	if err != nil {
-		t.Errorf("err = %s, expected nil", err)
-	}
-
-	expected := proto.RequestStatus{
-		Request: testdb.SavedRequests[reqId],
-		JobChainStatus: proto.JobChainStatus{
-			RequestId: reqId,
-			JobStatuses: proto.JobStatuses{
-				proto.JobStatus{
-					RequestId: reqId,
-					JobId:     "di12",
-					State:     proto.STATE_COMPLETE,
-				},
-				proto.JobStatus{
-					RequestId: reqId,
-					JobId:     "ldfi",
-					State:     proto.STATE_RUNNING,
-					Status:    "in progress",
-				},
-				proto.JobStatus{
-					RequestId: reqId,
-					JobId:     "590s",
-					State:     proto.STATE_COMPLETE,
-				},
-				proto.JobStatus{
-					RequestId: reqId,
-					JobId:     "g012",
-					State:     proto.STATE_PENDING,
-				},
-				proto.JobStatus{
-					RequestId: reqId,
-					JobId:     "9sa1",
-					State:     proto.STATE_FAIL,
-				},
-				proto.JobStatus{
-					RequestId: reqId,
-					JobId:     "pzi8",
-					State:     proto.STATE_PENDING,
-				},
-			},
-		},
-	}
-	sort.Sort(actual.JobChainStatus.JobStatuses)
-	sort.Sort(expected.JobChainStatus.JobStatuses)
-
-	if diff := deep.Equal(actual, expected); diff != nil {
-		t.Error(diff)
-	}
-
-	req := testdb.SavedRequests[reqId]
-	if recvdHost != req.JobRunnerURL {
-		t.Errorf("JR url = %s, expected %s", recvdHost, req.JobRunnerURL)
-	}
-}
-
-func TestStatusJobRetried(t *testing.T) {
-	// Bug fix: RM does not report live status for retried jobs. Problem is:
-	// RM uses job log and a retried job will have a JLE which masks its
-	// realtime status from the JR. So for this test, we need a JLE where the
-	// job failed + JR still reporting job on 2nd+ try.
-	reqId := "aaabbbcccdddeeefff00" // used in this data file:
-	dbName := setupManager(t, rmtest.DataPath+"/retry-job-live-status.sql")
-	defer teardownManager(t, dbName)
-
-	// @todo: the JobStatus fields are inconsistent (i.e. which are included or not)
-	//        because it depends on whether info comes from JR, JL, or neither and is implied.
-	job1Status := proto.JobStatus{
-		RequestId: reqId,
-		JobId:     "0001",
-		Name:      "job1Name",
-		State:     proto.STATE_RUNNING, // =2
-		Status:    "2nd try...",
-		//Type:      "job1Type",  // currently, we don't fetch these cols
-		//StartedAt: 1551711877191506000,
-	}
-	job2Status := proto.JobStatus{
-		JobId: "0002",
-		//Name:  "job2Name",
-		State: proto.STATE_PENDING,
-	}
-	job3Status := proto.JobStatus{
-		JobId: "0003",
-		//Name:  "job3Name",
-		State: proto.STATE_PENDING,
-	}
-
-	mockJRc := &mock.JRClient{
-		RequestStatusFunc: func(baseURL string, reqId string) (proto.JobChainStatus, error) {
-			return proto.JobChainStatus{
-				RequestId:   reqId,
-				JobStatuses: proto.JobStatuses{job1Status},
-			}, nil
-		},
-	}
-
-	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
-		DBConnector:    dbc,
-		JRClient:       mockJRc,
-		ShutdownChan:   shutdownChan,
-		DefaultJRURL:   "http://defaulturl:1111",
-	}
-	m := request.NewManager(cfg)
-	actual, err := m.Status(reqId)
-	if err != nil {
-		t.Errorf("err = %s, expected nil", err)
-	}
-	actual.JobChain = nil // don't need this
-	reqTs, _ := time.Parse("2006-01-02 15:04:05", "2019-03-04 00:00:00")
-	expected := proto.RequestStatus{
-		Request: proto.Request{
-			Id:           reqId,
-			Type:         "req-name",
-			State:        proto.STATE_RUNNING,
-			User:         "finch",
-			CreatedAt:    reqTs,
-			StartedAt:    &reqTs,
-			TotalJobs:    3,
-			FinishedJobs: 0,
-		},
-		JobChainStatus: proto.JobChainStatus{
-			RequestId:   reqId,
-			JobStatuses: proto.JobStatuses{job1Status, job2Status, job3Status},
-		},
-	}
-	sort.Sort(actual.JobChainStatus.JobStatuses)
-	// The bug causes diff: [JobChainStatus.JobStatuses.slice[0].State: 4 != 2 JobChainStatus.JobStatuses.slice[0].Status:  != 2nd try...]
-	// Statue 4 is from the job_log when it should be state 2 from the mock JR reporting it's running
-	if diff := deep.Equal(actual, expected); diff != nil {
-		t.Logf("-- got job statuses: %+v", actual.JobChainStatus.JobStatuses)
-		t.Error(diff)
+	if req.FinishedAt.IsZero() {
+		t.Errorf("got FinishedAt = nil/NULL, expected a value")
 	}
 }
 

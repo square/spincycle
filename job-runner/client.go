@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package client provides an HTTP client for interacting with the Job Runner (JR) API.
 package jr
@@ -25,12 +25,9 @@ type Client interface {
 	// StopRequest stops the job chain that corresponds to a given request Id. The
 	// baseURL should point to the Job Runner running this request.
 	StopRequest(baseURL string, requestId string) error
-	// RequestStatus gets the status of the job chain that corresponds to a given
-	// request Id. The baseURL should point to the Job Runner running this request.
-	RequestStatus(baseURL string, requestId string) (proto.JobChainStatus, error)
 
-	// SysStatRunning reports all running jobs.
-	SysStatRunning(baseURL string) ([]proto.JobStatus, error)
+	// Running reports running jobs. If no filters, all requests and jobs are reported.
+	Running(baseURL string, f proto.StatusFilter) ([]proto.JobStatus, error)
 }
 
 type client struct {
@@ -125,50 +122,21 @@ func (c *client) StopRequest(baseURL string, requestId string) error {
 	return nil
 }
 
-func (c *client) RequestStatus(baseURL string, requestId string) (proto.JobChainStatus, error) {
+func (c *client) Running(baseURL string, f proto.StatusFilter) ([]proto.JobStatus, error) {
 	// GET /api/v1/job-chains/${requestId}/status
-	url := fmt.Sprintf(baseURL+"/api/v1/job-chains/%s/status", requestId)
-
-	// Make the request.
-	status := proto.JobChainStatus{}
+	url := baseURL + "/api/v1/status/running" + f.String()
 	resp, body, err := c.get(url)
 	if err != nil {
-		return status, err
+		return nil, err
 	}
-
 	if resp.StatusCode != http.StatusOK {
-		return status, fmt.Errorf("unsuccessful status code: %d (response body: %s)",
-			resp.StatusCode, string(body))
+		return nil, fmt.Errorf("unsuccessful status code: %d (response body: %s)", resp.StatusCode, string(body))
 	}
-
-	// Unmarshal the response.
-	err = json.Unmarshal(body, &status)
-	if err != nil {
-		return status, err
+	var status []proto.JobStatus
+	if err := json.Unmarshal(body, &status); err != nil {
+		return nil, err
 	}
-
 	return status, nil
-}
-
-func (c *client) SysStatRunning(baseURL string) ([]proto.JobStatus, error) {
-	// GET /api/v1/job-chains/${requestId}/status
-	url := baseURL + "/api/v1/status/running"
-	resp, body, err := c.get(url)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unsuccessful status code: %d (response body: %s)",
-			resp.StatusCode, string(body))
-	}
-
-	var running []proto.JobStatus
-	if err := json.Unmarshal(body, &running); err != nil {
-		return nil, err
-	}
-
-	return running, nil
 }
 
 // ------------------------------------------------------------------------- //

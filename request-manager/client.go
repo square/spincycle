@@ -38,10 +38,6 @@ type Client interface {
 	// the SuspendedJobChain.
 	SuspendRequest(string, proto.SuspendedJobChain) error
 
-	// RequestStatus gets the status of a request that corresponds to a
-	// given request id.
-	RequestStatus(string) (proto.RequestStatus, error)
-
 	// GetJobChain gets the job chain for a given request id.
 	GetJobChain(string) (proto.JobChain, error)
 
@@ -54,8 +50,8 @@ type Client interface {
 	// RequestList returns a list of possible requests.
 	RequestList() ([]proto.RequestSpec, error)
 
-	// SysStatRunning returns a list of running jobs, sorted by runtime.
-	SysStatRunning() (proto.RunningStatus, error)
+	// Running returns a list of running jobs, sorted by runtime.
+	Running(proto.StatusFilter) (proto.RunningStatus, error)
 
 	// UpdateProgress updates request progress from Job Runner.
 	UpdateProgress(proto.RequestProgress) error
@@ -137,15 +133,6 @@ func (c *client) SuspendRequest(requestId string, sjc proto.SuspendedJobChain) e
 	return c.makeRequest("PUT", url, sjc, nil)
 }
 
-func (c *client) RequestStatus(requestId string) (proto.RequestStatus, error) {
-	// GET /api/v1/requests/${requestId}/status
-	url := c.baseUrl + "/api/v1/requests/" + requestId + "/status"
-
-	var status proto.RequestStatus
-	err := c.makeRequest("GET", url, nil, &status)
-	return status, err
-}
-
 func (c *client) GetJobChain(requestId string) (proto.JobChain, error) {
 	// GET /api/v1/requests/${requestId}/job-chain
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/job-chain"
@@ -179,9 +166,9 @@ func (c *client) RequestList() ([]proto.RequestSpec, error) {
 	return req, err
 }
 
-func (c *client) SysStatRunning() (proto.RunningStatus, error) {
+func (c *client) Running(f proto.StatusFilter) (proto.RunningStatus, error) {
 	// GET /api/v1/requests
-	url := c.baseUrl + "/api/v1/status/running"
+	url := c.baseUrl + "/api/v1/status/running" + f.String()
 	var req proto.RunningStatus
 	err := c.makeRequest("GET", url, nil, &req)
 	return req, err

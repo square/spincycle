@@ -7,7 +7,6 @@ package chain
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/square/spincycle/proto"
 )
@@ -18,9 +17,6 @@ type Chain struct {
 	// calls on jobsMux within the same goroutine.
 	jobsMux  *sync.RWMutex
 	jobChain *proto.JobChain
-
-	runningMux *sync.RWMutex
-	running    map[string]proto.JobStatus // keyed on job id
 
 	triesMux          *sync.RWMutex   // for access to sequence/job tries maps
 	sequenceTries     map[string]uint // Number of sequence retries attempted so far
@@ -40,8 +36,6 @@ func NewChain(jc *proto.JobChain, sequenceTries map[string]uint, totalJobTries m
 	return &Chain{
 		jobsMux:           &sync.RWMutex{},
 		jobChain:          jc,
-		runningMux:        &sync.RWMutex{},
-		running:           map[string]proto.JobStatus{},
 		sequenceTries:     sequenceTries,
 		triesMux:          &sync.RWMutex{},
 		totalJobTries:     totalJobTries,
@@ -156,10 +150,9 @@ func (c *Chain) FailedJobs() uint {
 	defer c.jobsMux.RUnlock()
 	n := uint(0)
 	for _, job := range c.jobChain.Jobs {
-		if job.State != proto.STATE_FAIL {
-			continue
+		if job.State == proto.STATE_FAIL {
+			n++
 		}
-		n++
 	}
 	return n
 }
@@ -284,65 +277,13 @@ func (c *Chain) State() byte {
 	return c.jobChain.State
 }
 
-// JobChain returns the chain's JobChain.
-func (c *Chain) JobChain() *proto.JobChain {
-	return c.jobChain
-}
-
 // Set the state of a job in the chain.
 func (c *Chain) SetJobState(jobId string, state byte) {
-	now := time.Now().UnixNano()
-
 	c.jobsMux.Lock() // -- lock
 	j := c.jobChain.Jobs[jobId]
-	prevState := j.State
 	j.State = state
 	c.jobChain.Jobs[jobId] = j
 	c.jobsMux.Unlock() // -- unlock
-
-	if prevState == state {
-		return
-	}
-
-	// Keep Chain.running up to date
-	c.runningMux.Lock()
-	defer c.runningMux.Unlock()
-	if state == proto.STATE_RUNNING {
-		jobStatus := proto.JobStatus{
-			RequestId: c.jobChain.RequestId,
-			JobId:     jobId,
-			Type:      j.Type,
-			Name:      j.Name,
-			Args:      map[string]interface{}{},
-			StartedAt: now,
-			State:     state,
-		}
-		for k, v := range j.Args {
-			jobStatus.Args[k] = v
-		}
-		c.running[jobId] = jobStatus
-	} else {
-		// STATE_RUNNING is the only running state, and it's not that, so the
-		// job must not be running.
-		delete(c.running, jobId)
-	}
-}
-
-// Running returns a list of running jobs.
-func (c *Chain) Running() map[string]proto.JobStatus {
-	// Return copy of c.running
-	c.runningMux.RLock()
-	defer c.runningMux.RUnlock()
-	running := make(map[string]proto.JobStatus, len(c.running))
-	for jobId, jobStatus := range c.running {
-		running[jobId] = jobStatus
-	}
-	return running
-}
-
-// Length returns the total number of jobs in the chain.
-func (c *Chain) Length() int {
-	return len(c.jobChain.Jobs)
 }
 
 // -------------------------------------------------------------------------- //

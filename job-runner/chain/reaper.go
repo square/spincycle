@@ -308,7 +308,7 @@ REAPER:
 			// check the loop condition before traverser.runJobs() gets a chance to
 			// remove the runner from the repo. In that case, the loop condition
 			// returns true, and we'd be stuck in this loop forever if we didn't
-			//have this timeout case.
+			// have this timeout case.
 		case <-r.stopChan: // Stop called
 			// Don't return right away - finalize the chain even when stopping.
 			break REAPER
@@ -379,7 +379,7 @@ func (r *SuspendedChainReaper) Finalize() {
 	defer log.Infof("SuspendedChainReaper.Finalize: return")
 
 	// Mark any jobs that didn't respond to Stop in time as Failed
-	for jobId := range r.chain.Running() {
+	for jobId := range r.runnerRepo.Items() {
 		r.logger.Infof("job %s still running, setting state to FAIL", jobId)
 		r.chain.SetJobState(jobId, proto.STATE_FAIL)
 	}
@@ -392,8 +392,8 @@ func (r *SuspendedChainReaper) Finalize() {
 		return
 	}
 
-	if r.chain.FailedJobs() > 0 {
-		r.logger.Infof("job chain failed")
+	if n := r.chain.FailedJobs(); n > 0 {
+		r.logger.Infof("job chain failed (%d failed jobs)", n)
 		r.chain.SetState(proto.STATE_FAIL)
 		r.sendFinalState(finishedAt)
 		return
@@ -501,9 +501,8 @@ func (r *StoppedChainReaper) Finalize() {
 	finishedAt := time.Now().UTC()
 
 	// Mark any jobs that didn't respond to Stop in time as Failed
-	for jobId, jobStatus := range r.chain.Running() {
+	for jobId := range r.runnerRepo.Items() {
 		r.logger.Infof("job %s still running, setting state to FAIL", jobId)
-		jobId := jobStatus.JobId
 		r.chain.SetJobState(jobId, proto.STATE_FAIL)
 	}
 

@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package mock
 
@@ -19,11 +19,10 @@ type RMClient struct {
 	FinishRequestFunc  func(proto.FinishRequest) error
 	StopRequestFunc    func(string) error
 	SuspendRequestFunc func(string, proto.SuspendedJobChain) error
-	RequestStatusFunc  func(string) (proto.RequestStatus, error)
 	GetJobChainFunc    func(string) (proto.JobChain, error)
 	GetJLFunc          func(string) ([]proto.JobLog, error)
 	CreateJLFunc       func(string, proto.JobLog) error
-	SysStatRunningFunc func() (proto.RunningStatus, error)
+	RunningFunc        func(proto.StatusFilter) (proto.RunningStatus, error)
 	RequestListFunc    func() ([]proto.RequestSpec, error)
 	UpdateProgressFunc func(proto.RequestProgress) error
 }
@@ -70,13 +69,6 @@ func (c *RMClient) SuspendRequest(requestId string, sjc proto.SuspendedJobChain)
 	return nil
 }
 
-func (c *RMClient) RequestStatus(requestId string) (proto.RequestStatus, error) {
-	if c.RequestStatusFunc != nil {
-		return c.RequestStatusFunc(requestId)
-	}
-	return proto.RequestStatus{}, nil
-}
-
 func (c *RMClient) GetJobChain(requestId string) (proto.JobChain, error) {
 	if c.GetJobChainFunc != nil {
 		return c.GetJobChainFunc(requestId)
@@ -105,9 +97,9 @@ func (c *RMClient) RequestList() ([]proto.RequestSpec, error) {
 	return []proto.RequestSpec{}, nil
 }
 
-func (c *RMClient) SysStatRunning() (proto.RunningStatus, error) {
-	if c.SysStatRunningFunc != nil {
-		return c.SysStatRunningFunc()
+func (c *RMClient) Running(f proto.StatusFilter) (proto.RunningStatus, error) {
+	if c.RunningFunc != nil {
+		return c.RunningFunc(f)
 	}
 	return proto.RunningStatus{}, nil
 }

@@ -85,13 +85,14 @@ func (c *Help) Usage() {
 		"  --help     Print help\n"+
 		"  --timeout  API timeout, milliseconds (default: %d)\n"+
 		"  --version  Print version\n"+
-		"  -v         Verbose ps or status\n\n"+
 		"Commands:\n"+
 		"  help    <cmd|req>  Print command or request help\n"+
-		"  ps                 Show all running requests and jobs\n"+
-		"  running <ID>       Exit 0 if request is running, else exit 1\n"+
+		"  info    <ID>       Print complete request information\n"+
+		"  log     <ID>       Print job log (tip: pipe output to less)\n"+
+		"  ps      [ID]       Show running requests and jobs (request ID optional)\n"+
+		"  running <ID>       Exit 0 if request is pending or running, else exit 1\n"+
 		"  start   <request>  Start new request\n"+
-		"  status  <ID>       Print status of request\n"+
+		"  status  <ID>       Print request status and basic information\n"+
 		"  stop    <ID>       Stop request\n"+
 		"  version            Print Spin Cycle version\n",
 		config.DEFAULT_ADDR, config.DEFAULT_CONFIG_FILES, config.DEFAULT_TIMEOUT)

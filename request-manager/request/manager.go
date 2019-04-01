@@ -29,7 +29,7 @@ const (
 	DB_RETRY_WAIT = time.Duration(500 * time.Millisecond)
 )
 
-// A Manager is used to create and manage requests.
+// A Manager creates and manages the life cycle of requests.
 type Manager interface {
 	// Create creates a request and saves it to the db. The request is not
 	// started; its state is pending until Start is called.
@@ -48,11 +48,6 @@ type Manager interface {
 
 	// Stop stops a request (sends a stop signal to the JR).
 	Stop(requestId string) error
-
-	// Status returns the status of a request and all of the jobs in it.
-	// The live status output of any jobs that are currently running will be
-	// included as well.
-	Status(requestId string) (proto.RequestStatus, error)
 
 	// Finish marks a request as being finished. It gets the request's final
 	// state from the proto.FinishRequest argument.
@@ -356,111 +351,6 @@ func (m *manager) Stop(requestId string) error {
 	return nil
 }
 
-func (m *manager) Status(requestId string) (proto.RequestStatus, error) {
-	var reqStatus proto.RequestStatus
-
-	req, err := m.GetWithJC(requestId)
-	if err != nil {
-		return reqStatus, err
-	}
-	reqStatus.Request = req
-
-	// //////////////////////////////////////////////////////////////////////
-	// Live jobs
-	// //////////////////////////////////////////////////////////////////////
-
-	// If the request is running, get the chain's live status from the job runner.
-	var liveS proto.JobStatuses
-	if req.State == proto.STATE_RUNNING {
-		s, err := m.jrc.RequestStatus(req.JobRunnerURL, req.Id)
-		if err != nil {
-			return reqStatus, err
-		}
-		liveS = s.JobStatuses
-	}
-
-	// //////////////////////////////////////////////////////////////////////
-	// Finished jobs
-	// //////////////////////////////////////////////////////////////////////
-
-	// Get the status of all finished jobs from the db.
-	ctx := context.TODO()
-
-	// TODO(alyssa): change query when we add support for nested sequence retries
-	q := "SELECT j1.job_id, j1.name, j1.state" +
-		" FROM job_log j1" +
-		" LEFT JOIN job_log j2 ON (j1.request_id = j2.request_id AND j1.job_id = j2.job_id AND j1.try < j2.try)" +
-		" WHERE j1.request_id = ? AND j2.try IS NULL"
-	var rows *sql.Rows
-	err = retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
-		var err error
-		rows, err = m.dbc.QueryContext(ctx, q, requestId)
-		return err
-	}, nil)
-	if err != nil {
-		return reqStatus, serr.NewDbError(err, "SELECT job_log")
-	}
-	defer rows.Close()
-
-	var finishedS proto.JobStatuses
-	for rows.Next() {
-		var s proto.JobStatus
-		if err := rows.Scan(&s.JobId, &s.Name, &s.State); err != nil {
-			return reqStatus, err
-		}
-		s.RequestId = requestId
-		finishedS = append(finishedS, s)
-	}
-
-	// //////////////////////////////////////////////////////////////////////
-	// Combine live + finished
-	// //////////////////////////////////////////////////////////////////////
-
-	// Convert liveS and finishedS into maps of jobId => status so that it
-	// is easy to lookup a job's status by its id (used below).
-	liveJ := map[string]proto.JobStatus{}
-	for _, s := range liveS {
-		liveJ[s.JobId] = s
-	}
-	finishedJ := map[string]proto.JobStatus{}
-	for _, s := range finishedS {
-		finishedJ[s.JobId] = s
-	}
-
-	// For each job in the job chain, get the job's status from either
-	// liveJ or finishedJ. We get live before finished, so it's possible
-	// a job can complete between these two, which means JR reports it
-	// running and there's a JLE for it. But it's also possible the job
-	// is being retried which yields the same. Live takes precdence, i.e.
-	// the point in time for this status is when job status is fetched
-	// from JR. -- If job is neither live nor logged, then we presume
-	// it's pending.
-	jobStatuses := proto.JobStatuses{}
-	for _, j := range req.JobChain.Jobs {
-		if s, ok := liveJ[j.Id]; ok { // live
-			jobStatuses = append(jobStatuses, s)
-		} else if s, ok := finishedJ[j.Id]; ok { // logged/complete
-			jobStatuses = append(jobStatuses, s)
-		} else { // presume pending
-			s := proto.JobStatus{
-				JobId: j.Id,
-				Name:  j.Name,
-				State: proto.STATE_PENDING,
-			}
-			jobStatuses = append(jobStatuses, s)
-		}
-	}
-
-	// @todo: Fix inconsistent JobStatus fields. See TestStatusJobRetried
-
-	reqStatus.JobChainStatus = proto.JobChainStatus{
-		RequestId:   req.Id,
-		JobStatuses: jobStatuses,
-	}
-
-	return reqStatus, nil
-}
-
 func (m *manager) Finish(requestId string, finishParams proto.FinishRequest) error {
 	req, err := m.Get(requestId)
 	if err != nil {
@@ -618,7 +508,7 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 	}
 
 	// Fields that should never be updated by this package are not listed in this query.
-	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, jr_url = ? WHERE request_id = ? AND state = ?"
+	q := "UPDATE requests SET state = ?, started_at = ?, finished_at = ?, finished_jobs = ?, jr_url = ?  WHERE request_id = ? AND state = ?"
 	var res sql.Result
 	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
 		var err error
@@ -626,6 +516,7 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 			req.State,
 			req.StartedAt,
 			req.FinishedAt,
+			req.FinishedJobs,
 			jrURL,
 			req.Id,
 			curState,

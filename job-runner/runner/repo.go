@@ -1,10 +1,8 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package runner
 
 import (
-	"fmt"
-
 	"github.com/orcaman/concurrent-map"
 )
 
@@ -12,8 +10,9 @@ import (
 // store and retrieve Runners in a thread-safe way.
 type Repo interface {
 	Set(jobId string, runner Runner)
+	Get(jobId string) Runner
 	Remove(jobId string)
-	Items() (map[string]Runner, error)
+	Items() map[string]Runner
 	Count() int
 }
 
@@ -32,22 +31,30 @@ func (r *repo) Set(jobId string, runner Runner) {
 	r.c.Set(jobId, runner)
 }
 
+func (r *repo) Get(jobId string) Runner {
+	v, ok := r.c.Get(jobId)
+	if !ok {
+		return nil
+	}
+	return v.(Runner)
+}
+
 // Remove removes a runner from the repo.
 func (r *repo) Remove(jobId string) {
 	r.c.Remove(jobId)
 }
 
 // Items returns a map of jobId => Runner with all the Runners in the repo.
-func (r *repo) Items() (map[string]Runner, error) {
+func (r *repo) Items() map[string]Runner {
 	runners := map[string]Runner{} // jobId => runner
 	for jobId, v := range r.c.Items() {
 		runner, ok := v.(Runner)
 		if !ok {
-			return runners, fmt.Errorf("invalid runner in repo for jobId=%s", jobId) // should be impossible
+			panic("runner for job ID " + jobId + " is not type Runner") // should be impossible
 		}
 		runners[jobId] = runner
 	}
-	return runners, nil
+	return runners
 }
 
 // Count returns the number of Runners in the repo.

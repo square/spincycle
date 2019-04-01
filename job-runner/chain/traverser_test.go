@@ -1,4 +1,4 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package chain_test
 
@@ -782,36 +782,54 @@ func TestSuspend(t *testing.T) {
 	}
 }
 
-// Get the status from all running jobs.
-func TestStatus(t *testing.T) {
-	now := time.Now().UnixNano()
-
+func TestRunning(t *testing.T) {
 	requestId := "test_status"
 	chainRepo := chain.NewMemoryRepo()
 	var runWg sync.WaitGroup
 	runWg.Add(2)
+	job1Status := runner.Status{
+		Job:       proto.Job{},
+		StartedAt: time.Now().Add(-3 * time.Second),
+		Try:       1,
+		Status:    "job1 DONE",
+	}
+	job2Status := runner.Status{
+		Job: proto.Job{
+			Id:   "job2",
+			Type: "j2type",
+			Name: "j2name",
+		},
+		StartedAt: time.Now().Add(-2 * time.Second),
+		Try:       2,
+		Status:    "job2 running",
+	}
+	job3Status := runner.Status{
+		Job: proto.Job{
+			Id:   "job3",
+			Type: "j3type",
+			Name: "j3name",
+		},
+		StartedAt: time.Now().Add(-1 * time.Second),
+		Try:       3,
+		Status:    "job3 running",
+	}
 	rf := &mock.RunnerFactory{
 		RunnersToReturn: map[string]*mock.Runner{
-			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: "job1 running"},
-			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: "job2 running", RunBlock: make(chan struct{}), RunWg: &runWg},
-			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: "job3 running", RunBlock: make(chan struct{}), RunWg: &runWg},
-			"job4": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: "job4 running"},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: job1Status},
+			"job2": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: job2Status, RunBlock: make(chan struct{}), RunWg: &runWg},
+			"job3": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}, StatusResp: job3Status, RunBlock: make(chan struct{}), RunWg: &runWg},
 		},
 	}
-	rmc := &mock.RMClient{}
-	shutdownChan := make(chan struct{})
 
 	jc := &proto.JobChain{
 		RequestId: requestId,
-		Jobs:      testutil.InitJobs(4),
+		Jobs:      testutil.InitJobs(3),
 		AdjacencyList: map[string][]string{
 			"job1": {"job2", "job3"},
-			"job2": {"job4"},
-			"job3": {"job4"},
 		},
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
-	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, &mock.RMClient{}, make(chan struct{}), timeout, timeout})
 
 	// Start the traverser.
 	doneChan := make(chan struct{})
@@ -824,38 +842,37 @@ func TestStatus(t *testing.T) {
 	// run until Status is called (which will close their RunBlock channels).
 	runWg.Wait()
 
-	expectedStatus := proto.JobChainStatus{
-		RequestId: requestId,
-		JobStatuses: proto.JobStatuses{
-			proto.JobStatus{
-				RequestId: requestId,
-				JobId:     "job2",
-				State:     proto.STATE_RUNNING,
-				Status:    "job2 running",
-				Args:      map[string]interface{}{},
-			},
-			proto.JobStatus{
-				RequestId: requestId,
-				JobId:     "job3",
-				State:     proto.STATE_RUNNING,
-				Status:    "job3 running",
-				Args:      map[string]interface{}{},
-			},
+	expectedStatus := []proto.JobStatus{
+		{
+			RequestId: requestId,
+			JobId:     "job2",
+			Type:      "j2type",
+			Name:      "j2name",
+			State:     proto.STATE_RUNNING,
+			Status:    "job2 running",
+			Try:       2,
+		},
+		{
+			RequestId: requestId,
+			JobId:     "job3",
+			Type:      "j3type",
+			Name:      "j3name",
+			State:     proto.STATE_RUNNING,
+			Status:    "job3 running",
+			Try:       3,
 		},
 	}
-	status, err := traverser.Status()
-	sort.Sort(status.JobStatuses)
+	gotRunning := traverser.Running()
+	sort.Sort(proto.JobStatusByStartTime(gotRunning))
 
-	for i, j := range status.JobStatuses {
-		if j.StartedAt < now {
-			t.Errorf("StartedAt <= 0: %+v", j)
+	for i, j := range gotRunning {
+		if j.StartedAt == 0 {
+			t.Errorf("StartedAt is zero for job %s", j.JobId)
 		}
-		status.JobStatuses[i].StartedAt = 0
+		gotRunning[i].StartedAt = 0
 	}
-	if err != nil {
-		t.Errorf("err = %s, expected nil", err)
-	}
-	if diff := deep.Equal(status, expectedStatus); diff != nil {
+
+	if diff := deep.Equal(gotRunning, expectedStatus); diff != nil {
 		t.Error(diff)
 	}
 

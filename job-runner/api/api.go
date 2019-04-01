@@ -73,16 +73,11 @@ func NewAPI(cfg Config) *API {
 	// //////////////////////////////////////////////////////////////////////
 	// Routes
 	// //////////////////////////////////////////////////////////////////////
-	// Create a new job chain and start running it.
-	api.echo.POST(API_ROOT+"job-chains", api.newJobChainHandler)
-	// Resume running a suspended job chain.
-	api.echo.POST(API_ROOT+"job-chains/resume", api.resumeJobChainHandler)
-	// Stop running a job chain.
-	api.echo.PUT(API_ROOT+"job-chains/:requestId/stop", api.stopJobChainHandler)
-	// Get the status of a job chain.
-	api.echo.GET(API_ROOT+"job-chains/:requestId/status", api.statusJobChainHandler)
+	api.echo.POST(API_ROOT+"job-chains", api.newJobChainHandler)                 // start running new job chain
+	api.echo.POST(API_ROOT+"job-chains/resume", api.resumeJobChainHandler)       // resume suspended job chain
+	api.echo.PUT(API_ROOT+"job-chains/:requestId/stop", api.stopJobChainHandler) // stop job chain
 
-	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler)
+	api.echo.GET(API_ROOT+"status/running", api.statusRunningHandler) // return running jobs -> []proto.JobStatus
 	api.echo.GET("/version", api.versionHandler)
 
 	// //////////////////////////////////////////////////////////////////////
@@ -164,9 +159,6 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 		return handleError(ErrDuplicateTraverser)
 	}
 
-	// Set the location in the response header to point to this server.
-	c.Response().Header().Set("Location", api.chainLocation(jc.RequestId))
-
 	// Start the traverser, and remove it from the repo when it's
 	// done running. This could take a very long time to return,
 	// so we run it in a goroutine.
@@ -174,6 +166,9 @@ func (api *API) newJobChainHandler(c echo.Context) error {
 		defer api.traverserRepo.Remove(jc.RequestId)
 		t.Run()
 	}()
+
+	// Set the location in the response header to point to this server.
+	c.Response().Header().Set("Location", api.chainLocation(jc.RequestId))
 
 	return nil
 }
@@ -252,38 +247,17 @@ func (api *API) stopJobChainHandler(c echo.Context) error {
 	return nil
 }
 
-// GET <API_ROOT>/job-chains/{requestId}/status
-// Get the status of a running job chain.
-func (api *API) statusJobChainHandler(c echo.Context) error {
-	requestId := c.Param("requestId")
-
-	// Get the traverser to the repo.
-	val, exists := api.traverserRepo.Get(requestId)
-	if !exists {
-		return handleError(ErrTraverserNotFound)
+// GET <API_ROOT>/status/running
+func (api *API) statusRunningHandler(c echo.Context) error {
+	f := proto.StatusFilter{
+		RequestId: c.QueryParam("requestId"),
+		OrderBy:   c.QueryParam("orderBy"),
 	}
-	traverser, ok := val.(chain.Traverser)
-	if !ok {
-		return handleError(ErrInvalidTraverser)
-	}
-
-	// This is expected to return quickly.
-	statuses, err := traverser.Status()
+	jobs, err := api.stat.Running(f)
 	if err != nil {
 		return handleError(err)
 	}
-
-	// Return the statuses.
-	return c.JSON(http.StatusOK, statuses)
-}
-
-// GET <API_ROOT>/status/running
-func (api *API) statusRunningHandler(c echo.Context) error {
-	running, err := api.stat.Running()
-	if err != nil {
-		return handleError(ErrTraverserNotFound)
-	}
-	return c.JSON(http.StatusOK, running)
+	return c.JSON(http.StatusOK, jobs)
 }
 
 func (api *API) versionHandler(c echo.Context) error {
