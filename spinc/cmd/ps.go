@@ -101,7 +101,7 @@ func (c *Ps) Cmd() string {
 
 func (c *Ps) Help() string {
 	return "'spinc ps [request ID]' prints running requests and jobs.\n" +
-		"Request ID is optinoal. If given, only its running jobs are printed; else, all requests' running jobs are printed.\n" +
+		"Request ID is optional. If given, only its running jobs are printed; else, all requests' running jobs are printed.\n" +
 		"Columns:\n" +
 		"  REQUEST: Request name\n" +
 		"  ID:      Request ID\n" +

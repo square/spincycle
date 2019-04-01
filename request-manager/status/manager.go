@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,7 +92,7 @@ func (m *manager) Running(f proto.StatusFilter) (proto.RunningStatus, error) {
 		return all, nil
 	}
 
-	switch f.OrderBy {
+	switch strings.ToLower(f.OrderBy) {
 	case "starttime":
 		sort.Sort(proto.JobStatusByStartTime(all.Jobs))
 	default:

@@ -350,7 +350,7 @@ func (t *traverser) Stop() error {
 }
 
 func (t *traverser) Running() []proto.JobStatus {
-	runners := t.runnerRepo.Items()                       // map[string]interface{} keyed on jobId
+	runners := t.runnerRepo.Items()                       // map[string]Runner keyed on jobId
 	jobStatus := make([]proto.JobStatus, 0, len(runners)) // for each runner
 	reqId := t.chain.RequestId()
 	for _, r := range runners {

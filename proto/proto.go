@@ -198,7 +198,7 @@ type RequestProgress struct {
 }
 
 // RunningStatus represents running jobs and their requests. It is returned by
-// GET /api/v1/status/running.
+// Request Manager GET /api/v1/status/running
 type RunningStatus struct {
 	Jobs     []JobStatus        `json:"jobs"`
 	Requests map[string]Request `json:"requests"` // keyed on RequestId

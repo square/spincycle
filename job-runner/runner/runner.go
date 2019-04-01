@@ -30,10 +30,10 @@ type Return struct {
 
 type Status struct {
 	Job       proto.Job
-	StartedAt time.Time
-	Try       uint
-	Status    string
-	Sleeping  bool
+	StartedAt time.Time // set once when Runner created
+	Try       uint      // total tries, not current sequence try (proto.JobLog.Try)
+	Status    string    // real-time job status (job.Job.Status())
+	Sleeping  bool      // if sleeping between tries
 }
 
 // A Runner runs and manages one job in a job chain. The job must implement the
@@ -72,9 +72,9 @@ type runner struct {
 	retryWait  time.Duration
 	stopChan   chan struct{}
 	*sync.Mutex
-	logger     *log.Entry
-	startTime  time.Time
-	retrySleep bool
+	logger    *log.Entry
+	startTime time.Time
+	sleeping  bool
 }
 
 // NewRunner takes a proto.Job struct and its corresponding job.Job interface, and
@@ -204,12 +204,12 @@ TRY_LOOP:
 		tries++
 		tryNo++
 		r.totalTries++
-		r.retrySleep = true
+		r.sleeping = true
 		r.Unlock()
 		select {
 		case <-time.After(r.retryWait):
 			r.Lock()
-			r.retrySleep = true
+			r.sleeping = false
 			r.Unlock()
 		case <-r.stopChan:
 			tryLogger.Infof("job stopped while waiting to run try %d", r.totalTries)
@@ -291,8 +291,7 @@ func (r *runner) Status() Status {
 	defer r.Unlock()
 
 	// Indicate in real-time status if job is sleep, i.e. not truly running
-	sleeping := r.retrySleep
-	if sleeping {
+	if r.sleeping {
 		status = "(retry sleep) " + status
 	}
 
@@ -301,6 +300,6 @@ func (r *runner) Status() Status {
 		StartedAt: r.startTime,
 		Try:       r.totalTries,
 		Status:    status,
-		Sleeping:  sleeping,
+		Sleeping:  r.sleeping,
 	}
 }
