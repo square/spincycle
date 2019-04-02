@@ -4,18 +4,21 @@ package cmd
 
 import (
 	"fmt"
-	"text/tabwriter"
 	"time"
 
+	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/spinc/app"
 )
 
 const (
-	JOB_COL_LEN = 100
+	reqColLen  = 20
+	userColLen = 9
+	jobColLen  = 22
 )
 
 type Ps struct {
-	ctx app.Context
+	ctx   app.Context
+	reqId string
 }
 
 func NewPs(ctx app.Context) *Ps {
@@ -25,11 +28,22 @@ func NewPs(ctx app.Context) *Ps {
 }
 
 func (c *Ps) Prepare() error {
-	return nil
+	n := len(c.ctx.Command.Args)
+	if n == 0 {
+		return nil
+	}
+	if n == 1 {
+		c.reqId = c.ctx.Command.Args[0]
+		return nil
+	}
+	return fmt.Errorf("Usage: spinc ps [id]\n")
 }
 
 func (c *Ps) Run() error {
-	status, err := c.ctx.RMClient.SysStatRunning()
+	f := proto.StatusFilter{
+		RequestId: c.reqId,
+	}
+	status, err := c.ctx.RMClient.Running(f)
 	if err != nil {
 		return err
 	}
@@ -48,82 +62,54 @@ func (c *Ps) Run() error {
 
 	now := time.Now()
 
-	w := new(tabwriter.Writer)
-	w.Init(c.ctx.Out, 0, 8, 0, '\t', 0)
-	hdr := fmt.Sprintf("%%-20s\t%%4s\t%%5s\t%%6s\t%%s\t%%s\t%%s\n")
-	var line string
-	if c.ctx.Options.Verbose {
-		fmt.Fprintf(w, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "REQUEST")
-		line = fmt.Sprintf("%%-20s\t%%4d\t%%5d\t%%6s\t%%s\t%%s\t%%s  %%s\n")
-	} else {
-		fmt.Fprintf(w, hdr, "ID", "N", "NJOBS", "TIME", "OWNER", "JOB", "")
-		line = fmt.Sprintf("%%-20s\t%%4d\t%%5d\t%%6s\t%%s\t%%s\n")
+	/*
+	   REQUEST              ID                    PRG  USER      RUNTIME  TRY JOB                  STATUS
+	   12345678901234567890 --------------------  100% 123456789 12345678   3 12345678901234567890 *
+	*/
+	hdr := "%-" + fmt.Sprintf("%d", reqColLen) + "s %-20s %4s  %-" + fmt.Sprintf("%d", userColLen) + "s %-8s %3s %-" + fmt.Sprintf("%d", jobColLen) + "s %s\n"
+	fmt.Fprintf(c.ctx.Out, hdr, "REQUEST", "ID", "PRG", "USER", "RUNTIME", "TRY", "JOB", "STATUS")
+
+	line := "%-" + fmt.Sprintf("%d", reqColLen) + "s %-20s %4s  %-" + fmt.Sprintf("%d", userColLen) + "s %-8s %3d %-" + fmt.Sprintf("%d", jobColLen) + "s %s\n"
+	for _, j := range status.Jobs {
+		reqName := "unknown"
+		reqId := ""
+		reqPrg := "0"
+		reqUser := ""
+		if r, ok := status.Requests[j.RequestId]; ok {
+			reqName = r.Type
+			reqId = r.Id
+			reqPrg = fmt.Sprintf("%.0f%%", float64(r.FinishedJobs)/float64(r.TotalJobs)*100)
+			reqUser = r.User
+		}
+		runtime := now.Sub(time.Unix(0, j.StartedAt)).Round(time.Second)
+		fmt.Fprintf(c.ctx.Out, line,
+			SqueezeString(reqName, reqColLen, ".."), reqId, reqPrg, SqueezeString(reqUser, userColLen, ".."),
+			runtime, j.Try, SqueezeString(j.Name, jobColLen, ".."),
+			j.Status,
+		)
 	}
-
-	for _, r := range status.Jobs {
-		runtime := fmt.Sprintf("%.1f", now.Sub(time.Unix(0, r.StartedAt)).Seconds())
-		nJobs := 0
-		requestName := ""
-		owner := ""
-		args := map[string]interface{}{}
-		argNames := []string{}
-		if status.Requests != nil {
-			if r, ok := status.Requests[r.RequestId]; ok {
-				nJobs = r.TotalJobs
-				owner = r.User
-				if c.ctx.Options.Verbose {
-					requestName = r.Type
-					request, err := c.ctx.RMClient.GetRequest(r.Id)
-					if err != nil {
-						return err
-					}
-
-					// Request args list order is same as spec order, so no need to sort.
-					// E.g. if spec has args: required: foo\n bar\n then list is [foo,bar].
-					// We presume spec order is relevant because it's what the user wrote.
-					if c.ctx.Options.Verbose {
-						for _, arg := range request.Args {
-							if arg.Type != "required" {
-								continue
-							}
-							args[arg.Name] = arg.Value
-							argNames = append(argNames, arg.Name)
-						}
-					}
-				}
-			}
-		}
-		jobNameLen := len(r.Name)
-		if jobNameLen > JOB_COL_LEN {
-			// "very_long_job_name" -> "very_long_job_..."
-			r.Name = r.Name[jobNameLen-(JOB_COL_LEN-3):jobNameLen] + "..." // -3 for "..."
-		}
-
-		if c.ctx.Options.Verbose {
-			argString := ""
-			for _, k := range argNames {
-				v := args[k]
-				val, ok := v.(string)
-				if !ok {
-					val = ""
-				}
-				argString = argString + k + "=" + val + " "
-			}
-			fmt.Fprintf(w, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name, requestName, argString)
-		} else {
-			fmt.Fprintf(w, line, r.RequestId, r.N, nJobs, runtime, owner, r.Name)
-		}
-	}
-
-	w.Flush()
 
 	return nil
 }
 
 func (c *Ps) Cmd() string {
+	if c.reqId != "" {
+		return "ps " + c.reqId
+	}
 	return "ps"
 }
 
 func (c *Ps) Help() string {
-	return "'spinc ps' prints all running requests and jobs.\n"
+	return "'spinc ps [request ID]' prints running requests and jobs.\n" +
+		"Request ID is optional. If given, only its running jobs are printed; else, all requests' running jobs are printed.\n" +
+		"Columns:\n" +
+		"  REQUEST: Request name\n" +
+		"  ID:      Request ID\n" +
+		"  PRG:     Request progress\n" +
+		"  USER:    User/owner who started the request\n" +
+		"  RUNTIME: Job runtime (1s resolution)\n" +
+		"  TRY:     Job try count\n" +
+		"  JOB:     Job name from request spec\n" +
+		"  STATUS:  Real-time job status\n" +
+		"Long column values are truncated in the middle with '..'.\n"
 }

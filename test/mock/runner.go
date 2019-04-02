@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package mock
 
@@ -17,12 +17,12 @@ var (
 type RunnerFactory struct {
 	RunnersToReturn map[string]*Runner // Keyed on job name.
 	MakeErr         error
-	MakeFunc        func(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (runner.Runner, error)
+	MakeFunc        func(job proto.Job, requestId string, prevTries uint, totalTries uint) (runner.Runner, error)
 }
 
-func (f *RunnerFactory) Make(job proto.Job, requestId string, prevTryNo uint, triesToSkip uint, sequenceRetry uint) (runner.Runner, error) {
+func (f *RunnerFactory) Make(job proto.Job, requestId string, prevTries uint, totalTries uint) (runner.Runner, error) {
 	if f.MakeFunc != nil {
-		return f.MakeFunc(job, requestId, prevTryNo, triesToSkip, sequenceRetry)
+		return f.MakeFunc(job, requestId, prevTries, totalTries)
 	}
 	return f.RunnersToReturn[job.Id], f.MakeErr
 }
@@ -35,7 +35,7 @@ type Runner struct {
 	RunWg        *sync.WaitGroup                           // WaitGroup that gets released from when a runner starts running.
 	RunBlock     chan struct{}                             // Channel that runner.Run() will block on, if defined.
 	IgnoreStop   bool                                      // false: return immediately after Stop, true: keep running after Stop
-	StatusResp   string
+	StatusResp   runner.Status
 
 	stopped bool // if Stop was called
 }
@@ -75,9 +75,54 @@ func (r *Runner) Stop() error {
 	return nil
 }
 
-func (r *Runner) Status() string {
+func (r *Runner) Status() runner.Status {
 	if r.RunBlock != nil {
 		close(r.RunBlock)
 	}
 	return r.StatusResp
+}
+
+// --------------------------------------------------------------------------
+
+type RunnerRepo struct {
+	SetFunc    func(jobId string, runner runner.Runner)
+	GetFunc    func(jobId string) runner.Runner
+	RemoveFunc func(jobId string)
+	ItemsFunc  func() (map[string]runner.Runner, error)
+	CountFunc  func() int
+}
+
+func (r RunnerRepo) Set(jobId string, runner runner.Runner) {
+	if r.SetFunc != nil {
+		r.Set(jobId, runner)
+	}
+	return
+}
+
+func (r RunnerRepo) Get(jobId string) runner.Runner {
+	if r.GetFunc != nil {
+		return r.GetFunc(jobId)
+	}
+	return nil
+}
+
+func (r RunnerRepo) Remove(jobId string) {
+	if r.RemoveFunc != nil {
+		r.RemoveFunc(jobId)
+	}
+	return
+}
+
+func (r RunnerRepo) Items() (map[string]runner.Runner, error) {
+	if r.ItemsFunc != nil {
+		return r.ItemsFunc()
+	}
+	return map[string]runner.Runner{}, nil
+}
+
+func (r RunnerRepo) Count() int {
+	if r.CountFunc != nil {
+		return r.CountFunc()
+	}
+	return 0
 }

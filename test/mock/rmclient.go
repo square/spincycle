@@ -1,10 +1,9 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package mock
 
 import (
 	"errors"
-	"time"
 
 	"github.com/square/spincycle/proto"
 )
@@ -17,15 +16,15 @@ type RMClient struct {
 	CreateRequestFunc  func(string, map[string]interface{}) (string, error)
 	GetRequestFunc     func(string) (proto.Request, error)
 	StartRequestFunc   func(string) error
-	FinishRequestFunc  func(string, byte, time.Time) error
+	FinishRequestFunc  func(proto.FinishRequest) error
 	StopRequestFunc    func(string) error
 	SuspendRequestFunc func(string, proto.SuspendedJobChain) error
-	RequestStatusFunc  func(string) (proto.RequestStatus, error)
 	GetJobChainFunc    func(string) (proto.JobChain, error)
 	GetJLFunc          func(string) ([]proto.JobLog, error)
 	CreateJLFunc       func(string, proto.JobLog) error
-	SysStatRunningFunc func() (proto.RunningStatus, error)
+	RunningFunc        func(proto.StatusFilter) (proto.RunningStatus, error)
 	RequestListFunc    func() ([]proto.RequestSpec, error)
+	UpdateProgressFunc func(proto.RequestProgress) error
 }
 
 func (c *RMClient) CreateRequest(requestId string, args map[string]interface{}) (string, error) {
@@ -49,9 +48,9 @@ func (c *RMClient) StartRequest(requestId string) error {
 	return nil
 }
 
-func (c *RMClient) FinishRequest(requestId string, state byte, finishedAt time.Time) error {
+func (c *RMClient) FinishRequest(fr proto.FinishRequest) error {
 	if c.FinishRequestFunc != nil {
-		return c.FinishRequestFunc(requestId, state, finishedAt)
+		return c.FinishRequestFunc(fr)
 	}
 	return nil
 }
@@ -68,13 +67,6 @@ func (c *RMClient) SuspendRequest(requestId string, sjc proto.SuspendedJobChain)
 		return c.SuspendRequestFunc(requestId, sjc)
 	}
 	return nil
-}
-
-func (c *RMClient) RequestStatus(requestId string) (proto.RequestStatus, error) {
-	if c.RequestStatusFunc != nil {
-		return c.RequestStatusFunc(requestId)
-	}
-	return proto.RequestStatus{}, nil
 }
 
 func (c *RMClient) GetJobChain(requestId string) (proto.JobChain, error) {
@@ -105,9 +97,16 @@ func (c *RMClient) RequestList() ([]proto.RequestSpec, error) {
 	return []proto.RequestSpec{}, nil
 }
 
-func (c *RMClient) SysStatRunning() (proto.RunningStatus, error) {
-	if c.SysStatRunningFunc != nil {
-		return c.SysStatRunningFunc()
+func (c *RMClient) Running(f proto.StatusFilter) (proto.RunningStatus, error) {
+	if c.RunningFunc != nil {
+		return c.RunningFunc(f)
 	}
 	return proto.RunningStatus{}, nil
+}
+
+func (c *RMClient) UpdateProgress(prg proto.RequestProgress) error {
+	if c.RequestListFunc != nil {
+		return c.UpdateProgressFunc(prg)
+	}
+	return nil
 }

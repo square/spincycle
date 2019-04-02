@@ -1,4 +1,4 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 // Package cmd provides all the commands that spinc can run: start, status, etc.
 package cmd
@@ -45,7 +45,31 @@ func (f *DefaultFactory) Make(name string, ctx app.Context) (app.Command, error)
 		return NewHelp(ctx), nil
 	case "version":
 		return NewVersion(ctx), nil
+	case "info":
+		return NewInfo(ctx), nil
 	default:
 		return nil, ErrNotExist
 	}
+}
+
+// SqueezeString makes string s fit into n characters by truncating and replacing
+// middle characters with x. Example: "hello, world!" squeezed into 5 characters
+// with ".." replacement: "he..!". Preference is given to left-side characters
+// when the truncation is not even. If s is squeezed too hard, it returns an empty
+// string (n - len(x) < 0 = "").
+func SqueezeString(s string, n int, x string) string {
+	ls := len(s)
+	if ls <= n {
+		return s
+	}
+	r := n - len(x)
+	if r < 0 {
+		return ""
+	}
+	if r == 0 {
+		return x
+	}
+	right := r / 2
+	left := r - right
+	return s[0:left] + x + s[ls-right:ls]
 }

@@ -6,34 +6,30 @@ package status
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"sort"
+	"strings"
+	"sync"
+	"time"
 
+	log "github.com/Sirupsen/logrus"
 	"github.com/go-sql-driver/mysql"
 
 	serr "github.com/square/spincycle/errors"
 	jr "github.com/square/spincycle/job-runner"
 	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/retry"
+)
+
+const (
+	DB_TRIES      = 3
+	DB_RETRY_WAIT = time.Duration(500 * time.Millisecond)
 )
 
 type Manager interface {
-	Running(Filter) (proto.RunningStatus, error)
+	Running(proto.StatusFilter) (proto.RunningStatus, error)
+	UpdateProgress(proto.RequestProgress) error
 }
-
-type Filter struct {
-	State   byte
-	Limit   int
-	OrderBy byte
-	// After time.Time
-	// Before time.Time
-}
-
-// NoFilter is a convenience var for calls like Running(status.NoFilter). Other
-// packages must not modify this var.
-var NoFilter Filter
-
-const (
-	ORDER_BY_START_TIME byte = iota
-)
 
 type manager struct {
 	dbc *sql.DB
@@ -47,82 +43,89 @@ func NewManager(dbc *sql.DB, jrClient jr.Client) Manager {
 	}
 }
 
-func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
-	status := proto.RunningStatus{}
+func (m *manager) Running(f proto.StatusFilter) (proto.RunningStatus, error) {
+	var noStatus proto.RunningStatus // returned on error
 	ctx := context.TODO()
 
-	// Make a list of the URLs of all JR hosts currently running any requests.
-	q := "SELECT jr_url FROM requests WHERE state = ? AND jr_url IS NOT NULL"
-	rows, err := m.dbc.QueryContext(ctx, q, proto.STATE_RUNNING)
+	// -------------------------------------------------------------------------
+	// Get running jobs from all JRs in parallel
+	// -------------------------------------------------------------------------
+
+	jrURLs, err := m.jrURLS()
 	if err != nil {
-		return status, serr.NewDbError(err, "SELECT requests")
+		return noStatus, err
 	}
-	defer rows.Close()
-
-	jrURLs := map[string]struct{}{}
-	for rows.Next() {
-		var jrURL string
-		err := rows.Scan(&jrURL)
-		if err != nil {
-			return status, err
-		}
-
-		// We only care about the presence of the key in the map, not the value.
-		jrURLs[jrURL] = struct{}{}
+	if len(jrURLs) == 0 {
+		return noStatus, nil
 	}
 
-	// Get the status of all running jobs from each JR host.
-	var running []proto.JobStatus
-	for url := range jrURLs {
-		runningFromHost, err := m.jrc.SysStatRunning(url)
-		if err != nil {
-			return status, err
-		}
+	var wg sync.WaitGroup
+	jobStatusChan := make(chan []proto.JobStatus, len(jrURLs))
+	for _, url := range jrURLs {
+		wg.Add(1)
+		go func(url string) {
+			defer wg.Done()
+			runningJobs, err := m.jrc.Running(url, f)
+			if err != nil {
+				log.Warnf("error getting running status from %s: %s", url, err)
+				return
+			}
+			jobStatusChan <- runningJobs
+		}(url)
+	}
+	wg.Wait()
+	close(jobStatusChan)
 
-		running = append(running, runningFromHost...)
+	// -------------------------------------------------------------------------
+	// Combine and sort results
+	// -------------------------------------------------------------------------
+
+	all := proto.RunningStatus{
+		Jobs:     []proto.JobStatus{},
+		Requests: map[string]proto.Request{},
+	}
+	for jobs := range jobStatusChan {
+		all.Jobs = append(all.Jobs, jobs...)
 	}
 
-	switch f.OrderBy {
-	case ORDER_BY_START_TIME:
-		sort.Sort(proto.JobStatusByStartTime(running))
+	if len(all.Jobs) == 0 {
+		return all, nil
+	}
+
+	switch strings.ToLower(f.OrderBy) {
+	case "starttime":
+		sort.Sort(proto.JobStatusByStartTime(all.Jobs))
 	default:
-		sort.Sort(proto.JobStatusByStartTime(running))
+		sort.Sort(proto.JobStatusByStartTime(all.Jobs))
 	}
 
-	if f.Limit > 0 && len(running) > f.Limit {
-		running = running[0:f.Limit]
-	}
-
-	status.Jobs = running
-
-	if len(running) == 0 {
-		return status, nil
-	}
+	// -------------------------------------------------------------------------
+	// Get request info
+	// -------------------------------------------------------------------------
 
 	seen := map[string]bool{}
 	ids := []string{}
-	for _, r := range running {
-		if seen[r.RequestId] {
+	for _, j := range all.Jobs {
+		if seen[j.RequestId] {
 			continue
 		}
-		ids = append(ids, r.RequestId)
-		seen[r.RequestId] = true
+		seen[j.RequestId] = true
+		ids = append(ids, j.RequestId)
 	}
 
-	q = "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs" +
+	q := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs" +
 		" FROM requests WHERE request_id IN (" + inList(ids) + ")"
-	rows2, err := m.dbc.QueryContext(ctx, q)
+	rows, err := m.dbc.QueryContext(ctx, q)
 	if err != nil {
-		return status, serr.NewDbError(err, "SELECT requests")
+		return noStatus, serr.NewDbError(err, "SELECT requests")
 	}
-	defer rows2.Close()
+	defer rows.Close()
 
-	requests := map[string]proto.Request{}
-	for rows2.Next() {
+	for rows.Next() {
 		r := proto.Request{}
 		startedAt := mysql.NullTime{}
 		finishedAt := mysql.NullTime{}
-		err := rows2.Scan(
+		err := rows.Scan(
 			&r.Id,
 			&r.Type,
 			&r.State,
@@ -134,7 +137,7 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 			&r.FinishedJobs,
 		)
 		if err != nil {
-			return status, err
+			return noStatus, err
 		}
 		if startedAt.Valid {
 			r.StartedAt = &startedAt.Time
@@ -142,12 +145,10 @@ func (m *manager) Running(f Filter) (proto.RunningStatus, error) {
 		if finishedAt.Valid {
 			r.FinishedAt = &finishedAt.Time
 		}
-		requests[r.Id] = r
+		all.Requests[r.Id] = r
 	}
 
-	status.Requests = requests
-
-	return status, err
+	return all, err
 }
 
 // ["a","b"] -> "'a','b'"
@@ -161,4 +162,56 @@ func inList(vals []string) string {
 		}
 	}
 	return in
+}
+
+func (m *manager) UpdateProgress(prg proto.RequestProgress) error {
+	ctx := context.TODO()
+	q := "UPDATE requests SET finished_jobs = ? WHERE request_id = ? AND state = ?"
+	var res sql.Result
+	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		var err error
+		res, err = m.dbc.ExecContext(ctx, q, prg.FinishedJobs, prg.RequestId, proto.STATE_RUNNING)
+		return err
+	}, nil)
+	if err != nil {
+		return serr.NewDbError(err, "UPDATE requests")
+	}
+
+	cnt, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	switch cnt {
+	case 0:
+		// @todo: check if it didn't match because state != RUNNING
+		return serr.RequestNotFound{prg.RequestId}
+	case 1:
+		return nil
+	default:
+		// This should be impossible since we specify the primary key
+		// in the WHERE clause of the update.
+		return fmt.Errorf("UpdateProgress: request_id = %s matched %d rows, expected 1", prg.RequestId, cnt)
+	}
+}
+
+func (m *manager) jrURLS() ([]string, error) {
+	// Make a list of the URLs of all JR hosts currently running any requests.
+	ctx := context.TODO()
+	q := "SELECT DISTINCT jr_url FROM requests WHERE state = ? AND jr_url IS NOT NULL"
+	rows, err := m.dbc.QueryContext(ctx, q, proto.STATE_RUNNING)
+	if err != nil {
+		return nil, serr.NewDbError(err, "SELECT requests")
+	}
+	defer rows.Close()
+	jrURLs := []string{}
+	for rows.Next() {
+		var url string
+		err := rows.Scan(&url)
+		if err != nil {
+			return nil, err
+		}
+		jrURLs = append(jrURLs, url)
+	}
+	return jrURLs, nil
 }

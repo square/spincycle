@@ -20,7 +20,7 @@ type Repo interface {
 	Add(*Chain) error
 	Set(*Chain) error
 	Remove(string) error
-	GetAll() ([]Chain, error)
+	GetAll() ([]*Chain, error)
 }
 
 type memoryRepo struct {
@@ -48,11 +48,11 @@ func (m *memoryRepo) Get(id string) (*Chain, error) {
 	return chain, nil
 }
 
-func (m *memoryRepo) GetAll() ([]Chain, error) {
-	chains := []Chain{}
+func (m *memoryRepo) GetAll() ([]*Chain, error) {
+	chains := []*Chain{}
 	for _, v := range m.ConcurrentMap.Items() {
 		chain := v.(*Chain)
-		chains = append(chains, *chain)
+		chains = append(chains, chain)
 	}
 	return chains, nil
 }

@@ -14,10 +14,10 @@ var (
 )
 
 type Traverser struct {
-	RunErr     error
-	StopErr    error
-	StatusResp proto.JobChainStatus
-	StatusErr  error
+	RunErr    error
+	StopErr   error
+	StatusErr error
+	JobStatus []proto.JobStatus
 }
 
 func (t *Traverser) Run() {
@@ -28,8 +28,11 @@ func (t *Traverser) Stop() error {
 	return t.StopErr
 }
 
-func (t *Traverser) Status() (proto.JobChainStatus, error) {
-	return t.StatusResp, t.StatusErr
+func (t *Traverser) Running() []proto.JobStatus {
+	if t.JobStatus != nil {
+		return t.JobStatus
+	}
+	return []proto.JobStatus{}
 }
 
 type TraverserFactory struct {

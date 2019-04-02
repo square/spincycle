@@ -18,14 +18,22 @@ import (
 
 const (
 	// Number of times to attempt sending a job log to the RM.
-	JOB_LOG_TRIES = 3
+	JOB_LOG_TRIES = 5
 	// Time to wait between attempts to send a job log to RM.
 	JOB_LOG_RETRY_WAIT = 500 * time.Millisecond
 )
 
 type Return struct {
-	FinalState byte // Type of final status is.
-	Tries      uint // Number of attempted tries in this run
+	FinalState byte // Final proto.STATE_*. Determines if/how chain continues running.
+	Tries      uint // Number of tries this run, not including any previous tries
+}
+
+type Status struct {
+	Job       proto.Job
+	StartedAt time.Time // set once when Runner created
+	Try       uint      // total tries, not current sequence try (proto.JobLog.Try)
+	Status    string    // real-time job status (job.Job.Status())
+	Sleeping  bool      // if sleeping between tries
 }
 
 // A Runner runs and manages one job in a job chain. The job must implement the
@@ -42,34 +50,36 @@ type Runner interface {
 	// quickly because Stop blocks while waiting for the job to stop.
 	Stop() error
 
-	// Status returns the status of the job as reported by the job. The job
-	// is responsible for handling status requests asynchronously while running.
-	Status() string
+	// Status returns the job try count and real-time status. The runner handles
+	// the try count. The underlying job.Job must handle async, real-time status
+	// requests while running.
+	Status() Status
 }
 
 // A runner represents all information needed to run a job.
 type runner struct {
+	pJob    proto.Job
 	realJob job.Job   // the actual job interface to run
 	reqId   string    // the request id the job belongs to
 	rmc     rm.Client // client used to send JLs to the RM
 	// --
-	jobId       string
-	jobName     string
-	jobType     string
-	prevTryNo   uint
-	sequenceId  string
-	sequenceTry uint
-	maxTries    uint
-	retryWait   time.Duration
-	stopChan    chan struct{}
+	jobId      string
+	jobName    string
+	jobType    string
+	prevTries  uint // tries previous run (on resume/retry)
+	totalTries uint // try count all seq tries
+	maxTries   uint // max tries per seq try, not global maxTry in request spec (once implemented)
+	retryWait  time.Duration
+	stopChan   chan struct{}
 	*sync.Mutex
 	logger    *log.Entry
 	startTime time.Time
+	sleeping  bool
 }
 
 // NewRunner takes a proto.Job struct and its corresponding job.Job interface, and
 // returns a Runner.
-func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, sequenceTry uint, rmc rm.Client) Runner {
+func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTries, totalTries uint, rmc rm.Client) Runner {
 	var retryWait time.Duration
 	if pJob.RetryWait != "" {
 		retryWait, _ = time.ParseDuration(pJob.RetryWait) // validated by grapher
@@ -77,21 +87,19 @@ func NewRunner(pJob proto.Job, realJob job.Job, reqId string, prevTryNo uint, se
 		retryWait = 0
 	}
 	return &runner{
-		realJob: realJob,
-		reqId:   reqId,
-		rmc:     rmc,
+		pJob:       pJob,
+		realJob:    realJob,
+		reqId:      reqId,
+		prevTries:  prevTries,
+		totalTries: 1 + totalTries, // this run + past totalTries (on resume/retry)
+		rmc:        rmc,
 		// --
-		jobId:       pJob.Id,
-		jobName:     pJob.Name,
-		jobType:     pJob.Type,
-		prevTryNo:   prevTryNo,
-		maxTries:    1 + pJob.Retry, // + 1 because we always run once
-		sequenceId:  pJob.SequenceId,
-		sequenceTry: sequenceTry,
-		retryWait:   retryWait,
-		stopChan:    make(chan struct{}),
-		Mutex:       &sync.Mutex{},
-		logger:      log.WithFields(log.Fields{"requestId": reqId, "jobId": pJob.Id}),
+		maxTries:  1 + pJob.Retry, // + 1 because we always run once
+		retryWait: retryWait,
+		stopChan:  make(chan struct{}),
+		Mutex:     &sync.Mutex{},
+		logger:    log.WithFields(log.Fields{"request_id": reqId, "job_id": pJob.Id}),
+		startTime: time.Now().UTC(),
 	}
 }
 
@@ -99,22 +107,31 @@ func (r *runner) Run(jobData map[string]interface{}) Return {
 	// The chain.traverser that's calling us only cares about the final state
 	// of the job. If maxTries > 1, the intermediate states are only logged if
 	// the run fails.
-	var finalState byte = proto.STATE_PENDING
-
-	r.startTime = time.Now().UTC()
-
-	tryNo := uint(1)
+	finalState := proto.STATE_PENDING
+	tries := uint(1)         // number of tries this run
+	tryNo := 1 + r.prevTries // this run + past tries (on resume/retry)
 TRY_LOOP:
 	for tryNo <= r.maxTries {
 		tryLogger := r.logger.WithFields(log.Fields{
-			"try":       tryNo,
+			"try":       r.totalTries,
+			"tries":     tryNo,
 			"max_tries": r.maxTries,
 		})
-		tryLogger.Infof("starting the job")
+
+		// Can be stopped before we've started. Although we never started, we
+		// must set final state = stopped so that this try is re-run on resume.
+		if r.stopped() {
+			tryLogger.Infof("job stopped before start")
+			finalState = proto.STATE_STOPPED
+			break TRY_LOOP
+		}
 
 		// Run the job. Use a separate method so we can easily recover from a panic
 		// in job.Run.
+		tryLogger.Infof("job start")
 		startedAt, finishedAt, jobRet, runErr := r.runJob(jobData)
+		runtime := time.Duration(finishedAt-startedAt) * time.Nanosecond
+		tryLogger.Infof("job return: runtime=%s, state=%s (%d), exit=%d, err=%v", runtime, proto.StateName[jobRet.State], jobRet.State, jobRet.Exit, runErr)
 
 		// Figure out what the error message in the JL should be. An
 		// error returned by Run takes precedence (because it implies
@@ -128,69 +145,82 @@ TRY_LOOP:
 			errMsg = jobRet.Error.Error()
 		}
 
+		// Can be stopped while running, in which case STATE_FAIL is not really
+		// because it failed but because we stopped it, so log then overwrite
+		// the state = stopped. This also sets finalState below.
+		if r.stopped() {
+			if jobRet.State != proto.STATE_STOPPED && jobRet.State != proto.STATE_COMPLETE {
+				tryLogger.Errorf("job stopped: changing state %s (%d) to STATE_STOPPED", proto.StateName[jobRet.State], jobRet.State)
+				jobRet.State = proto.STATE_STOPPED
+			}
+		}
+
 		// Create a JL and send it to the RM.
 		jl := proto.JobLog{
-			RequestId:   r.reqId,
-			JobId:       r.jobId,
-			Name:        r.jobName,
-			Type:        r.jobType,
-			Try:         r.prevTryNo + tryNo,
-			SequenceId:  r.sequenceId,
-			SequenceTry: r.sequenceTry,
-			StartedAt:   startedAt,
-			FinishedAt:  finishedAt,
-			State:       jobRet.State,
-			Exit:        jobRet.Exit,
-			Error:       errMsg,
-			Stdout:      jobRet.Stdout,
-			Stderr:      jobRet.Stderr,
+			RequestId:  r.reqId,
+			JobId:      r.pJob.Id,
+			Name:       r.pJob.Name,
+			Type:       r.pJob.Type,
+			Try:        r.totalTries,
+			StartedAt:  startedAt,
+			FinishedAt: finishedAt,
+			State:      jobRet.State,
+			Exit:       jobRet.Exit,
+			Error:      errMsg,
+			Stdout:     jobRet.Stdout,
+			Stderr:     jobRet.Stderr,
 		}
-		// Send the JL to the RM.
 		err := retry.Do(JOB_LOG_TRIES, JOB_LOG_RETRY_WAIT,
-			func() error {
-				return r.rmc.CreateJL(r.reqId, jl)
-			},
-			nil,
+			func() error { return r.rmc.CreateJL(r.reqId, jl) },
+			func(err error) { tryLogger.Warnf("error sending job log entry: %s (retrying)", err) },
 		)
 		if err != nil {
-			tryLogger.Errorf("problem sending job log (%#v) to the Request Manager: %s", jl, err)
+			tryLogger.Errorf("failed to send job log entry: %s (%+v)", err, jl)
 		}
 
 		// Set final job state to this job state
 		finalState = jobRet.State
 
-		// If job completed successfully, break retry loop
-		if jobRet.State == proto.STATE_COMPLETE {
-			tryLogger.Info("job completed successfully")
+		// Break try loop on success or stop
+		if jobRet.State == proto.STATE_COMPLETE || jobRet.State == proto.STATE_STOPPED {
 			break TRY_LOOP
 		}
 
 		// //////////////////////////////////////////////////////////////////
 		// Job failed, wait and retry?
 		// //////////////////////////////////////////////////////////////////
-
-		// Log the failure
-		tryLogger.Errorf("job failed because state != %s: state = %s",
-			proto.StateName[proto.STATE_COMPLETE], proto.StateName[jl.State])
+		tryLogger.Warnf("job failed: state %s (%d), %d try left", proto.StateName[jl.State], jl.State, r.maxTries-tryNo)
 
 		// If last try, break retry loop, don't wait
 		if tryNo == r.maxTries {
 			break TRY_LOOP
 		}
 
-		// Wait between retries
+		// Wait between retries. Can be stopped while waiting which is why we
+		// need to increment tryNo first. At this point, we're effectively on
+		// the next try. E.g. try 1 fails, we're waiting for try 2, then we're
+		// stopped: we want try 2 state=stopped so on resume try 2 is re-run.
+		r.Lock()
+		tries++
+		tryNo++
+		r.totalTries++
+		r.sleeping = true
+		r.Unlock()
 		select {
 		case <-time.After(r.retryWait):
+			r.Lock()
+			r.sleeping = false
+			r.Unlock()
 		case <-r.stopChan:
-			// runner has been stopped
+			tryLogger.Infof("job stopped while waiting to run try %d", r.totalTries)
+			finalState = proto.STATE_STOPPED
 			break TRY_LOOP
 		}
-		tryNo++
 	}
 
 	return Return{
 		FinalState: finalState,
-		Tries:      tryNo,
+		Tries:      tries,
 	}
 }
 
@@ -240,11 +270,36 @@ func (r *runner) Stop() error {
 	return r.realJob.Stop() // this is a blocking operation that should return quickly
 }
 
+func (r *runner) stopped() bool {
+	select {
+	case <-r.stopChan:
+		return true
+	default:
+		return false
+	}
+}
+
 func (r *runner) Runtime() float64 {
 	return time.Now().Sub(r.startTime).Seconds()
 }
 
-func (r *runner) Status() string {
-	r.logger.Infof("getting job status")
-	return r.realJob.Status() // this is a blocking operation that should return quickly
+func (r *runner) Status() Status {
+	// Get real-time status before locking in case it's slow
+	status := r.realJob.Status()
+
+	r.Lock()
+	defer r.Unlock()
+
+	// Indicate in real-time status if job is sleep, i.e. not truly running
+	if r.sleeping {
+		status = "(retry sleep) " + status
+	}
+
+	return Status{
+		Job:       r.pJob,
+		StartedAt: r.startTime,
+		Try:       r.totalTries,
+		Status:    status,
+		Sleeping:  r.sleeping,
+	}
 }

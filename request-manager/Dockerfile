@@ -7,8 +7,9 @@ FROM golang:1.11.5-alpine3.9
 RUN apk add --no-cache \
     mysql-client
 
-# Copy all source code
-COPY . /go/src/github.com/square/spincycle/
+# Copy source code and copy dev jobs over open-source stub jobs
+COPY .          /go/src/github.com/square/spincycle/
+COPY dev/jobs/  /go/src/github.com/square/spincycle/jobs/
 
 # Build request-manager bin
 WORKDIR /app/spin-rm/bin

@@ -1,10 +1,9 @@
-// Copyright 2017, Square, Inc.
+// Copyright 2017-2019, Square, Inc.
 
 package jr_test
 
 import (
 	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -212,71 +211,48 @@ func TestStopRequest(t *testing.T) {
 	}
 }
 
-func TestRequestStatus(t *testing.T) {
-	// Unsuccessful response status code.
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-	}))
-	c := jr.NewClient(&http.Client{})
-
-	_, err := c.RequestStatus(ts.URL, "3")
-	if err == nil {
-		t.Errorf("expected an error but did not get one")
-	}
-	ts.Close()
-
-	// Successful response status code, but bad payload.
-	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "baD{json")
-	}))
-	c = jr.NewClient(&http.Client{})
-
-	_, err = c.RequestStatus(ts.URL, "3")
-	if err == nil {
-		t.Errorf("expected an error but did not get one")
-	}
-	ts.Close()
-
-	// Successful response status code.
+func TestRunning(t *testing.T) {
 	var path string
 	var method string
-	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	jobs := []proto.JobStatus{
+		{
+			RequestId: "req1",
+			JobId:     "job1",
+			Type:      "reqType",
+			Name:      "reqName",
+			StartedAt: 100,
+			State:     proto.STATE_RUNNING,
+			Status:    "job status",
+			Try:       2,
+		},
+	}
+	bytes, err := json.Marshal(jobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
 		method = r.Method
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "{\"requestId\":\"3\",\"jobStatuses\":[{\"JobId\":\"job1\",\"status\":\"job is running...\",\"state\":5}]}")
+		w.Write(bytes)
 	}))
-	c = jr.NewClient(&http.Client{})
+	c := jr.NewClient(&http.Client{})
 
-	status, err := c.RequestStatus(ts.URL, "3")
+	gotJobs, err := c.Running(ts.URL, proto.StatusFilter{})
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 	ts.Close()
 
-	expectedPath := "/api/v1/job-chains/3/status"
+	expectedPath := "/api/v1/status/running"
 	if path != expectedPath {
 		t.Errorf("url path = %s, expected %s", path, expectedPath)
 	}
-
 	if method != "GET" {
 		t.Errorf("request method = %s, expected POST", method)
 	}
-
-	expectedStatus := proto.JobChainStatus{
-		JobStatuses: proto.JobStatuses{
-			proto.JobStatus{
-				JobId:  "job1",
-				Status: "job is running...",
-				State:  5,
-			},
-		},
-		RequestId: "3",
-	}
-	if diff := deep.Equal(status, expectedStatus); diff != nil {
+	if diff := deep.Equal(gotJobs, jobs); diff != nil {
 		t.Error(diff)
 	}
 }

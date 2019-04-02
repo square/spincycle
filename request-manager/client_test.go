@@ -199,7 +199,13 @@ func TestFinishRequestError(t *testing.T) {
 	defer cleanup()
 	c := rm.NewClient(&http.Client{}, ts.URL)
 
-	err := c.FinishRequest(reqId, proto.STATE_COMPLETE, time.Now())
+	fr := proto.FinishRequest{
+		RequestId:    reqId,
+		State:        proto.STATE_COMPLETE,
+		FinishedAt:   time.Now(),
+		FinishedJobs: 10,
+	}
+	err := c.FinishRequest(fr)
 	if err == nil {
 		t.Errorf("expected an error but did not get one")
 	}
@@ -214,16 +220,18 @@ func TestFinishRequestSuccess(t *testing.T) {
 	c := rm.NewClient(&http.Client{}, ts.URL)
 
 	finishTime := time.Now()
-	err := c.FinishRequest(reqId, proto.STATE_COMPLETE, finishTime)
+	fr := proto.FinishRequest{
+		RequestId:    reqId,
+		State:        proto.STATE_COMPLETE,
+		FinishedAt:   finishTime,
+		FinishedJobs: 10,
+	}
+	err := c.FinishRequest(fr)
 	if err != nil {
 		t.Errorf("err = %s, expected nil", err)
 	}
 
-	expectedPayload := proto.FinishRequest{
-		State:      proto.STATE_COMPLETE,
-		FinishedAt: finishTime,
-	}
-	if diff := deep.Equal(payload, expectedPayload); diff != nil {
+	if diff := deep.Equal(payload, fr); diff != nil {
 		t.Error(diff)
 	}
 
@@ -335,56 +343,6 @@ func TestSuspendRequest(t *testing.T) {
 
 	if method != "PUT" {
 		t.Errorf("request method = %s, expected PUT", method)
-	}
-}
-
-func TestRequestStatusError(t *testing.T) {
-	reqId := "abcd1234"
-
-	setup(t, nil, http.StatusBadRequest, "")
-	defer cleanup()
-	c := rm.NewClient(&http.Client{}, ts.URL)
-
-	_, err := c.RequestStatus(reqId)
-	if err == nil {
-		t.Errorf("expected an error but did not get one")
-	}
-}
-
-func TestRequestStatusSuccess(t *testing.T) {
-	reqId := "abcd1234"
-	respBody := `{"request":{"id":"` + reqId + `"},"jobChainStatus":{"jobStatuses":[{"jobId":"job1"}]}}`
-
-	setup(t, nil, http.StatusOK, respBody)
-	defer cleanup()
-	c := rm.NewClient(&http.Client{}, ts.URL)
-
-	status, err := c.RequestStatus(reqId)
-	if err != nil {
-		t.Errorf("err = %s, expected nil", err)
-	}
-
-	expectedStatus := proto.RequestStatus{
-		Request: proto.Request{
-			Id: reqId,
-		},
-		JobChainStatus: proto.JobChainStatus{
-			JobStatuses: proto.JobStatuses{
-				proto.JobStatus{JobId: "job1"},
-			},
-		},
-	}
-	if diff := deep.Equal(status, expectedStatus); diff != nil {
-		t.Error(diff)
-	}
-
-	expectedPath := "/api/v1/requests/" + reqId + "/status"
-	if path != expectedPath {
-		t.Errorf("url path = %s, expected %s", path, expectedPath)
-	}
-
-	if method != "GET" {
-		t.Errorf("request method = %s, expected GET", method)
 	}
 }
 

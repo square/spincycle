@@ -32,7 +32,6 @@ type Options struct {
 	Ping    bool
 	Timeout uint `arg:"env" yaml:"timeout"`
 	Version bool
-	Verbose bool `arg:"-v"`
 }
 
 // Command represents a command (start, stop, etc.) and its values.

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	"github.com/square/spincycle/proto"
 )
@@ -27,10 +26,8 @@ type Client interface {
 	// (by sending it to the job runner).
 	StartRequest(string) error
 
-	// FinishRequest takes a request id, a state, and a finish time, and marks the
-	// corresponding request as being finished with the provided state, at the
-	// provided time.
-	FinishRequest(string, byte, time.Time) error
+	// FinishRequest marks a request as finished.
+	FinishRequest(proto.FinishRequest) error
 
 	// StopRequest takes a request id and stops the corresponding request.
 	// If the request is not running, it returns an error.
@@ -40,10 +37,6 @@ type Client interface {
 	// corresponding request. It marks the request's state as suspended and saves
 	// the SuspendedJobChain.
 	SuspendRequest(string, proto.SuspendedJobChain) error
-
-	// RequestStatus gets the status of a request that corresponds to a
-	// given request id.
-	RequestStatus(string) (proto.RequestStatus, error)
 
 	// GetJobChain gets the job chain for a given request id.
 	GetJobChain(string) (proto.JobChain, error)
@@ -57,8 +50,11 @@ type Client interface {
 	// RequestList returns a list of possible requests.
 	RequestList() ([]proto.RequestSpec, error)
 
-	// SysStatRunning returns a list of running jobs, sorted by runtime.
-	SysStatRunning() (proto.RunningStatus, error)
+	// Running returns a list of running jobs, sorted by runtime.
+	Running(proto.StatusFilter) (proto.RunningStatus, error)
+
+	// UpdateProgress updates request progress from Job Runner.
+	UpdateProgress(proto.RequestProgress) error
 }
 
 type client struct {
@@ -108,17 +104,19 @@ func (c *client) StartRequest(requestId string) error {
 	return c.makeRequest("PUT", url, nil, nil)
 }
 
-func (c *client) FinishRequest(requestId string, state byte, finishedAt time.Time) error {
+func (c *client) FinishRequest(fr proto.FinishRequest) error {
 	// PUT /api/v1/requests/${requestId}/finish
-	url := c.baseUrl + "/api/v1/requests/" + requestId + "/finish"
-
-	// Create the payload struct.
-	finishParams := proto.FinishRequest{
-		State:      state,
-		FinishedAt: finishedAt,
+	url := c.baseUrl + "/api/v1/requests/" + fr.RequestId + "/finish"
+	if fr.RequestId == "" {
+		return fmt.Errorf("RequestId is empty")
 	}
-
-	return c.makeRequest("PUT", url, finishParams, nil)
+	if _, ok := proto.StateName[fr.State]; !ok {
+		return fmt.Errorf("invalid State value: %d", fr.State)
+	}
+	if fr.FinishedAt.IsZero() {
+		return fmt.Errorf("FinishedAt is zero")
+	}
+	return c.makeRequest("PUT", url, fr, nil)
 }
 
 func (c *client) StopRequest(requestId string) error {
@@ -133,15 +131,6 @@ func (c *client) SuspendRequest(requestId string, sjc proto.SuspendedJobChain) e
 	url := c.baseUrl + "/api/v1/requests/" + requestId + "/suspend"
 
 	return c.makeRequest("PUT", url, sjc, nil)
-}
-
-func (c *client) RequestStatus(requestId string) (proto.RequestStatus, error) {
-	// GET /api/v1/requests/${requestId}/status
-	url := c.baseUrl + "/api/v1/requests/" + requestId + "/status"
-
-	var status proto.RequestStatus
-	err := c.makeRequest("GET", url, nil, &status)
-	return status, err
 }
 
 func (c *client) GetJobChain(requestId string) (proto.JobChain, error) {
@@ -177,12 +166,18 @@ func (c *client) RequestList() ([]proto.RequestSpec, error) {
 	return req, err
 }
 
-func (c *client) SysStatRunning() (proto.RunningStatus, error) {
+func (c *client) Running(f proto.StatusFilter) (proto.RunningStatus, error) {
 	// GET /api/v1/requests
-	url := c.baseUrl + "/api/v1/status/running"
+	url := c.baseUrl + "/api/v1/status/running" + f.String()
 	var req proto.RunningStatus
 	err := c.makeRequest("GET", url, nil, &req)
 	return req, err
+}
+
+func (c *client) UpdateProgress(prg proto.RequestProgress) error {
+	// GET /api/v1/requests/${requestId}/status
+	url := c.baseUrl + "/api/v1/requests/" + prg.RequestId + "/progress"
+	return c.makeRequest("PUT", url, prg, nil)
 }
 
 // ------------------------------------------------------------------------- //

@@ -1,9 +1,8 @@
-// Copyright 2018, Square, Inc.
+// Copyright 2018-2019, Square, Inc.
 
 package chain_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -14,10 +13,6 @@ import (
 	"github.com/square/spincycle/proto"
 	testutil "github.com/square/spincycle/test"
 	"github.com/square/spincycle/test/mock"
-)
-
-var (
-	deleteThis = fmt.Sprintf("blah")
 )
 
 // Get a default factory to use for testing. Tests probably need to re-set
@@ -69,7 +64,7 @@ func TestRunningReapComplete(t *testing.T) {
 	factory.RunJobChan = runJobChan
 	reaper := factory.MakeRunning()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_RUNNING)
 
@@ -163,7 +158,7 @@ func TestRunningReapFail(t *testing.T) {
 	factory.RunJobChan = runJobChan
 	reaper := factory.MakeRunning()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_RUNNING)
 
@@ -212,6 +207,7 @@ func TestRunningReapFailRetry(t *testing.T) {
 			"job1": {"job2", "job4"},
 			"job2": {"job3"},
 		},
+		FinishedJobs: 2,
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	factory.Chain = c
@@ -222,7 +218,9 @@ func TestRunningReapFailRetry(t *testing.T) {
 	factory.RunJobChan = runJobChan
 	reaper := factory.MakeRunning()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
+	c.IncrementJobTries("job1", 1)
+	c.IncrementJobTries("job4", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job4", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_RUNNING)
@@ -263,20 +261,23 @@ func TestRunningReapFailRetry(t *testing.T) {
 		}
 	}
 
-	// sequence tries in chain should have been incremented
+	// Sequence try count is _not_ incremented yet. That happens in traverser.runJobs
+	// when the sequence start job is ran, which is the true indicator that a sequence
+	// has been tried. Between reaper doing sequece retry prep and then, the chain
+	// could be stopped, etc. and the seq never actually retried.
 	tryCount := c.SequenceTries(job.Id)
-	if tryCount != 2 {
-		t.Errorf("got sequence try count %d, expected %d", tryCount, 1)
+	if tryCount != 1 {
+		t.Errorf("got sequence try count %d, expected 1", tryCount)
 	}
 }
 
 // test runningChainReaper.Run on a new chain (faking the runJobs loop)
 func TestRunningReaper(t *testing.T) {
 	// Job Chain:
-	//       2 - 5
-	//     /  \
-	// -> 1    4
-	//     \  /
+	//      2 - 5
+	//     / \
+	// -> 1   4
+	//     \ /
 	//      3
 
 	reqId := "test_running_reaper"
@@ -288,6 +289,7 @@ func TestRunningReaper(t *testing.T) {
 			"job2": {"job4", "job5"},
 			"job3": {"job4"},
 		},
+		FinishedJobs: 0,
 	}
 	job1 := jc.Jobs["job1"]
 	job1.Data = map[string]interface{}{
@@ -299,9 +301,9 @@ func TestRunningReaper(t *testing.T) {
 	sent := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sent = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 	}
@@ -328,24 +330,30 @@ func TestRunningReaper(t *testing.T) {
 		close(runJobChan)
 	}()
 
-	c.IncrementSequenceTries("job1")
+	// Complete job 1 so 2 and 3 are enqueued
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_RUNNING)
-
 	job1 = jc.Jobs["job1"]
 	job1.State = proto.STATE_COMPLETE
-
 	doneJobChan <- job1
 
-	// fail first job received (to retry sequence)
+	// Fail job 2 or 3 (whichever we recv first) so we trigger a seq retry
+	// which should re-run jobs 1, 2, and 3
 	job := <-runJobChan
 	job.State = proto.STATE_FAIL
 	doneJobChan <- job
 
-	// complete all jobs except fail job 5
+	// Complete all jobs except fail job 5
 	for job := range runJobChan {
 		if job.Id == "job5" {
 			job.State = proto.STATE_FAIL
 			doneJobChan <- job
+			continue
+		}
+		// Seq try incremented in runJobs not reaper, so we need to simulate
+		// this here else the chain retries infinitely
+		if job.Id == "job1" {
+			c.IncrementSequenceTries("job1", 1)
 		}
 		job.State = proto.STATE_COMPLETE
 		doneJobChan <- job
@@ -366,7 +374,6 @@ func TestRunningReaper(t *testing.T) {
 		if job.State != expectedStates[job.Id] {
 			t.Errorf("got state %s for job %s, expected state %s", proto.StateName[job.State], job.Id, proto.StateName[expectedStates[job.Id]])
 		}
-
 		if diff := deep.Equal(job.Data, expectedJobData); diff != nil {
 			t.Errorf("job data for job %s not as expected: %s", job.Id, diff)
 		}
@@ -380,6 +387,11 @@ func TestRunningReaper(t *testing.T) {
 
 	if receivedState != proto.STATE_FAIL {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_FAIL])
+	}
+
+	finishedJobs := c.FinishedJobs()
+	if finishedJobs != 4 {
+		t.Errorf("got finished jobs %d, expected 4", finishedJobs)
 	}
 }
 
@@ -412,9 +424,9 @@ func TestRunningReaperResume(t *testing.T) {
 	sent := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sent = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 	}
@@ -439,7 +451,7 @@ func TestRunningReaperResume(t *testing.T) {
 	// Pretend job chain was suspended - jobs 2 + 3 were stopped and are now being
 	// run. Keep job3 stopped while sending job2 to reaper, to make sure it can
 	// handle stopped jobs.
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_STOPPED)
 	c.SetJobState("job3", proto.STATE_STOPPED)
@@ -515,7 +527,7 @@ func TestStoppedReap(t *testing.T) {
 
 	reaper := factory.MakeStopped()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_RUNNING)
 
@@ -563,9 +575,9 @@ func TestStoppedReaper(t *testing.T) {
 	sent := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sent = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 	}
@@ -584,7 +596,8 @@ func TestStoppedReaper(t *testing.T) {
 	}
 	reaper := factory.MakeStopped()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementFinishedJobs(2)
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_RUNNING)
@@ -634,7 +647,7 @@ func TestStoppedReaper(t *testing.T) {
 		return
 	}
 
-	if receivedState != proto.STATE_FAIL {
+	if receivedState != proto.STATE_STOPPED {
 		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_FAIL])
 	}
 }
@@ -666,9 +679,9 @@ func TestStoppedReaperStop(t *testing.T) {
 	sent := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sent = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 	}
@@ -687,7 +700,7 @@ func TestStoppedReaperStop(t *testing.T) {
 	}
 	reaper := factory.MakeStopped()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_RUNNING)
@@ -762,7 +775,7 @@ func TestSuspendedReapComplete(t *testing.T) {
 
 	reaper := factory.MakeSuspended()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_RUNNING)
 
@@ -811,13 +824,14 @@ func TestSuspendedReapFail(t *testing.T) {
 			"job2": {"job4", "job5"},
 			"job3": {"job4"},
 		},
+		FinishedJobs: 1, // job1
 	}
 	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
 	factory.Chain = c
 
 	reaper := factory.MakeSuspended()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_RUNNING)
 
@@ -872,7 +886,7 @@ func TestSuspendedReapStopped(t *testing.T) {
 
 	reaper := factory.MakeSuspended()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_RUNNING)
 
@@ -915,6 +929,8 @@ func TestSuspendedReaper(t *testing.T) {
 			"job3": {"job4"},
 		},
 	}
+
+	// Make job6 a separate sequence
 	job := jc.Jobs["job6"]
 	job.SequenceId = "job6"
 	job.SequenceRetry = 1
@@ -925,7 +941,7 @@ func TestSuspendedReaper(t *testing.T) {
 	sentSJC := false
 	var receivedSJC proto.SuspendedJobChain
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
 			return nil
 		},
@@ -950,8 +966,9 @@ func TestSuspendedReaper(t *testing.T) {
 	}
 	reaper := factory.MakeSuspended()
 
-	c.IncrementSequenceTries("job1")
-	c.IncrementSequenceTries("job6")
+	c.IncrementFinishedJobs(2)
+	c.IncrementSequenceTries("job1", 1)
+	c.IncrementSequenceTries("job6", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_RUNNING)
@@ -1000,15 +1017,16 @@ func TestSuspendedReaper(t *testing.T) {
 	}
 
 	if !sentSJC {
-		t.Errorf("SJC not sent to RM client")
-		return
+		t.Fatal("SJC not sent to RM client")
 	}
 
 	expectedSJC := proto.SuspendedJobChain{
-		RequestId:         reqId,
-		JobChain:          jc,
-		TotalJobTries:     map[string]uint{},
-		LatestRunJobTries: map[string]uint{},
+		RequestId:     reqId,
+		JobChain:      jc,
+		TotalJobTries: map[string]uint{},
+		LatestRunJobTries: map[string]uint{
+			"job6": 0,
+		},
 		SequenceTries: map[string]uint{
 			"job1": 1,
 			"job6": 1,
@@ -1041,9 +1059,9 @@ func TestSuspendedReaperCompleted(t *testing.T) {
 	sentSJC := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 		SuspendRequestFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
@@ -1066,7 +1084,7 @@ func TestSuspendedReaperCompleted(t *testing.T) {
 	}
 	reaper := factory.MakeSuspended()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_RUNNING)
@@ -1126,9 +1144,9 @@ func TestSuspendedReaperStop(t *testing.T) {
 	sentSJC := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 		SuspendRequestFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
@@ -1151,7 +1169,8 @@ func TestSuspendedReaperStop(t *testing.T) {
 	}
 	reaper := factory.MakeSuspended()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementFinishedJobs(2)
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_RUNNING)
@@ -1180,7 +1199,7 @@ func TestSuspendedReaperStop(t *testing.T) {
 	}
 
 	if receivedState != proto.STATE_FAIL {
-		t.Errorf("chain state %s sent to RM client, expected state %s", proto.StateName[receivedState], proto.StateName[proto.STATE_FAIL])
+		t.Errorf("chain state %s sent to RM client, expected FAIL", proto.StateName[receivedState])
 	}
 }
 
@@ -1194,7 +1213,21 @@ func TestSuspendedFinalize(t *testing.T) {
 	//      3
 
 	reqId := "test_suspended_finalize"
-	factory := defaultFactory(reqId)
+	factory := &chain.ChainReaperFactory{
+		Chain:        chain.NewChain(&proto.JobChain{}, make(map[string]uint), make(map[string]uint), make(map[string]uint)),
+		RMClient:     &mock.RMClient{},
+		Logger:       log.WithFields(log.Fields{"requestId": reqId}),
+		RMCTries:     5,
+		RMCRetryWait: 50 * time.Millisecond,
+		DoneJobChan:  make(chan proto.Job),
+		RunJobChan:   make(chan proto.Job),
+		RunnerRepo:   runner.NewRepo(),
+	}
+
+	// Reapers check the runnerRepo for running jobs, so this makes it look like
+	// job3 didn't respond to Stop and is still running in Finalize
+	factory.RunnerRepo.Set("job3", &mock.Runner{})
+
 	jc := &proto.JobChain{
 		RequestId: reqId,
 		Jobs:      testutil.InitJobs(5),
@@ -1211,7 +1244,7 @@ func TestSuspendedFinalize(t *testing.T) {
 	sentSJC := false
 	var receivedSJC proto.SuspendedJobChain
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
 			return nil
 		},
@@ -1225,9 +1258,10 @@ func TestSuspendedFinalize(t *testing.T) {
 
 	reaper := factory.MakeSuspended()
 
+	c.IncrementFinishedJobs(2)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
-	c.SetJobState("job3", proto.STATE_RUNNING)
+	c.SetJobState("job3", proto.STATE_RUNNING) // Finalize will stop and fail this
 	c.SetJobState("job5", proto.STATE_STOPPED)
 
 	reaper.(*chain.SuspendedChainReaper).Finalize()
@@ -1238,25 +1272,13 @@ func TestSuspendedFinalize(t *testing.T) {
 		t.Errorf("job3 state in chain = %d, expected state = %d", gotState, proto.STATE_FAIL)
 	}
 
-	// SJC should have been sent, since job 5 can still be run
-	if sentState {
+	// SJC should not have been sent because job3 was still running so reaper failed it
+	if !sentState {
 		t.Errorf("chain state sent to RM client, expected only SJC to be sent")
 	}
 
-	if !sentSJC {
-		t.Errorf("SJC not sent to RM client")
-		return
-	}
-
-	expectedSJC := proto.SuspendedJobChain{
-		RequestId:         reqId,
-		JobChain:          jc,
-		TotalJobTries:     map[string]uint{},
-		LatestRunJobTries: map[string]uint{},
-		SequenceTries:     map[string]uint{},
-	}
-	if diff := deep.Equal(receivedSJC, expectedSJC); diff != nil {
-		t.Errorf("received SJC != expected SJC: %s", diff)
+	if sentSJC {
+		t.Errorf("SJC sent: %+v", receivedSJC)
 	}
 }
 
@@ -1287,9 +1309,9 @@ func TestSuspendedFinalizeFinished(t *testing.T) {
 	sentSJC := false
 	var receivedState byte
 	rmc := &mock.RMClient{
-		FinishRequestFunc: func(reqId string, state byte, finishedAt time.Time) error {
+		FinishRequestFunc: func(fr proto.FinishRequest) error {
 			sentState = true
-			receivedState = state
+			receivedState = fr.State
 			return nil
 		},
 		SuspendRequestFunc: func(reqId string, sjc proto.SuspendedJobChain) error {
@@ -1301,7 +1323,7 @@ func TestSuspendedFinalizeFinished(t *testing.T) {
 
 	reaper := factory.MakeSuspended()
 
-	c.IncrementSequenceTries("job1")
+	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_COMPLETE)
 	c.SetJobState("job3", proto.STATE_FAIL)

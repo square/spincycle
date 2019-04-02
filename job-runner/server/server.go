@@ -22,12 +22,15 @@ import (
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/job-runner/status"
 	"github.com/square/spincycle/jobs"
+	"github.com/square/spincycle/request-manager"
 )
 
 type Server struct {
 	appCtx        app.Context
 	api           *api.API
 	traverserRepo cmap.ConcurrentMap
+	chainRepo     chain.Repo
+	rmc           rm.Client
 
 	shutdownChan chan struct{}
 	apiStopped   chan struct{}
@@ -65,6 +68,26 @@ func (s *Server) Run(stopOnSignal bool) error {
 	if stopOnSignal {
 		go s.waitForShutdown()
 	}
+
+	// Every second, send updated finished jobs counts for all running chains.
+	// This is best effort, so no error handling or logger here. When a chain
+	// completes, its final finished jobs count is sent with FinishRequest.
+	go func() {
+		finishedJobs := status.FinishedJobs{
+			ChainRepo: s.chainRepo,
+			RMC:       s.rmc,
+		}
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				finishedJobs.Update()
+			case <-s.shutdownChan:
+				return
+			}
+		}
+	}()
 
 	// Run the API - this will block until the API is stopped (or encounters
 	// some fatal error). If the RunAPI hook has been provided, call that instead
@@ -120,9 +143,51 @@ func (s *Server) Boot() error {
 	cfgstr, _ := json.MarshalIndent(cfg, "", "  ")
 	log.Printf("Config: %s", cfgstr)
 
-	if err := s.makeAPI(); err != nil {
-		return err
+	// JR uses Request Manager client to send back job logs, suspend job chains,
+	// and tell the RM when a job chain (request) is done
+	rmc, err := s.appCtx.Factories.MakeRequestManagerClient(s.appCtx)
+	if err != nil {
+		return fmt.Errorf("MakeRequestManagerClient: %s", err)
 	}
+	s.rmc = rmc
+
+	// Chain repo holds running job chains in memory. It's primarily used by
+	// chain.Traversers while running chains. It's also used by status.Manager
+	// to report status back to RM (then back to user).
+	s.chainRepo = chain.NewMemoryRepo()
+
+	// Runner Factory makes a job.Runner to run one job. It's used by chain.Traversers
+	// to run jobs.
+	rf := runner.NewFactory(jobs.Factory, rmc)
+
+	// Traverser Factory is used by API to make a new chain.Traverser to run a
+	// job chain. These are stored in a Traverser Repo (just a map) so API can
+	// keep track of what's running.
+	trFactory := chain.NewTraverserFactory(s.chainRepo, rf, rmc, s.shutdownChan)
+	s.traverserRepo = cmap.New()
+
+	// Status Manager reports what's happening in the JR
+	stat := status.NewManager(s.traverserRepo)
+
+	// Base URL is what this JR reports itself as, e.g. https://spin-jr.prod.local:32307
+	// The RM saves this so it knows which JR to query to get the status of a
+	// given request.
+	baseURL, err := s.appCtx.Hooks.ServerURL(s.appCtx)
+	if err != nil {
+		return fmt.Errorf("error getting base server URL: %s", err)
+	}
+
+	// The API instance
+	apiCfg := api.Config{
+		AppCtx:           s.appCtx,
+		TraverserFactory: trFactory,
+		TraverserRepo:    s.traverserRepo,
+		StatusManager:    stat,
+		ShutdownChan:     s.shutdownChan,
+		BaseURL:          baseURL,
+	}
+	s.api = api.NewAPI(apiCfg)
+
 	return nil
 }
 
@@ -197,51 +262,4 @@ func (s *Server) waitForShutdown() {
 	if err != nil {
 		log.Errorf("error shutting down server: %s", err)
 	}
-}
-
-func (s *Server) makeAPI() error {
-	// JR uses Request Manager client to send back job logs, suspend job chains,
-	// and tell the RM when a job chain (request) is done
-	rmc, err := s.appCtx.Factories.MakeRequestManagerClient(s.appCtx)
-	if err != nil {
-		return fmt.Errorf("error loading config at %s", err)
-	}
-
-	// Chain repo holds running job chains in memory. It's primarily used by
-	// chain.Traversers while running chains. It's also used by status.Manager
-	// to report status back to RM (then back to user).
-	chainRepo := chain.NewMemoryRepo()
-
-	// Status Manager reports what's happening in the JR
-	stat := status.NewManager(chainRepo)
-
-	// Runner Factory makes a job.Runner to run one job. It's used by chain.Traversers
-	// to run jobs.
-	rf := runner.NewFactory(jobs.Factory, rmc)
-
-	// Traverser Factory is used by API to make a new chain.Traverser to run a
-	// job chain. These are stored in a Traverser Repo (just a map) so API can
-	// keep track of what's running.
-	trFactory := chain.NewTraverserFactory(chainRepo, rf, rmc, s.shutdownChan)
-	s.traverserRepo = cmap.New()
-
-	// Base URL is what this JR reports itself as, e.g. https://spin-jr.prod.local:32307
-	// The RM saves this so it knows which JR to query to get the status of a
-	// given request.
-	baseURL, err := s.appCtx.Hooks.ServerURL(s.appCtx)
-	if err != nil {
-		return fmt.Errorf("error getting base server URL: %s", err)
-	}
-
-	// The API instance
-	apiCfg := api.Config{
-		AppCtx:           s.appCtx,
-		TraverserFactory: trFactory,
-		TraverserRepo:    s.traverserRepo,
-		StatusManager:    stat,
-		ShutdownChan:     s.shutdownChan,
-		BaseURL:          baseURL,
-	}
-	s.api = api.NewAPI(apiCfg)
-	return nil
 }
