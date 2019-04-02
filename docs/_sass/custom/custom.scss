@@ -20,3 +20,17 @@ h6:hover .header-link {
 div pre.highlight {
 	line-height: 1em;
 }
+
+// Used for http response statuses in the API docs.
+.good-response {
+  border-radius: 2px;
+  padding: 10px;
+  background-color: rgba(0, 170, 19, 0.1);
+}
+
+// Used for http response statuses in the API docs.
+.bad-response {
+  border-radius: 2px;
+  padding: 10px;
+  background-color: rgba(229, 57, 53, 0.1);
+}
