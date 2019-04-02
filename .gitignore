@@ -15,8 +15,9 @@
 
 tags
 *.swp
-job-runner/job-runner
 job-runner/bin/bin
+job-runner/bin/job-runner
 request-manager/bin/bin
-dev/sandbox/
+request-manager/bin/request-manager
 spinc/bin/bin
+spinc/bin/spinc
