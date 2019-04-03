@@ -73,3 +73,12 @@ func SqueezeString(s string, n int, x string) string {
 	left := r - right
 	return s[0:left] + x + s[ls-right:ls]
 }
+
+func QuoteArgValue(val string) string {
+	// If no whitespace or quotes, no change
+	if !strings.ContainsAny(val, " \t") && !strings.ContainsAny(val, `"`) {
+		return val
+	}
+	// Return in "" and escape inner ", if any
+	return `"` + strings.Replace(val, `"`, `\"`, -1) + `"`
+}

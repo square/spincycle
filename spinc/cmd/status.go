@@ -43,17 +43,26 @@ func (c *Status) Run() error {
 		return nil
 	}
 
-	runtime := "not started"
-	if r.StartedAt != nil && !r.StartedAt.IsZero() {
+	var runtime string
+	if r.StartedAt == nil || r.StartedAt.IsZero() { // not started
+		runtime = "not started"
+	} else if r.FinishedAt == nil || r.FinishedAt.IsZero() { // still running
 		runtime = time.Now().Sub(*r.StartedAt).Round(time.Second).String()
+	} else { // finished
+		runtime = r.FinishedAt.Sub(*r.StartedAt).Round(time.Second).String()
 	}
 
+	// For status, we only print required args in the order they're given to us,
+	// which should be the order they're listed in the request spec. The idea is:
+	// required args are sufficient to tell one request from another. If not,
+	// i.e. if some optional arg makes the different, then user uses info command.
 	args := []string{}
 	for _, arg := range r.Args {
 		if arg.Type != "required" {
 			continue
 		}
-		args = append(args, fmt.Sprintf("%s=%s", arg.Name, arg.Value))
+		val := fmt.Sprintf("%s", arg.Value)
+		args = append(args, fmt.Sprintf("%s=%s", arg.Name, QuoteArgValue(val)))
 	}
 
 	fmt.Fprintf(c.ctx.Out, "   state: %s\n", proto.StateName[r.State])

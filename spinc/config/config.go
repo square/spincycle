@@ -24,13 +24,12 @@ const (
 
 // Options represents typical command line options: --addr, --config, etc.
 type Options struct {
-	Addr    string `arg:"env" yaml:"addr"`
-	Config  string `arg:"env"`
-	Debug   bool
-	Env     string
+	Addr    string `arg:"env:SPINC_ADDR" yaml:"addr"`
+	Config  string `arg:"env:SPINC_CONFIG"`
+	Debug   bool   `arg:"env:SPINC_DEBUG" yaml:"debug"`
+	Env     string `arg:"env:SPINC_ENV" yaml:"env"`
 	Help    bool
-	Ping    bool
-	Timeout uint `arg:"env" yaml:"timeout"`
+	Timeout uint `arg:"env:SPINC_TIMEOUT" yaml:"timeout"`
 	Version bool
 }
 

@@ -200,14 +200,14 @@ func (c *Start) Cmd() string {
 	fullCmd := "start " + c.reqName
 	args := map[string]interface{}{}
 	for _, i := range c.requiredArgs {
-		fullCmd += " " + i.Name + "=" + i.Value
+		fullCmd += " " + i.Name + "=" + QuoteArgValue(i.Value)
 		if i.Value != "" {
 			args[i.Name] = i.Value
 		}
 	}
 	for _, i := range c.optionalArgs {
 		if !i.IsDefault {
-			fullCmd += " " + i.Name + "=" + i.Value
+			fullCmd += " " + i.Name + "=" + QuoteArgValue(i.Value)
 			args[i.Name] = i.Value
 		}
 	}

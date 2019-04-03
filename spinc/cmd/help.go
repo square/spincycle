@@ -83,7 +83,7 @@ func (c *Help) Usage() {
 		"  --debug    Print debug to stderr\n"+
 		"  --env      Environment (dev, staging, production)\n"+
 		"  --help     Print help\n"+
-		"  --timeout  API timeout, milliseconds (default: %d)\n"+
+		"  --timeout  API timeout, milliseconds (default: %d ms)\n"+
 		"  --version  Print version\n"+
 		"Commands:\n"+
 		"  help    <cmd|req>  Print command or request help\n"+
@@ -101,7 +101,7 @@ func (c *Help) Usage() {
 
 func (c *Help) QuickHelp() {
 	if c.ctx.RMClient == nil {
-		fmt.Fprintf(c.ctx.Out, "Specify --addr or ADDR environment variable to list all requests\n")
+		fmt.Fprintf(c.ctx.Out, "Specify --addr or SPINC_ADDR environment variable to list all requests\n")
 		fmt.Fprintf(c.ctx.Out, "Run 'spinc help' for usage\n")
 	} else {
 		fmt.Fprintf(c.ctx.Out, "Request Manager address: %s\n\n", c.ctx.Options.Addr)

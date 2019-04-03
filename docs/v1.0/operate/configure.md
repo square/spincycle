@@ -56,15 +56,15 @@ The config file is YAML with multiple sections: `server`, `mysql`, `specs`, etc.
 server:
   addr: 10.0.0.50:32308
   tls:
-    cert_file: myorg.crt
-    key_file: myorg.key
-    ca_file: myorg.ca
+    cert_file: /secret/mycorp.crt
+    key_file:  /secret/mycorp.key
+    ca_file:   /secret/mycorp.ca
 mysql:
   dsn: "spincycle@tcp(spin-mysql.local:3306)/spincycle_production"
 specs:
   dir: /data/app/spin-rm/specs/
 jr_client:
-  url: https://spincycle-jr.myorg.local:32307
+  url: https://spincycle-jr.mycorp.local:32307
 ```
 
 ## Environment Variables
@@ -81,13 +81,15 @@ Take a config option, change `.` to `_`, upper-case everything, and add `SPINCYC
 
 <a id="rm.jr_client.url">jr_client.url</a>: URL that Request Manager uses to connect to any Job Runner. If TLS enabled on JR, use "https" and configure TLS. In production, this is usually a load balancer address in front of N-many JR instances.
 
-<a id="rm.jr_client.tls">jr_client.tls</a>: Enable TLS when RM connects to any JR at [jr_client.url](#rm.jr_client.url).
+<a id="rm.jr_client.tls">jr_client.tls</a>: Enable TLS when RM connects to any JR at [jr_client.url](#rm.jr_client.url). See common [TLS](#tls) section below.
 
 <a id="rm.mysql.dsn">mysql.dsn</a>: [DSN](https://github.com/go-sql-driver/mysql#dsn-data-source-name) specifying connection to MySQL. The DSN must specify the database, for example: `/spincycle_production`. Do use `tls` DSN parameter, specify the TLS config and Spin Cycle will add the `tls` DSN parameter automatically.
 
+<a id="rm.mysql.tls">mysql.tls</a>: Enable TLS connection to MySQL. See common [TLS](#tls) section below.
+
 <a id="rm.server.addr">server.addr</a>: Network address:port to listen on. To listen on all interfaces on the default port, specify ":32308".
 
-<a id="rm.server.tls">server.tls</a>: Enable TLS for clients (users) and when JR connects to RM.
+<a id="rm.server.tls">server.tls</a>: Enable TLS for clients (users) and when JR connects to RM. See common [TLS](#tls) section below.
 
 <a id="rm.specs.dir">specs.dir</a>: Directory containing all request spec files. Subdirectories are ignored. The default is "specs/", relative to current working dir.
 
@@ -95,11 +97,11 @@ Take a config option, change `.` to `_`, upper-case everything, and add `SPINCYC
 
 <a id="jr.rm_client.url">rm_client.url</a>: URL that Job Runner uses to connect to any Request Manager. If TLS enabled on RM, use "https" and configure TLS. In production, this is usually a load balancer address in front of N-many RM instances.
 
-<a id="jr.rm_client.tls">rm_client.tls</a>: Enable TLS when JR connects to any RM at [rm_client.url](#jr.rm_client.url).
+<a id="jr.rm_client.tls">rm_client.tls</a>: Enable TLS when JR connects to any RM at [rm_client.url](#jr.rm_client.url). See common [TLS](#tls) section below.
 
 <a id="jr.server.addr">server.addr</a>: Network address:port to listen on and to report to RM. _This must be the address of the specific JR instance that RM can connect to._ Do not use a load balancer address.
 
-<a id="jr.server.tls">server.tls</a>: Enable TLS for incoming connections from RM.
+<a id="jr.server.tls">server.tls</a>: Enable TLS for incoming connections from RM. See common [TLS](#tls) section below.
 
 ## TLS
 

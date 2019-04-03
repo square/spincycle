@@ -32,6 +32,7 @@ Spin Cycle can do anything you can program. The database team at [Square](https:
 * [Auth](v1.0/operate/auth)
 
 ## Develop
+* [Dev Env](v1.0/develop/dev-env)
 * [Jobs](v1.0/develop/jobs)
 * [Requests](v1.0/develop/requests)
 * [Extensions](v1.0/develop/extensions)
