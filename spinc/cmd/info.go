@@ -64,7 +64,8 @@ func (c *Info) Run() error {
 		if arg.Type == "static" {
 			continue
 		}
-		args = append(args, fmt.Sprintf("%s=%s", arg.Name, arg.Value))
+		val := fmt.Sprintf("%s", arg.Value)
+		args = append(args, fmt.Sprintf("%s=%s", arg.Name, QuoteArgValue(val)))
 	}
 
 	fmt.Fprintf(c.ctx.Out, "      id: %s\n", r.Id)

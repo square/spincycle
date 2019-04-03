@@ -62,3 +62,18 @@ func TestSqueezeString(t *testing.T) {
 		t.Errorf("got '%s', expected '%s'", got, expect)
 	}
 }
+
+func TestQuoteArgValue(t *testing.T) {
+	inputs := [][]string{
+		{"foo", "foo"},           // no spaces or quotes = no change
+		{"foo bar", `"foo bar"`}, // space
+		{"foo	bar", `"foo	bar"`}, // tab
+		{`the "inner" quote`, `"the \"inner\" quote"`}, // escape inner quotes
+	}
+	for _, v := range inputs {
+		got := cmd.QuoteArgValue(v[0])
+		if got != v[1] {
+			t.Errorf("got '%s', expected '%s'", got, v[1])
+		}
+	}
+}

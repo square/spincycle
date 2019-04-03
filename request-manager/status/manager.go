@@ -181,18 +181,16 @@ func (m *manager) UpdateProgress(prg proto.RequestProgress) error {
 	if err != nil {
 		return err
 	}
-
-	switch cnt {
-	case 0:
-		// @todo: check if it didn't match because state != RUNNING
-		return serr.RequestNotFound{prg.RequestId}
-	case 1:
-		return nil
-	default:
+	if cnt > 1 {
 		// This should be impossible since we specify the primary key
 		// in the WHERE clause of the update.
 		return fmt.Errorf("UpdateProgress: request_id = %s matched %d rows, expected 1", prg.RequestId, cnt)
 	}
+
+	// Presuming the request ID is correct and request is running, cnt = 0 happens
+	// when finished_jobs = prg.FinishedJobs, i.e. no more finished jobs since last
+	// update. cnt = 1 happens when we increment finished jobs.
+	return nil
 }
 
 func (m *manager) jrURLS() ([]string, error) {

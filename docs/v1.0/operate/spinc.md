@@ -11,7 +11,7 @@ spinc is the command line interface (CLI) for humans to operate Spin Cycle. spin
 
 ## addr
 
-spinc needs the Request Manager address specified by `--addr`, or `ADDR` environment variable, or `addr: <URL>` in `/etc/spinc/spinc.yaml` or `~/.spinc.yaml`. Setting `addr` in one of the config YAML files is probably easiest. If many RM are deployed, this should be the URL of the load balancer.
+spinc needs the Request Manager address specified by `--addr`, or `SPINC_ADDR` environment variable, or `addr: <URL>` in `/etc/spinc/spinc.yaml` or `~/.spinc.yaml`. Setting `addr` in one of the config YAML files is probably easiest. If many RM are deployed, this should be the URL of the load balancer.
 
 Once `addr` is set, run `spinc` (no arguments) to list available requests:
 
@@ -53,4 +53,16 @@ Run `spinc start <request>` to start a request by name. It will prompt you for r
 
 Use `spinc status <request ID>` and `spinc log <request ID>` to check the status and results of a request.
 
-`spinc ps` shows all running requests/jobs, analogous to Unix ps.
+`spinc ps` shows all running requests/jobs, analogous to Unix ps. You can specify an optional request ID to show only its running jobs.
+
+## Environment Variables
+
+| Option | Environment Variable |
+| ------ | -------------------- |
+| --addr | SPINC_ADDR |
+| --config | SPINC_CONFIG |
+| --debug | SPINC_DEBUG |
+| --env | SPINC_ENV |
+| --timeout | SPINC_TIMEOUT |
+
+Options not listed do not have an environment variable.
