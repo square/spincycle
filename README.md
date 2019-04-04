@@ -2,10 +2,10 @@
 
 [![Build Status](https://travis-ci.org/square/spincycle.svg?branch=master)](https://travis-ci.org/square/spincycle) [![Go Report Card](https://goreportcard.com/badge/github.com/square/spincycle)](https://goreportcard.com/report/github.com/square/spincycle) [![GoDoc](https://godoc.org/github.com/square/spincycle?status.svg)](https://godoc.org/github.com/square/spincycle)
 
-<img src="https://github.com/square/spincycle/blob/master/docs/assets/img/logo/Spin-Cycle-Finals-Black.png?raw=true" alt="logo" width="175"/>
+<img src="https://github.com/square/spincycle/blob/master/docs/assets/img/logo/Spin-Cycle-Finals-Black.png?raw=true" alt="logo" width="175" align="left">
 
-Spin Cycle is an orchestration framework to automate anything. Documentation can be found [here](https://square.github.io/spincycle/).
+Spin Cycle automates and exposes complex infrastructure tasks to other teams and services. This allows a few engineers to quickly and reliably manage thousands of resources&mdash;platform automation at scale.
 
-# License
+Spin Cycle can do anything you can program. The database team at Square uses it to provision and decommission databases, safely stop and start hosts, upgrade MySQL and Docker images, reconfigure services, and more.
 
-[Apache 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+To learn more, check out the Spin Cycle docs](https://square.github.io/spincycle/).
