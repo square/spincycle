@@ -7,5 +7,5 @@
 Spin Cycle automates and exposes complex infrastructure tasks to other teams and services. This allows a few engineers to quickly and reliably manage thousands of resources&mdash;platform automation at scale.
 
 Spin Cycle can do anything you can program. The database team at Square uses it to provision and decommission databases, safely stop and start hosts, upgrade MySQL and Docker images, reconfigure services, and more.
-
-To learn more, check out the Spin Cycle docs](https://square.github.io/spincycle/).
+<br/><br/><br/>
+To learn more, check out the [Spin Cycle docs](https://square.github.io/spincycle/).
