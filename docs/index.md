@@ -6,6 +6,7 @@ description: "Spin Cycle automates and exposes complex infrastructure tasks to o
 permalink: /
 ---
 <img src="/spincycle/assets/img/logo/Spin-Cycle-Finals-Black.png" alt="logo" width="200"/>
+{: .logo }
 
 Spin Cycle automates and exposes complex infrastructure tasks to other teams and services. This allows a few engineers to quickly and reliably manage thousands of resources&mdash;platform automation at scale.
 
