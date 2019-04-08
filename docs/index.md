@@ -39,7 +39,8 @@ Spin Cycle can do anything you can program. The database team at [Square](https:
 * [Extensions](v1.0/develop/extensions)
 
 ## API
-* [API Endpoints](v1.0/api/)
+* [Overview](v1.0/api/overview)
+* [Endpoints](v1.0/api/endpoints)
 
 ## Release Notes
 * [Release Notes](release-notes)
