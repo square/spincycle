@@ -108,7 +108,7 @@ func (j *ShellCommand) Run(jobData map[string]interface{}) (job.Return, error) {
 	cmd.Stderr = &stderr
 
 	// Run the cmd and wait for it to return
-	exit := int64(0)
+	exit := uint64(0)
 	err := cmd.Run()
 	ret := job.Return{
 		Exit:   exit,

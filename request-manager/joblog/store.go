@@ -101,7 +101,7 @@ func (s *store) Get(requestId, jobId string) (proto.JobLog, error) {
 		jl.Stderr = stderr.String
 	}
 	if exit.Valid {
-		jl.Exit = exit.Int64
+		jl.Exit = uint64(exit.Int64)
 	}
 
 	return jl, nil
@@ -154,7 +154,7 @@ func (s *store) GetFull(requestId string) ([]proto.JobLog, error) {
 			l.Stderr = stderr.String
 		}
 		if exit.Valid {
-			l.Exit = exit.Int64
+			l.Exit = uint64(exit.Int64)
 		}
 
 		jl = append(jl, l)

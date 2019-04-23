@@ -158,7 +158,7 @@ type JobLog struct {
 	FinishedAt int64  `json:"finishedAt"` // when job finished, regardless of state (UnixNano)
 
 	State  byte   `json:"state"`  // STATE_* const
-	Exit   int64  `json:"exit"`   // unix exit code
+	Exit   uint64 `json:"exit"`   // unix exit code
 	Error  string `json:"error"`  // error message
 	Stdout string `json:"stdout"` // stdout output
 	Stderr string `json:"stderr"` // stderr output

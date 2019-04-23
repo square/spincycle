@@ -154,7 +154,7 @@ type Factory interface {
 // is successful but reports Error = ErrRecordNotFound for logging.
 type Return struct {
 	State  byte   // proto/STATE_ const
-	Exit   int64  // Unix exit code
+	Exit   uint64 // Unix exit code
 	Error  error  // Go error
 	Stdout string // stdout output
 	Stderr string // stderr output
