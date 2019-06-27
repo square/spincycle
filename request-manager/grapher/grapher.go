@@ -563,6 +563,13 @@ func (o *Grapher) allArgsPresent(n *NodeSpec, args map[string]interface{}) bool 
 		}
 	}
 
+	// Assert that the conditional variable is present.
+	if n.If != "" {
+		if _, ok := args[n.If]; !ok {
+			return false
+		}
+	}
+
 	// Assert all other defined args are present
 	for _, arg := range n.Args {
 		if arg.Expected == iterator {
