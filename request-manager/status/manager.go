@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/go-sql-driver/mysql"
+	log "github.com/sirupsen/logrus"
 
 	serr "github.com/square/spincycle/errors"
 	jr "github.com/square/spincycle/job-runner"
