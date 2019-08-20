@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/go-test/deep"
+	log "github.com/sirupsen/logrus"
 	"github.com/square/spincycle/job-runner/chain"
 	"github.com/square/spincycle/job-runner/runner"
 	"github.com/square/spincycle/proto"

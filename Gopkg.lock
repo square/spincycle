@@ -2,14 +2,6 @@
 
 
 [[projects]]
-  digest = "1:b2339e83ce9b5c4f79405f949429a7f68a9a904fed903c672aac1e7ceb7f5f02"
-  name = "github.com/Sirupsen/logrus"
-  packages = ["."]
-  pruneopts = "NUT"
-  revision = "3e01752db0189b9157070a0e1668a620f9a85da2"
-  version = "v1.0.6"
-
-[[projects]]
   digest = "1:f5e4d540e80f4fb980244767df1af9d6d7a95230790aca62c262dca15cb23dbd"
   name = "github.com/alexflint/go-arg"
   packages = ["."]
@@ -106,6 +98,14 @@
   version = "v1.1"
 
 [[projects]]
+  digest = "1:b2339e83ce9b5c4f79405f949429a7f68a9a904fed903c672aac1e7ceb7f5f02"
+  name = "github.com/sirupsen/logrus"
+  packages = ["."]
+  pruneopts = "NUT"
+  revision = "3e01752db0189b9157070a0e1668a620f9a85da2"
+  version = "v1.0.6"
+
+[[projects]]
   digest = "1:af354641f23332b1a8d5d361d11b5a9171589e412a67d499633706c611acc064"
   name = "github.com/valyala/bytebufferpool"
   packages = ["."]
@@ -164,7 +164,6 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
-    "github.com/Sirupsen/logrus",
     "github.com/alexflint/go-arg",
     "github.com/go-sql-driver/mysql",
     "github.com/go-test/deep",
@@ -172,6 +171,7 @@
     "github.com/labstack/echo/middleware",
     "github.com/orcaman/concurrent-map",
     "github.com/rs/xid",
+    "github.com/sirupsen/logrus",
     "gopkg.in/yaml.v2",
   ]
   solver-name = "gps-cdcl"

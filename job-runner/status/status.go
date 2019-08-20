@@ -4,8 +4,8 @@
 package status
 
 import (
-	log "github.com/Sirupsen/logrus"
 	"github.com/orcaman/concurrent-map"
+	log "github.com/sirupsen/logrus"
 
 	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/job-runner/chain"

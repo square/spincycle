@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/orcaman/concurrent-map"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/square/spincycle/config"
 	"github.com/square/spincycle/job-runner/api"
