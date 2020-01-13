@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/api"

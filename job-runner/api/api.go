@@ -10,8 +10,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/labstack/echo"
-	"github.com/labstack/echo/middleware"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/orcaman/concurrent-map"
 
 	"github.com/square/spincycle/job-runner/app"
