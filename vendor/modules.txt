@@ -34,10 +34,10 @@ github.com/valyala/fasttemplate
 golang.org/x/crypto/acme
 golang.org/x/crypto/acme/autocert
 golang.org/x/crypto/ssh/terminal
-# golang.org/x/sys v0.0.0-20180201153126-8f27ce8a6040
+# golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # google.golang.org/appengine v1.4.0
 google.golang.org/appengine/cloudsql
-# gopkg.in/yaml.v2 v2.0.0
+# gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
