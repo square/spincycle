@@ -124,6 +124,10 @@ func NewAPI(appCtx app.Context) *API {
 	return api
 }
 
+func (api *API) Router() *echo.Echo {
+	return api.echo
+}
+
 // Run makes the API listen on the configured address.
 func (api *API) Run() error {
 	var err error
