@@ -30,6 +30,13 @@ type Manager interface {
 	// It returns the name of the db it creates.
 	Create(dataFile string) (string, error)
 
+	// CreateBlank creates a new db without loading the default schema
+	// or populating it with any data. It returns the name of the db created.
+	CreateBlank() (string, error)
+
+	// LoadSQLFile loads a SQL file to the given schema.
+	LoadSQLFile(dbName, file string) error
+
 	// Connect takes a db name and returns a *sql.DB for it.
 	Connect(dbName string) (*sql.DB, error)
 
@@ -69,15 +76,34 @@ func (m *manager) Create(dataFile string) (string, error) {
 	}
 
 	// Source the schema.
-	if err := m.sourceFile(dbName, rmtest.SchemaFile); err != nil {
+	if err := m.LoadSQLFile(dbName, rmtest.SchemaFile); err != nil {
 		return dbName, err
 	}
 
 	// Source test data.
 	if dataFile != "" {
-		if err := m.sourceFile(dbName, dataFile); err != nil {
+		if err := m.LoadSQLFile(dbName, dataFile); err != nil {
 			return dbName, err
 		}
+	}
+
+	// Add the db to the dbs map.
+	m.Lock()
+	m.dbs[dbName] = nil
+	m.Unlock()
+
+	return dbName, nil
+}
+
+func (m *manager) CreateBlank() (string, error) {
+	dbName := m.dsn.DBName + "_" + test.RandSeq(6)
+
+	// Create a fresh db.
+	if err := m.dropDB(dbName); err != nil {
+		return dbName, err
+	}
+	if err := m.createDB(dbName); err != nil {
+		return dbName, err
 	}
 
 	// Add the db to the dbs map.
@@ -133,6 +159,16 @@ func (m *manager) Destroy(dbName string) error {
 	return nil
 }
 
+func (m *manager) LoadSQLFile(dbName, file string) error {
+	q := "SOURCE " + file
+	extraArgs := []string{dbName} // pass this to the cli so that we source the file into the correct db
+	err := m.execCLIQuery(q, extraArgs)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // -------------------------------------------------------------------------- //
 
 func (m *manager) dropDB(dbName string) error {
@@ -147,16 +183,6 @@ func (m *manager) dropDB(dbName string) error {
 func (m *manager) createDB(dbName string) error {
 	q := "CREATE DATABASE " + dbName
 	err := m.execCLIQuery(q, nil)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (m *manager) sourceFile(dbName, file string) error {
-	q := "SOURCE " + file
-	extraArgs := []string{dbName} // pass this to the cli so that we source the file into the correct db
-	err := m.execCLIQuery(q, extraArgs)
 	if err != nil {
 		return err
 	}

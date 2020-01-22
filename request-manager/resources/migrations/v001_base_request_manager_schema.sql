@@ -1,7 +1,3 @@
--- When updating this file, create a new migration file in the
--- /migrations subdirectory to record the changes, and ensure
--- the migrations_test.go tests pass.
-
 CREATE TABLE IF NOT EXISTS `requests` (
   `request_id`     BINARY(20)       NOT NULL,
   `type`           VARBINARY(75)    NOT NULL,
