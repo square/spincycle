@@ -1,4 +1,4 @@
-FROM golang:1.11.5-alpine3.9
+FROM golang:1.13.6-alpine3.11
 
 # Copy source code and copy dev jobs over open-source stub jobs
 COPY .          /go/src/github.com/square/spincycle/

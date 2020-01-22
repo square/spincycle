@@ -1,7 +1,7 @@
 # Build from repo root dir: docker build -f request-manager/Dockerfile . -t spin-rm
 # Run one container:        docker run -p 32308:32308 spin-rm
 
-FROM golang:1.11.5-alpine3.9
+FROM golang:1.13.6-alpine3.11
 
 # Install mysql cli so entrypoint script can init db
 RUN apk add --no-cache \
