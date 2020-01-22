@@ -15,6 +15,7 @@ var (
 type RMClient struct {
 	CreateRequestFunc  func(string, map[string]interface{}) (string, error)
 	GetRequestFunc     func(string) (proto.Request, error)
+	FindRequestsFunc   func(proto.RequestFilter) ([]proto.Request, error)
 	StartRequestFunc   func(string) error
 	FinishRequestFunc  func(proto.FinishRequest) error
 	StopRequestFunc    func(string) error
@@ -39,6 +40,13 @@ func (c *RMClient) GetRequest(requestId string) (proto.Request, error) {
 		return c.GetRequestFunc(requestId)
 	}
 	return proto.Request{}, nil
+}
+
+func (c *RMClient) FindRequests(filter proto.RequestFilter) ([]proto.Request, error) {
+	if c.FindRequestsFunc != nil {
+		return c.FindRequestsFunc(filter)
+	}
+	return []proto.Request{}, nil
 }
 
 func (c *RMClient) StartRequest(requestId string) error {

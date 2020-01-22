@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -17,9 +18,10 @@ import (
 )
 
 var (
-	ts     *httptest.Server
-	path   string
-	method string
+	ts          *httptest.Server
+	path        string
+	method      string
+	queryString string
 )
 
 // setup creates a test http server that allows you to control the response to
@@ -31,6 +33,7 @@ func setup(t *testing.T, payloadStruct interface{}, responseStatus int, response
 	ts = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path = r.URL.Path
 		method = r.Method
+		queryString = r.URL.RawQuery
 
 		if payloadStruct != nil {
 			// Get the request payload.
@@ -148,6 +151,63 @@ func TestGetRequestSuccess(t *testing.T) {
 	expectedPath := "/api/v1/requests/" + reqId
 	if path != expectedPath {
 		t.Errorf("url path = %s, expected %s", path, expectedPath)
+	}
+
+	if method != "GET" {
+		t.Errorf("request method = %s, expected GET", method)
+	}
+}
+
+func TestFindRequestsSuccess(t *testing.T) {
+	setup(t, nil, http.StatusOK, "[{\"id\":\"blah\"}]")
+	defer cleanup()
+	c := rm.NewClient(&http.Client{}, ts.URL)
+
+	filter := proto.RequestFilter{
+		Type: "request-type",
+		States: []byte{
+			proto.STATE_PENDING,
+			proto.STATE_RUNNING,
+			proto.STATE_SUSPENDED,
+		},
+		Requestor: "felixp",
+		Since:     time.Date(2020, 01, 01, 12, 34, 56, 789000000, time.UTC),
+		Until:     time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
+		Limit:     5,
+		Offset:    10,
+	}
+	gotRequests, err := c.FindRequests(filter)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+	ts.Close()
+
+	expectedRequests := []proto.Request{
+		{
+			Id: "blah",
+		},
+	}
+	if diff := deep.Equal(gotRequests, expectedRequests); diff != nil {
+		t.Error(diff)
+	}
+
+	expectedPath := "/api/v1/requests/"
+	if path != expectedPath {
+		t.Errorf("url path = %s, expected %s", path, expectedPath)
+	}
+
+	params := url.Values{}
+	params.Add("type", "request-type")
+	params.Add("state", "PENDING")
+	params.Add("state", "RUNNING")
+	params.Add("state", "SUSPENDED")
+	params.Add("requestor", "felixp")
+	params.Add("since", "2020-01-01T12:34:56.789Z")
+	params.Add("until", "2020-01-02T12:34:56.789Z")
+	params.Add("limit", "5")
+	params.Add("offset", "10")
+	if queryString != params.Encode() {
+		t.Errorf("query string = \n%q\n, expected \n%q", queryString, params.Encode())
 	}
 
 	if method != "GET" {
