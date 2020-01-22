@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -68,6 +70,7 @@ func NewAPI(appCtx app.Context) *API {
 
 	// Request
 	api.echo.POST(API_ROOT+"requests", api.createRequestHandler)                   // create
+	api.echo.GET(API_ROOT+"requests", api.findRequestsHandler)                     // list requests
 	api.echo.GET(API_ROOT+"requests/:reqId", api.getRequestHandler)                // get -> proto.Request
 	api.echo.PUT(API_ROOT+"requests/:reqId/start", api.startRequestHandler)        // start
 	api.echo.PUT(API_ROOT+"requests/:reqId/finish", api.finishRequestHandler)      // finish
@@ -215,6 +218,69 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// Return the request.
 	req.JobChain = nil // don't include the job chain in the return
 	return c.JSON(http.StatusCreated, req)
+}
+
+// GET <API_ROOT>/requests
+// Return a list of requests matching the filter. Requests do not have job chain
+// or args set.
+//
+// Time fields of the filter must be passed as strings following RFCC3339Nano.
+// States should be passed as a comma-separated list of state names (eg. PENDING).
+func (api *API) findRequestsHandler(c echo.Context) error {
+	filter := proto.RequestFilter{
+		Type:      c.QueryParam("type"),
+		Requestor: c.QueryParam("requestor"),
+	}
+	if states := c.QueryParams()["state"]; len(states) != 0 {
+		for _, state := range states {
+			stateVal, ok := proto.StateValue[state]
+			if !ok {
+				errMsg := fmt.Sprintf("invalid 'state' parameter: %q is not a valid state name", state)
+				return handleError(serr.ValidationError{Message: errMsg}, c)
+			}
+			filter.States = append(filter.States, stateVal)
+		}
+	}
+	if since := c.QueryParam("since"); since != "" {
+		var err error
+		filter.Since, err = time.Parse(time.RFC3339Nano, since)
+		if err != nil {
+			errMsg := fmt.Sprintf("invalid 'since' parameter: %q cannot be parsed to time.Time using RFC3339Nano format: %w", since, err)
+			return handleError(serr.ValidationError{Message: errMsg}, c)
+		}
+	}
+	if until := c.QueryParam("until"); until != "" {
+		var err error
+		filter.Until, err = time.Parse(time.RFC3339Nano, until)
+		if err != nil {
+			errMsg := fmt.Sprintf("invalid 'until' parameter: %q cannot be parsed to time.Time using RFC3339Nano format: %w", until, err)
+			return handleError(serr.ValidationError{Message: errMsg}, c)
+		}
+	}
+	if limit := c.QueryParam("limit"); limit != "" {
+		limitInt, err := strconv.ParseUint(limit, 10, 0)
+		if err != nil {
+			errMsg := fmt.Sprintf("invalid 'limit' parameter: %q cannot be parsed to uint: %w", limit, err)
+			return handleError(serr.ValidationError{Message: errMsg}, c)
+		}
+		filter.Limit = uint(limitInt)
+
+		if offset := c.QueryParam("offset"); offset != "" {
+			offsetInt, err := strconv.ParseUint(offset, 10, 0)
+			if err != nil {
+				errMsg := fmt.Sprintf("invalid 'offset' parameter: %q cannot be parsed to uint: %w", offset, err)
+				return handleError(serr.ValidationError{Message: errMsg}, c)
+			}
+			filter.Offset = uint(offsetInt)
+		}
+	}
+
+	requests, err := api.rm.Find(filter)
+	if err != nil {
+		return handleError(err, c)
+	}
+
+	return c.JSON(http.StatusOK, requests)
 }
 
 // GET <API_ROOT>/requests/{reqId}
@@ -430,17 +496,13 @@ func handleError(err error, c echo.Context) error {
 		HTTPStatus: http.StatusInternalServerError,
 	}
 
-	switch err.(type) {
-	case serr.RequestNotFound, serr.JobNotFound:
+	if errors.As(err, &serr.RequestNotFound{}) || errors.As(err, &serr.JobNotFound{}) {
 		ret.HTTPStatus = http.StatusNotFound
-	case serr.ErrInvalidCreateRequest:
+	} else if errors.As(err, &serr.ErrInvalidCreateRequest{}) {
 		ret.HTTPStatus = http.StatusBadRequest
-	case serr.ValidationError:
+	} else if errors.As(err, &serr.ValidationError{}) {
 		ret.HTTPStatus = http.StatusBadRequest
-	}
-
-	switch err {
-	case ErrShuttingDown:
+	} else if errors.Is(err, ErrShuttingDown) {
 		ret.HTTPStatus = http.StatusServiceUnavailable
 	}
 

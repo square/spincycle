@@ -24,6 +24,7 @@ type RequestManager struct {
 	FinishFunc    func(string, proto.FinishRequest) error
 	SpecsFunc     func() []proto.RequestSpec
 	JobChainFunc  func(string) (proto.JobChain, error)
+	FindFunc      func(proto.RequestFilter) ([]proto.Request, error)
 }
 
 func (r *RequestManager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
@@ -80,6 +81,13 @@ func (r *RequestManager) JobChain(reqId string) (proto.JobChain, error) {
 		return r.JobChainFunc(reqId)
 	}
 	return proto.JobChain{}, nil
+}
+
+func (r *RequestManager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
+	if r.FindFunc != nil {
+		return r.FindFunc(filter)
+	}
+	return []proto.Request{}, nil
 }
 
 // --------------------------------------------------------------------------

@@ -252,6 +252,24 @@ func (j Jobs) Swap(i, k int) {
 	j[i], j[k] = j[k], j[i]
 }
 
+// RequestFilter represents optional filters when listing requests.
+type RequestFilter struct {
+	Type      string // Type of requests to return.
+	States    []byte // Request states to include.
+	Requestor string // User who made the request.
+
+	// Return only requests that were created and run at any point within the time
+	// range. I.e. Requests created before Since but finished after Since will
+	// still be returned, as will requests created before Until but not finished
+	// until after Until.
+	Since time.Time
+	Until time.Time
+
+	// Use these options for pagination of results:
+	Limit  uint // Limit response to this many requests
+	Offset uint // Skip the first <Offset> requests. Ignored if Limit is not set.
+}
+
 // Error is the standard response for all handled errors. Client errors (HTTP 400
 // codes) and internal errors (HTTP 500 codes) are returned as an Error, if handled.
 // If not handled (API crash, panic, etc.), Spin Cycle returns an HTTP 500 code and the

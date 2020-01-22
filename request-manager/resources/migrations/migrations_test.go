@@ -124,17 +124,15 @@ func TestMigrationsEqualSchema(t *testing.T) {
 	for _, table := range tablesFromSchema {
 		query := fmt.Sprintf("SHOW CREATE TABLE %s", table)
 
-		row := schemaDB.QueryRow(query)
 		var tableName string
 		var schemaCreate string
-		err := row.Scan(&tableName, &schemaCreate)
+		err := schemaDB.QueryRow(query).Scan(&tableName, &schemaCreate)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		row = migrationDB.QueryRow(query)
 		var migrationCreate string
-		err = row.Scan(&tableName, &migrationCreate)
+		err = migrationDB.QueryRow(query).Scan(&tableName, &migrationCreate)
 		if err != nil {
 			t.Fatal(err)
 		}
