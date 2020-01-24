@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
@@ -194,20 +193,6 @@ func TestFindRequestsSuccess(t *testing.T) {
 	expectedPath := "/api/v1/requests/"
 	if path != expectedPath {
 		t.Errorf("url path = %s, expected %s", path, expectedPath)
-	}
-
-	params := url.Values{}
-	params.Add("type", "request-type")
-	params.Add("state", "PENDING")
-	params.Add("state", "RUNNING")
-	params.Add("state", "SUSPENDED")
-	params.Add("requestor", "felixp")
-	params.Add("since", "2020-01-01T12:34:56.789Z")
-	params.Add("until", "2020-01-02T12:34:56.789Z")
-	params.Add("limit", "5")
-	params.Add("offset", "10")
-	if queryString != params.Encode() {
-		t.Errorf("query string = \n%q\n, expected \n%q", queryString, params.Encode())
 	}
 
 	if method != "GET" {

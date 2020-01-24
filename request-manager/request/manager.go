@@ -520,7 +520,7 @@ func (m *manager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
 
 // Return request IDs matching the filter, ordered by create time + request ID.
 func (m *manager) findIDs(filter proto.RequestFilter) ([]string, error) {
-	query := "SELECT request_id FROM requests WHERE "
+	query := "SELECT request_id FROM requests "
 
 	var fields []string
 	var values []interface{}
@@ -548,7 +548,9 @@ func (m *manager) findIDs(filter proto.RequestFilter) ([]string, error) {
 		values = append(values, filter.Until.Format(time.RFC3339Nano))
 	}
 
-	query += strings.Join(fields, " AND ")
+	if len(fields) > 0 {
+		query += "WHERE " + strings.Join(fields, " AND ")
+	}
 
 	query += " ORDER BY created_at, request_id "
 

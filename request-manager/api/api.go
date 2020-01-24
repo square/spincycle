@@ -227,6 +227,8 @@ func (api *API) createRequestHandler(c echo.Context) error {
 // Time fields of the filter must be passed as strings following RFCC3339Nano.
 // States should be passed as a comma-separated list of state names (eg. PENDING).
 func (api *API) findRequestsHandler(c echo.Context) error {
+	fmt.Printf("%v\n", c.QueryParams())
+
 	filter := proto.RequestFilter{
 		Type:      c.QueryParam("type"),
 		Requestor: c.QueryParam("requestor"),

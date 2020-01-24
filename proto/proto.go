@@ -5,6 +5,8 @@ package proto
 
 import (
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -268,6 +270,35 @@ type RequestFilter struct {
 	// Use these options for pagination of results:
 	Limit  uint // Limit response to this many requests
 	Offset uint // Skip the first <Offset> requests. Ignored if Limit is not set.
+}
+
+// Return the query string representation of the Request Filter.
+func (f RequestFilter) String() string {
+	params := url.Values{}
+	if f.Type != "" {
+		params.Add("type", f.Type)
+	}
+	if len(f.States) != 0 {
+		for _, state := range f.States {
+			params.Add("state", StateName[state])
+		}
+	}
+	if f.Requestor != "" {
+		params.Add("requestor", f.Requestor)
+	}
+	if !f.Since.IsZero() {
+		params.Add("since", f.Since.Format(time.RFC3339Nano))
+	}
+	if !f.Until.IsZero() {
+		params.Add("until", f.Until.Format(time.RFC3339Nano))
+	}
+	if f.Limit != 0 {
+		params.Add("limit", strconv.FormatUint(uint64(f.Limit), 10))
+	}
+	if f.Offset != 0 {
+		params.Add("offset", strconv.FormatUint(uint64(f.Offset), 10))
+	}
+	return params.Encode()
 }
 
 // Error is the standard response for all handled errors. Client errors (HTTP 400

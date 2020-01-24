@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
@@ -233,19 +232,22 @@ func TestFindRequestsHandler(t *testing.T) {
 	defer cleanup()
 
 	// Make the HTTP request.
-	params := url.Values{}
-	params.Add("type", "request-type")
-	params.Add("state", "PENDING")
-	params.Add("state", "RUNNING")
-	params.Add("state", "SUSPENDED")
-	params.Add("requestor", "felixp")
-	params.Add("since", "2020-01-01T12:34:56.789Z")
-	params.Add("until", "2020-01-02T12:34:56.789Z")
-	params.Add("limit", "5")
-	params.Add("offset", "10")
+	sentFilter := proto.RequestFilter{
+		Type: "request-type",
+		States: []byte{
+			proto.STATE_PENDING,
+			proto.STATE_RUNNING,
+			proto.STATE_SUSPENDED,
+		},
+		Requestor: "felixp",
+		Since:     time.Date(2020, 01, 01, 12, 34, 56, 789000000, time.UTC),
+		Until:     time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
+		Limit:     5,
+		Offset:    10,
+	}
 
 	var actualReqs []proto.Request
-	statusCode, _, err := testutil.MakeHTTPRequest("GET", baseURL()+"requests?"+params.Encode(), []byte{}, &actualReqs)
+	statusCode, _, err := testutil.MakeHTTPRequest("GET", baseURL()+"requests?"+sentFilter.String(), []byte{}, &actualReqs)
 	if err != nil {
 		t.Error(err)
 	}

@@ -9,9 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
-	"strconv"
-	"time"
 
 	"github.com/square/spincycle/proto"
 )
@@ -26,7 +23,7 @@ type Client interface {
 	GetRequest(string) (proto.Request, error)
 
 	// FindRequests takes a request filter and returns a list of requests
-	// matching the filter conditions, in chronological order.
+	// matching the filter conditions, in reverse chronological order.
 	FindRequests(proto.RequestFilter) ([]proto.Request, error)
 
 	// StartRequest takes a request id and starts the corresponding request
@@ -106,33 +103,7 @@ func (c *client) GetRequest(requestId string) (proto.Request, error) {
 
 func (c *client) FindRequests(filter proto.RequestFilter) ([]proto.Request, error) {
 	// GET /api/v1/requests
-
-	params := url.Values{}
-	if filter.Type != "" {
-		params.Add("type", filter.Type)
-	}
-	if len(filter.States) != 0 {
-		for _, state := range filter.States {
-			params.Add("state", proto.StateName[state])
-		}
-	}
-	if filter.Requestor != "" {
-		params.Add("requestor", filter.Requestor)
-	}
-	if !filter.Since.IsZero() {
-		params.Add("since", filter.Since.Format(time.RFC3339Nano))
-	}
-	if !filter.Until.IsZero() {
-		params.Add("until", filter.Until.Format(time.RFC3339Nano))
-	}
-	if filter.Limit != 0 {
-		params.Add("limit", strconv.FormatUint(uint64(filter.Limit), 10))
-	}
-	if filter.Offset != 0 {
-		params.Add("offset", strconv.FormatUint(uint64(filter.Offset), 10))
-	}
-
-	url := c.baseUrl + "/api/v1/requests/?" + params.Encode()
+	url := c.baseUrl + "/api/v1/requests/?" + filter.String()
 
 	var requests []proto.Request
 	err := c.makeRequest("GET", url, nil, &requests)

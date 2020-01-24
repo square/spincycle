@@ -678,10 +678,9 @@ func TestFind(t *testing.T) {
 		testdb.SavedRequests["0874a524aa1edn3ysp00"],
 		testdb.SavedRequests["93ec156e204ety45sgf0"],
 	}
-	// Expect requests without job chain or args set.
+	// Expect requests without job chain.
 	for i, _ := range expected {
 		expected[i].JobChain = nil
-		expected[i].Args = nil
 	}
 
 	if diff := deep.Equal(actual, expected); diff != nil {
@@ -708,10 +707,9 @@ func TestFind(t *testing.T) {
 	expected = []proto.Request{
 		testdb.SavedRequests["454ae2f98a05cv16sdwt"],
 	}
-	// Expect requests without job chain or args set.
+	// Expect requests without job chain.
 	for i, _ := range expected {
 		expected[i].JobChain = nil
-		expected[i].Args = nil
 	}
 
 	if diff := deep.Equal(actual, expected); diff != nil {
@@ -744,10 +742,9 @@ func TestFind(t *testing.T) {
 		testdb.SavedRequests["running_with_old_sjc"],
 		testdb.SavedRequests["suspended___________"],
 	}
-	// Expect requests without job chain or args set.
+	// Expect requests without job chain.
 	for i, _ := range expected {
 		expected[i].JobChain = nil
-		expected[i].Args = nil
 	}
 
 	if diff := deep.Equal(actual, expected); diff != nil {
@@ -778,10 +775,9 @@ func TestFind(t *testing.T) {
 		testdb.SavedRequests["454ae2f98a05cv16sdwt"],
 		testdb.SavedRequests["93ec156e204ety45sgf0"],
 	}
-	// Expect requests without job chain or args set.
+	// Expect requests without job chain.
 	for i, _ := range expected {
 		expected[i].JobChain = nil
-		expected[i].Args = nil
 	}
 
 	if diff := deep.Equal(actual, expected); diff != nil {
@@ -816,10 +812,44 @@ func TestFind(t *testing.T) {
 		// testdb.SavedRequests["running_with_old_sjc"],
 		// testdb.SavedRequests["suspended___________"],
 	}
-	// Expect requests without job chain or args set.
+	// Expect requests without job chain.
 	for i, _ := range expected {
 		expected[i].JobChain = nil
-		expected[i].Args = nil
+	}
+
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+
+	// 6. Empty filter
+	filter = proto.RequestFilter{}
+	cfg = request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m = request.NewManager(cfg)
+	actual, err = m.Find(filter)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	expected = []proto.Request{
+		testdb.SavedRequests["0874a524aa1edn3ysp00"],
+		testdb.SavedRequests["454ae2f98a05cv16sdwt"],
+		testdb.SavedRequests["93ec156e204ety45sgf0"],
+		testdb.SavedRequests["abandoned_old_sjc___"],
+		testdb.SavedRequests["abandoned_sjc_______"],
+		testdb.SavedRequests["old_sjc_____________"],
+		testdb.SavedRequests["running_abandoned___"],
+		testdb.SavedRequests["running_with_old_sjc"],
+		testdb.SavedRequests["suspended___________"],
+	}
+	// Expect requests without job chain.
+	for i, _ := range expected {
+		expected[i].JobChain = nil
 	}
 
 	if diff := deep.Equal(actual, expected); diff != nil {
