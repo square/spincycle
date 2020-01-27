@@ -221,8 +221,8 @@ func (api *API) createRequestHandler(c echo.Context) error {
 }
 
 // GET <API_ROOT>/requests
-// Return a list of requests matching the filter. Requests do not have job chain
-// or args set.
+// Return a list of requests matching the filter. Requests are in descending order
+// by create time (most recent first). Requests do not have job chain or args set.
 //
 // Time fields of the filter must be passed as strings following RFCC3339Nano.
 // States should be passed as a comma-separated list of state names (eg. PENDING).

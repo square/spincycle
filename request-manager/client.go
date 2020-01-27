@@ -23,7 +23,8 @@ type Client interface {
 	GetRequest(string) (proto.Request, error)
 
 	// FindRequests takes a request filter and returns a list of requests
-	// matching the filter conditions, in reverse chronological order.
+	// matching the filter conditions, in descending order by create time
+	// (i.e. most recent first).
 	FindRequests(proto.RequestFilter) ([]proto.Request, error)
 
 	// StartRequest takes a request id and starts the corresponding request

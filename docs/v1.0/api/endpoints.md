@@ -363,7 +363,7 @@ GET
 `/api/v1/requests`
 {: .d-inline }
 
-Requests are returned in reverse chronological order by create time.
+Requests are returned in descending order by create time (i.e. most recently created first).
 
 #### Optional Query Parameters
 {: .no_toc }

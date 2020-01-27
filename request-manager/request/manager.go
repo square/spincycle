@@ -60,8 +60,9 @@ type Manager interface {
 	JobChain(requestId string) (proto.JobChain, error)
 
 	// Find returns a list of requests that match the given filter criteria,
-	// ordered by create time (and request id where create time is not unique).
-	// Returned requests do not have job chain or args set.
+	// in descending order by create time (i.e. most recent first) and ascending
+	// by request id where create time is not unique. Returned requests do
+	// not have job chain or args set.
 	Find(filter proto.RequestFilter) ([]proto.Request, error)
 }
 
@@ -499,28 +500,8 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 }
 
 func (m *manager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
-	ids, err := m.findIDs(filter)
-	if err != nil {
-		return []proto.Request{}, fmt.Errorf("Error finding requests matching filter: %w", err)
-	}
-
-	requests := make([]proto.Request, 0, len(ids))
-	for _, id := range ids {
-		req, err := m.Get(id)
-		if err != nil {
-			return []proto.Request{}, fmt.Errorf("Error retrieving request %s: %w", id, err)
-		}
-		requests = append(requests, req)
-	}
-
-	return requests, nil
-}
-
-// ------------------------------------------------------------------------- //
-
-// Return request IDs matching the filter, ordered by create time + request ID.
-func (m *manager) findIDs(filter proto.RequestFilter) ([]string, error) {
-	query := "SELECT request_id FROM requests "
+	// Build the query from the filter.
+	query := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs, jr_url FROM requests "
 
 	var fields []string
 	var values []interface{}
@@ -552,7 +533,7 @@ func (m *manager) findIDs(filter proto.RequestFilter) ([]string, error) {
 		query += "WHERE " + strings.Join(fields, " AND ")
 	}
 
-	query += " ORDER BY created_at, request_id "
+	query += " ORDER BY created_at DESC, request_id "
 
 	if filter.Limit != 0 {
 		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
@@ -562,6 +543,7 @@ func (m *manager) findIDs(filter proto.RequestFilter) ([]string, error) {
 		}
 	}
 
+	// Query the db and parse results.
 	ctx := context.Background()
 	var rows *sql.Rows
 	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
@@ -573,26 +555,58 @@ func (m *manager) findIDs(filter proto.RequestFilter) ([]string, error) {
 		return nil
 	}, nil)
 	if err != nil {
-		return []string{}, serr.NewDbError(err, "SELECT request_id")
+		return []proto.Request{}, serr.NewDbError(err, "SELECT request_id")
 	}
 
-	var ids []string
+	var requests []proto.Request
 	defer rows.Close()
 	for rows.Next() {
-		var id string
-		err := rows.Scan(&id)
+		var req proto.Request
+		// Nullable columns:
+		var user sql.NullString
+		var jrURL sql.NullString
+		startedAt := mysql.NullTime{}
+		finishedAt := mysql.NullTime{}
+
+		err := rows.Scan(
+			&req.Id,
+			&req.Type,
+			&req.State,
+			&user,
+			&req.CreatedAt,
+			&startedAt,
+			&finishedAt,
+			&req.TotalJobs,
+			&req.FinishedJobs,
+			&jrURL,
+		)
 		if err != nil {
-			return []string{}, fmt.Errorf("Error scanning row returned from MySQL: %s", err)
+			return []proto.Request{}, fmt.Errorf("Error scanning row returned from MySQL: %s", err)
 		}
 
-		ids = append(ids, id)
+		if user.Valid {
+			req.User = user.String
+		}
+		if jrURL.Valid {
+			req.JobRunnerURL = jrURL.String
+		}
+		if startedAt.Valid {
+			req.StartedAt = &startedAt.Time
+		}
+		if finishedAt.Valid {
+			req.FinishedAt = &finishedAt.Time
+		}
+
+		requests = append(requests, req)
 	}
 	if rows.Err() != nil {
-		return []string{}, fmt.Errorf("Error iterating over rows returned from MySQL: %s", err)
+		return []proto.Request{}, fmt.Errorf("Error iterating over rows returned from MySQL: %s", err)
 	}
 
-	return ids, nil
+	return requests, nil
 }
+
+// ------------------------------------------------------------------------- //
 
 // Updates the state, started/finished timestamps, and JR url of the provided
 // request. The request is updated only if its current state (in the db) matches
