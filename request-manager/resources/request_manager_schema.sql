@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS `requests` (
   `jr_url`         VARCHAR(2000)        NULL DEFAULT NULL,
 
   PRIMARY KEY (`request_id`),
-  INDEX (`finished_at`),             -- recently finished
-  INDEX (`state`),                   -- currently running
-  INDEX (`created_at`, `request_id`) -- recently created
+  INDEX (`created_at`),         -- recently created
+  INDEX (`finished_at`),        -- recently finished
+  INDEX (`state`, `created_at`) -- currently running
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS `request_archives` (
