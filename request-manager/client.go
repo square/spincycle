@@ -22,6 +22,11 @@ type Client interface {
 	// GetRequest takes a request id and returns the corresponding request.
 	GetRequest(string) (proto.Request, error)
 
+	// FindRequests takes a request filter and returns a list of requests
+	// matching the filter conditions, in descending order by create time
+	// (i.e. most recent first).
+	FindRequests(proto.RequestFilter) ([]proto.Request, error)
+
 	// StartRequest takes a request id and starts the corresponding request
 	// (by sending it to the job runner).
 	StartRequest(string) error
@@ -95,6 +100,15 @@ func (c *client) GetRequest(requestId string) (proto.Request, error) {
 	var req proto.Request
 	err := c.makeRequest("GET", url, nil, &req)
 	return req, err
+}
+
+func (c *client) FindRequests(filter proto.RequestFilter) ([]proto.Request, error) {
+	// GET /api/v1/requests
+	url := c.baseUrl + "/api/v1/requests/?" + filter.String()
+
+	var requests []proto.Request
+	err := c.makeRequest("GET", url, nil, &requests)
+	return requests, err
 }
 
 func (c *client) StartRequest(requestId string) error {

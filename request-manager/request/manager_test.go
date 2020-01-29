@@ -648,3 +648,217 @@ func TestJobChain(t *testing.T) {
 		t.Error(diff)
 	}
 }
+
+func TestFind(t *testing.T) {
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
+
+	// 1. Filter States
+	filter := proto.RequestFilter{
+		States: []byte{
+			proto.STATE_PENDING,
+			proto.STATE_COMPLETE,
+		},
+	}
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
+	actual, err := m.Find(filter)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	expected := []proto.Request{
+		// ordered by descending create time (most recent first)
+		testdb.SavedRequests["93ec156e204ety45sgf0"],
+		testdb.SavedRequests["0874a524aa1edn3ysp00"],
+	}
+	// Expect requests without job chain + args.
+	for i, _ := range expected {
+		expected[i].JobChain = nil
+		expected[i].Args = nil
+	}
+
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+
+	// 2. Filter requestor
+	filter = proto.RequestFilter{
+		Requestor: "finch",
+	}
+	cfg = request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m = request.NewManager(cfg)
+	actual, err = m.Find(filter)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	expected = []proto.Request{
+		testdb.SavedRequests["454ae2f98a05cv16sdwt"],
+	}
+	// Expect requests without job chain + args.
+	for i, _ := range expected {
+		expected[i].JobChain = nil
+		expected[i].Args = nil
+	}
+
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+
+	// 3. Filter type
+	filter = proto.RequestFilter{
+		Type: "do-another-thing",
+	}
+	cfg = request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m = request.NewManager(cfg)
+	actual, err = m.Find(filter)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	expected = []proto.Request{
+		// create time is same, so ordered by id (alphabetically)
+		testdb.SavedRequests["abandoned_old_sjc___"],
+		testdb.SavedRequests["abandoned_sjc_______"],
+		testdb.SavedRequests["old_sjc_____________"],
+		testdb.SavedRequests["running_abandoned___"],
+		testdb.SavedRequests["running_with_old_sjc"],
+		testdb.SavedRequests["suspended___________"],
+	}
+	// Expect requests without job chain + args.
+	for i, _ := range expected {
+		expected[i].JobChain = nil
+		expected[i].Args = nil
+	}
+
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+
+	// 4. Filter time
+	filter = proto.RequestFilter{
+		Since: time.Date(2017, 9, 13, 2, 15, 00, 00, time.UTC),
+		Until: time.Date(2017, 9, 13, 2, 45, 00, 00, time.UTC),
+	}
+	cfg = request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m = request.NewManager(cfg)
+	actual, err = m.Find(filter)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	expected = []proto.Request{
+		// ordered by descending create time
+		testdb.SavedRequests["93ec156e204ety45sgf0"],
+		testdb.SavedRequests["454ae2f98a05cv16sdwt"],
+		testdb.SavedRequests["0874a524aa1edn3ysp00"],
+	}
+	// Expect requests without job chain + args.
+	for i, _ := range expected {
+		expected[i].JobChain = nil
+		expected[i].Args = nil
+	}
+
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+
+	// 5. Limit + Offset. Otherwise filter is same as test 3
+	filter = proto.RequestFilter{
+		Type:   "do-another-thing",
+		Limit:  2,
+		Offset: 2,
+	}
+	cfg = request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m = request.NewManager(cfg)
+	actual, err = m.Find(filter)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	expected = []proto.Request{
+		// Requests commented out are those removed by the limit + offset:
+		// testdb.SavedRequests["abandoned_old_sjc___"],
+		// testdb.SavedRequests["abandoned_sjc_______"],
+		testdb.SavedRequests["old_sjc_____________"],
+		testdb.SavedRequests["running_abandoned___"],
+		// testdb.SavedRequests["running_with_old_sjc"],
+		// testdb.SavedRequests["suspended___________"],
+	}
+	// Expect requests without job chain + args.
+	for i, _ := range expected {
+		expected[i].JobChain = nil
+		expected[i].Args = nil
+	}
+
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+
+	// 6. Empty filter
+	filter = proto.RequestFilter{}
+	cfg = request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m = request.NewManager(cfg)
+	actual, err = m.Find(filter)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	expected = []proto.Request{
+		testdb.SavedRequests["abandoned_old_sjc___"],
+		testdb.SavedRequests["abandoned_sjc_______"],
+		testdb.SavedRequests["old_sjc_____________"],
+		testdb.SavedRequests["running_abandoned___"],
+		testdb.SavedRequests["running_with_old_sjc"],
+		testdb.SavedRequests["suspended___________"],
+		testdb.SavedRequests["93ec156e204ety45sgf0"],
+		testdb.SavedRequests["454ae2f98a05cv16sdwt"],
+		testdb.SavedRequests["0874a524aa1edn3ysp00"],
+	}
+	// Expect requests without job chain + args.
+	for i, _ := range expected {
+		expected[i].JobChain = nil
+		expected[i].Args = nil
+	}
+
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+}

@@ -58,6 +58,12 @@ type Manager interface {
 
 	// JobChain returns the job chain for the given request id.
 	JobChain(requestId string) (proto.JobChain, error)
+
+	// Find returns a list of requests that match the given filter criteria,
+	// in descending order by create time (i.e. most recent first) and ascending
+	// by request id where create time is not unique. Returned requests do
+	// not have job chain or args set.
+	Find(filter proto.RequestFilter) ([]proto.Request, error)
 }
 
 // manager implements the Manager interface.
@@ -491,6 +497,113 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 	req.JobChain = &jc
 
 	return req, nil
+}
+
+func (m *manager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
+	// Build the query from the filter.
+	query := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs, jr_url FROM requests "
+
+	var fields []string
+	var values []interface{}
+	if filter.Type != "" {
+		fields = append(fields, "type = ?")
+		values = append(values, filter.Type)
+	}
+	if filter.Requestor != "" {
+		fields = append(fields, "user = ?")
+		values = append(values, filter.Requestor)
+	}
+	if len(filter.States) != 0 {
+		stateSQL := fmt.Sprintf("state IN (%s)", strings.TrimRight(strings.Repeat("?, ", len(filter.States)), ", "))
+		fields = append(fields, stateSQL)
+		for _, state := range filter.States {
+			values = append(values, state)
+		}
+	}
+	if !filter.Since.IsZero() {
+		fields = append(fields, "(finished_at > ? OR finished_at IS NULL)")
+		values = append(values, filter.Since.Format(time.RFC3339Nano))
+	}
+	if !filter.Until.IsZero() {
+		fields = append(fields, "(created_at < ?)")
+		values = append(values, filter.Until.Format(time.RFC3339Nano))
+	}
+
+	if len(fields) > 0 {
+		query += "WHERE " + strings.Join(fields, " AND ")
+	}
+
+	query += " ORDER BY created_at DESC, request_id "
+
+	if filter.Limit != 0 {
+		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
+
+		if filter.Offset != 0 {
+			query += fmt.Sprintf(" OFFSET %d", filter.Offset)
+		}
+	}
+
+	// Query the db and parse results.
+	ctx := context.Background()
+	var rows *sql.Rows
+	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
+		var err error
+		rows, err = m.dbc.QueryContext(ctx, query, values...)
+		if err != nil {
+			return err
+		}
+		return nil
+	}, nil)
+	if err != nil {
+		return []proto.Request{}, serr.NewDbError(err, "SELECT request_id")
+	}
+
+	var requests []proto.Request
+	defer rows.Close()
+	for rows.Next() {
+		var req proto.Request
+		// Nullable columns:
+		var user sql.NullString
+		var jrURL sql.NullString
+		startedAt := mysql.NullTime{}
+		finishedAt := mysql.NullTime{}
+
+		err := rows.Scan(
+			&req.Id,
+			&req.Type,
+			&req.State,
+			&user,
+			&req.CreatedAt,
+			&startedAt,
+			&finishedAt,
+			&req.TotalJobs,
+			&req.FinishedJobs,
+			&jrURL,
+		)
+		if err != nil {
+			return []proto.Request{}, fmt.Errorf("Error scanning row returned from MySQL: %s", err)
+		}
+
+		if user.Valid {
+			req.User = user.String
+		}
+		if jrURL.Valid {
+			req.JobRunnerURL = jrURL.String
+		}
+		if startedAt.Valid {
+			req.StartedAt = &startedAt.Time
+		}
+		if finishedAt.Valid {
+			req.FinishedAt = &finishedAt.Time
+		}
+
+		requests = append(requests, req)
+	}
+	if rows.Err() != nil {
+		return []proto.Request{}, fmt.Errorf("Error iterating over rows returned from MySQL: %s", err)
+	}
+
+	return requests, nil
 }
 
 // ------------------------------------------------------------------------- //

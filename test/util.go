@@ -36,7 +36,7 @@ func MakeHTTPRequest(httpVerb, url string, payload []byte, respStruct interface{
 		decoder := json.NewDecoder(res.Body)
 		err = decoder.Decode(respStruct)
 		if err != nil {
-			return statusCode, res.Header, fmt.Errorf("error decoding response body")
+			return res.StatusCode, res.Header, fmt.Errorf("error decoding response body: %s", err)
 		}
 	}
 

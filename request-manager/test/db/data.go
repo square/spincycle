@@ -70,6 +70,7 @@ func init() {
 	SavedRequests[reqId] = proto.Request{
 		Id:        reqId,
 		Type:      "do-something",
+		User:      "finch",
 		CreatedAt: curTime,
 		State:     proto.STATE_RUNNING,
 		JobChain: &proto.JobChain{
@@ -115,7 +116,8 @@ func init() {
 			},
 			State: proto.STATE_RUNNING,
 		},
-		FinishedJobs: 4,
+		FinishedJobs: 1,
+		TotalJobs:    4,
 		JobRunnerURL: jrURL,
 	}
 
@@ -274,7 +276,7 @@ func init() {
 		Type:      "do-another-thing",
 		CreatedAt: curTime,
 		StartedAt: &startTime,
-		State:     proto.STATE_SUSPENDED,
+		State:     proto.STATE_RUNNING,
 		JobChain: &proto.JobChain{
 			RequestId: reqId,
 			Jobs: map[string]proto.Job{
@@ -412,11 +414,13 @@ func init() {
 	// //////////////////////////////////////////////////////////////////////////
 	reqId = "93ec156e204ety45sgf0"
 	curTime, _ = time.Parse(time.RFC3339, "2017-09-13T02:00:00Z")
+	finishTime, _ := time.Parse(time.RFC3339, "2017-09-13T04:00:00Z")
 	SavedRequests[reqId] = proto.Request{
-		Id:        reqId,
-		Type:      "something-else",
-		CreatedAt: curTime,
-		State:     proto.STATE_COMPLETE,
+		Id:         reqId,
+		Type:       "something-else",
+		CreatedAt:  curTime,
+		FinishedAt: &finishTime,
+		State:      proto.STATE_COMPLETE,
 	}
 
 	// //////////////////////////////////////////////////////////////////////////

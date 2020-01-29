@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-test/deep"
-	"github.com/labstack/echo"
+	"github.com/labstack/echo/v4"
 
 	"github.com/square/spincycle/proto"
 	"github.com/square/spincycle/request-manager/api"
@@ -208,6 +209,74 @@ func TestGetRequestHandlerSuccess(t *testing.T) {
 
 	// Check that the response body is what we expect.
 	if diff := deep.Equal(actualReq, req); diff != nil {
+		t.Error(diff)
+	}
+}
+
+func TestFindRequestsHandler(t *testing.T) {
+	reqs := []proto.Request{
+		proto.Request{
+			Id:    "abcd1234",
+			State: proto.STATE_PENDING,
+		},
+	}
+	// Create a mock request manager to record the filter the API sets.
+	var gotFilter proto.RequestFilter
+	rm := &mock.RequestManager{
+		FindFunc: func(filter proto.RequestFilter) ([]proto.Request, error) {
+			gotFilter = filter
+			return reqs, nil
+		},
+	}
+	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
+	defer cleanup()
+
+	// Make the HTTP request.
+	sentFilter := proto.RequestFilter{
+		Type: "request-type",
+		States: []byte{
+			proto.STATE_PENDING,
+			proto.STATE_RUNNING,
+			proto.STATE_SUSPENDED,
+		},
+		Requestor: "felixp",
+		Since:     time.Date(2020, 01, 01, 12, 34, 56, 789000000, time.UTC),
+		Until:     time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
+		Limit:     5,
+		Offset:    10,
+	}
+
+	var actualReqs []proto.Request
+	statusCode, _, err := testutil.MakeHTTPRequest("GET", baseURL()+"requests?"+sentFilter.String(), []byte{}, &actualReqs)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Check that the status code is what we expect.
+	if statusCode != http.StatusOK {
+		t.Fatalf("response status = %d, expected %d", statusCode, http.StatusOK)
+	}
+
+	// Check that the response body is what we expect.
+	if diff := deep.Equal(actualReqs, reqs); diff != nil {
+		t.Error(diff)
+	}
+
+	// Check that parsed filter is what we expect.
+	expectFilter := proto.RequestFilter{
+		Type: "request-type",
+		States: []byte{
+			proto.STATE_PENDING,
+			proto.STATE_RUNNING,
+			proto.STATE_SUSPENDED,
+		},
+		Requestor: "felixp",
+		Since:     time.Date(2020, 01, 01, 12, 34, 56, 789000000, time.UTC),
+		Until:     time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
+		Limit:     5,
+		Offset:    10,
+	}
+	if diff := deep.Equal(gotFilter, expectFilter); diff != nil {
 		t.Error(diff)
 	}
 }
