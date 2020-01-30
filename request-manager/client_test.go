@@ -169,11 +169,11 @@ func TestFindRequestsSuccess(t *testing.T) {
 			proto.STATE_RUNNING,
 			proto.STATE_SUSPENDED,
 		},
-		Requestor: "felixp",
-		Since:     time.Date(2020, 01, 01, 12, 34, 56, 789000000, time.UTC),
-		Until:     time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
-		Limit:     5,
-		Offset:    10,
+		User:   "felixp",
+		Since:  time.Date(2020, 01, 01, 12, 34, 56, 789000000, time.UTC),
+		Until:  time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
+		Limit:  5,
+		Offset: 10,
 	}
 	gotRequests, err := c.FindRequests(filter)
 	if err != nil {

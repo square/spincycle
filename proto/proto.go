@@ -256,9 +256,9 @@ func (j Jobs) Swap(i, k int) {
 
 // RequestFilter represents optional filters when listing requests.
 type RequestFilter struct {
-	Type      string // Type of requests to return.
-	States    []byte // Request states to include.
-	Requestor string // User who made the request.
+	Type   string // Type of requests to return.
+	States []byte // Request states to include.
+	User   string // User who made the request.
 
 	// Return only requests that were created and run at any point within the time
 	// range. I.e. Requests created before Since but finished after Since will
@@ -283,8 +283,8 @@ func (f RequestFilter) String() string {
 			params.Add("state", StateName[state])
 		}
 	}
-	if f.Requestor != "" {
-		params.Add("requestor", f.Requestor)
+	if f.User != "" {
+		params.Add("user", f.User)
 	}
 	if !f.Since.IsZero() {
 		params.Add("since", f.Since.Format(time.RFC3339Nano))
