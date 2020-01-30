@@ -4,7 +4,7 @@ github.com/alexflint/go-arg
 github.com/alexflint/go-scalar
 # github.com/dgrijalva/jwt-go v3.2.0+incompatible
 github.com/dgrijalva/jwt-go
-# github.com/go-sql-driver/mysql v1.4.1
+# github.com/go-sql-driver/mysql v1.5.0
 github.com/go-sql-driver/mysql
 # github.com/go-test/deep v1.0.1
 github.com/go-test/deep
@@ -44,7 +44,5 @@ golang.org/x/text/secure/bidirule
 golang.org/x/text/transform
 golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
-# google.golang.org/appengine v1.4.0
-google.golang.org/appengine/cloudsql
 # gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2

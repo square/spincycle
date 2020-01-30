@@ -371,7 +371,7 @@ Requests are returned in descending order by create time (i.e. most recently cre
 | Parameter    | Description                      | Notes  |
 |:-------------|:---------------------------------|:-------|
 | type         | The type of request              |        |
-| requestor    | The user who created the request |        |
+| user         | The user who created the request |        |
 | state        | The state of the request         | See [proto.go](https://godoc.org/github.com/square/spincycle/proto#pkg-variables) — the string name of the state, not the byte. Specify this parameter multiple times to search for multiple states. |
 | since        | Return only requests which were running after this time  | Format: 2006-01-02T15:04:05.999999Z07:00 |
 | until        | Return only requests which were running before this time | Format: 2006-01-02T15:04:05.999999Z07:00 |

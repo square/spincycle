@@ -509,9 +509,9 @@ func (m *manager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
 		fields = append(fields, "type = ?")
 		values = append(values, filter.Type)
 	}
-	if filter.Requestor != "" {
+	if filter.User != "" {
 		fields = append(fields, "user = ?")
-		values = append(values, filter.Requestor)
+		values = append(values, filter.User)
 	}
 	if len(filter.States) != 0 {
 		stateSQL := fmt.Sprintf("state IN (%s)", strings.TrimRight(strings.Repeat("?, ", len(filter.States)), ", "))

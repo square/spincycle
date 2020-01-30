@@ -688,9 +688,9 @@ func TestFind(t *testing.T) {
 		t.Error(diff)
 	}
 
-	// 2. Filter requestor
+	// 2. Filter user
 	filter = proto.RequestFilter{
-		Requestor: "finch",
+		User: "finch",
 	}
 	cfg = request.ManagerConfig{
 		GrapherFactory: grf,

@@ -230,8 +230,8 @@ func (api *API) findRequestsHandler(c echo.Context) error {
 	fmt.Printf("%v\n", c.QueryParams())
 
 	filter := proto.RequestFilter{
-		Type:      c.QueryParam("type"),
-		Requestor: c.QueryParam("requestor"),
+		Type: c.QueryParam("type"),
+		User: c.QueryParam("user"),
 	}
 	if states := c.QueryParams()["state"]; len(states) != 0 {
 		for _, state := range states {
@@ -498,13 +498,14 @@ func handleError(err error, c echo.Context) error {
 		HTTPStatus: http.StatusInternalServerError,
 	}
 
-	if errors.As(err, &serr.RequestNotFound{}) || errors.As(err, &serr.JobNotFound{}) {
+	switch {
+	case errors.As(err, &serr.RequestNotFound{}), errors.As(err, &serr.JobNotFound{}):
 		ret.HTTPStatus = http.StatusNotFound
-	} else if errors.As(err, &serr.ErrInvalidCreateRequest{}) {
+	case errors.As(err, &serr.ErrInvalidCreateRequest{}):
 		ret.HTTPStatus = http.StatusBadRequest
-	} else if errors.As(err, &serr.ValidationError{}) {
+	case errors.As(err, &serr.ValidationError{}):
 		ret.HTTPStatus = http.StatusBadRequest
-	} else if errors.Is(err, ErrShuttingDown) {
+	case errors.Is(err, ErrShuttingDown):
 		ret.HTTPStatus = http.StatusServiceUnavailable
 	}
 

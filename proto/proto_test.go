@@ -47,13 +47,13 @@ func TestRequestFilterString(t *testing.T) {
 			proto.STATE_RUNNING,
 			proto.STATE_SUSPENDED,
 		},
-		Requestor: "felixp",
-		Since:     time.Date(2020, 01, 01, 12, 34, 56, 789123000, time.UTC),
-		Until:     time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
-		Limit:     5,
-		Offset:    10,
+		User:   "felixp",
+		Since:  time.Date(2020, 01, 01, 12, 34, 56, 789123000, time.UTC),
+		Until:  time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
+		Limit:  5,
+		Offset: 10,
 	}
-	expect = "limit=5&offset=10&requestor=felixp&since=2020-01-01T12%3A34%3A56.789123Z&state=PENDING&state=RUNNING&state=SUSPENDED&type=request-type&until=2020-01-02T12%3A34%3A56.789Z"
+	expect = "limit=5&offset=10&since=2020-01-01T12%3A34%3A56.789123Z&state=PENDING&state=RUNNING&state=SUSPENDED&type=request-type&until=2020-01-02T12%3A34%3A56.789Z&user=felixp"
 	got = f.String()
 	if got != expect {
 		t.Errorf("got '%s', expected '%s'", got, expect)
