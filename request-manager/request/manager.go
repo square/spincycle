@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -27,6 +28,8 @@ import (
 const (
 	DB_TRIES      = 3
 	DB_RETRY_WAIT = time.Duration(500 * time.Millisecond)
+	JR_TRIES      = 5
+	JR_RETRY_WAIT = time.Duration(5 * time.Second)
 )
 
 // A Manager creates and manages the life cycle of requests.
@@ -308,9 +311,15 @@ func (m *manager) Start(requestId string) error {
 		return serr.NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[req.State])
 	}
 
-	// TODO(felixp): add retries to this call to the JR to start the job chain
 	// Send the request's job chain to the job runner, which will start running it.
-	chainURL, err := m.jrc.NewJobChain(m.defaultJRURL, *req.JobChain)
+	var chainURL *url.URL
+	for i := 0; i < JR_TRIES; i++ {
+		chainURL, err = m.jrc.NewJobChain(m.defaultJRURL, *req.JobChain)
+		if err == nil {
+			break
+		}
+		time.Sleep(JR_RETRY_WAIT)
+	}
 	if err != nil {
 		return err
 	}
