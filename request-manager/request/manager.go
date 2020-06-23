@@ -315,9 +315,13 @@ func (m *manager) Start(requestId string) error {
 	var chainURL *url.URL
 	for i := 0; i < JR_TRIES; i++ {
 		chainURL, err = m.jrc.NewJobChain(m.defaultJRURL, *req.JobChain)
-		if err != nil {
-			return err
+		if err == nil {
+			break
 		}
+		time.Sleep(JR_RETRY_WAIT)
+	}
+	if err != nil {
+		return err
 	}
 
 	now := time.Now().UTC()
