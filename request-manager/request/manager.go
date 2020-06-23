@@ -28,7 +28,7 @@ import (
 const (
 	DB_TRIES      = 3
 	DB_RETRY_WAIT = time.Duration(500 * time.Millisecond)
-	JR_TRIES      = 3
+	JR_TRIES      = 5
 	JR_RETRY_WAIT = time.Duration(5 * time.Second)
 )
 
