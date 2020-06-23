@@ -43,8 +43,8 @@ func (c *Running) Run() error {
 		return nil
 	}
 
-	// Request is running if in these two states:
-	if status.State == proto.STATE_PENDING || status.State == proto.STATE_RUNNING {
+	// Request is running if in these three states:
+	if status.State == proto.STATE_PENDING || status.State == proto.STATE_RUNNING || status.State == proto.STATE_SUSPENDED {
 		os.Exit(0)
 	}
 
