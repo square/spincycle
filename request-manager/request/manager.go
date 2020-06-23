@@ -314,11 +314,13 @@ func (m *manager) Start(requestId string) error {
 	// Send the request's job chain to the job runner, which will start running it.
 	var chainURL *url.URL
 	for i := 0; i < JR_TRIES; i++ {
+		if i != 0 {
+			time.Sleep(JR_RETRY_WAIT)
+		}
 		chainURL, err = m.jrc.NewJobChain(m.defaultJRURL, *req.JobChain)
 		if err == nil {
 			break
 		}
-		time.Sleep(JR_RETRY_WAIT)
 	}
 	if err != nil {
 		return err
