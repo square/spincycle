@@ -92,6 +92,12 @@ func ReadConfig(configFile string) (Config, error) {
 
 	for sequenceName, sequence := range cfg.Sequences {
 		sequence.Name = sequenceName
+		for _, arg := range sequence.Args.Static {
+			if arg.Default == "" {
+				return cfg, fmt.Errorf("static arg in sequence %s was not given a default", sequence.Name)
+			}
+		}
+
 		for nodeName, node := range sequence.Nodes {
 			node.Name = nodeName
 			if node.Parallel != nil && *node.Parallel == 0 {

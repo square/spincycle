@@ -1604,3 +1604,11 @@ func TestFailSpecBadParallel(t *testing.T) {
 		t.Errorf("successfully read Parallel: 0, expected an error")
 	}
 }
+
+func TestFailSpecBadStatic(t *testing.T) {
+	sequencesFile := "../test/specs/spec-bad-static.yaml"
+	_, err := ReadConfig(sequencesFile)
+	if err == nil {
+		t.Errorf("accepted static arg with no default, expected error")
+	}
+}

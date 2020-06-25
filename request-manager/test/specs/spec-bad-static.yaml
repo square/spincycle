@@ -1,0 +1,19 @@
+sequences:
+  req:
+    args:
+      required:
+        - name: cmd
+          desc: Shell command name
+      static:
+        - name: args
+    nodes:
+      job1name:
+        category: job
+        type: job1type
+        args:
+          - expected: cmd
+            given: cmd
+          - expected: args
+            given: args
+        sets: []
+        deps: []
