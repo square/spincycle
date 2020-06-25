@@ -184,13 +184,16 @@ Conditional nodes can be used to switch between alternatives or, like the exampl
         each:
           - nodeHostname:node
           - hosts:host
+        parallel: maxParallel
         args: []
           - expected: archiveData
             given: archiveData
         deps: []
 ```
 
-`each:` takes a list of job arg names and "expands" the sequence, "decomm-node", _in parallel_ for each job arg value. Expanded sequences are ran in parallel. There are currently no options to control this.
+`each:` takes a list of job arg names and "expands" the sequence, "decomm-node", _in parallel_ for each job arg value. Expanded sequences are ran in parallel.
+
+`parallel:` takes a positive integer. At most `maxParallel` expanded sequences will run in parallel at a given time.
 
 The job args must be type `[]string` of equal lengths. In this example, the job args could be:
 
