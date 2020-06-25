@@ -92,6 +92,13 @@ func testConditionalGrapher() *Grapher {
 	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
 }
 
+func testLimitParallelGrapher() *Grapher {
+	tf := &testFactory{}
+	sequencesFile := "../test/specs/decomm-limit-parallel.yaml"
+	cfg, _ := ReadConfig(sequencesFile)
+	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+}
+
 func TestNodeArgs(t *testing.T) {
 	omg := testGrapher()
 	args := map[string]interface{}{
@@ -561,11 +568,8 @@ func TestFailCreateBadIfConditionalGraph(t *testing.T) {
 	}
 }
 
-func TestLimitParallel(t *testing.T) {
-	tf := &testFactory{}
-	sequencesFile := "../test/specs/decomm-limit-parallel.yaml"
-	cfg, _ := ReadConfig(sequencesFile)
-	omg := NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+func TestCreateLimitParallel(t *testing.T) {
+	omg := testLimitParallelGrapher()
 	args := map[string]interface{}{
 		"cluster": "test-cluster-001",
 		"env":     "testing",

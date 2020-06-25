@@ -342,18 +342,28 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				// Insert all components between the start and end vertices.
-				// Place in parallel if possible, otherwise serialize.
-				// Each parallel component is wrapped between dummy nodes.
+				// Place at most `parallel` components per parallel supercomponent..
+				// Serialize parallel supercomponents if `parallel` exceeds number of
+				// components.
+				// Each parallel supercomponent is wrapped between dummy nodes.
+				var parallel uint
+				if n.Parallel == nil {
+					parallel = uint(len(componentsForThisNode))
+				} else {
+					parallel = *n.Parallel
+				}
+
 				currG, err := o.newEmptyGraph("repeat_"+n.Name, nodeArgs)
 				if err != nil {
 					return nil, err
 				}
+
 				prev := g.First
 				var count uint = 0
 				for _, c := range componentsForThisNode {
 					currG.insertComponentBetween(c, currG.First, currG.Last)
 					count++
-					if n.Parallel != nil && count == *n.Parallel {
+					if count == parallel {
 						g.insertComponentBetween(currG, prev, g.Last)
 						prev = currG.Last
 						currG, err = o.newEmptyGraph("repeat_"+n.Name, nodeArgs)

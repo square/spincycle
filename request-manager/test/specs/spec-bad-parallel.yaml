@@ -57,7 +57,7 @@ sequences:
           - expected: instances
             given: instances
         deps: [prep-1]
-        parallel: 0
+        parallel: 0 # should be non-zero and positive--at least one sequence needs to be able to run
       first-cleanup-job:
         category: job
         type: cleanup-job
