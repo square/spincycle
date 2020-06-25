@@ -561,14 +561,6 @@ func TestFailCreateBadIfConditionalGraph(t *testing.T) {
 	}
 }
 
-func TestBadParallel(t *testing.T) {
-	sequencesFile := "../test/specs/bad-decomm-limit-parallel.yaml"
-	_, err := ReadConfig(sequencesFile)
-	if err == nil {
-		t.Errorf("successfully read Parallel: 0, expected an error")
-	}
-}
-
 func TestLimitParallel(t *testing.T) {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm-limit-parallel.yaml"
@@ -1594,5 +1586,17 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 		if v.SequenceId != verticies[k].SequenceId {
 			t.Errorf("node '%s'.SequenceId = %s, expected %s", k, v.SequenceId, verticies[k].SequenceId)
 		}
+	}
+}
+
+// //////////////////////////////////////////////////////////////////////////
+// Spec tests
+// //////////////////////////////////////////////////////////////////////////
+
+func TestFailSpecBadParallel(t *testing.T) {
+	sequencesFile := "../test/specs/spec-bad-parallel.yaml"
+	_, err := ReadConfig(sequencesFile)
+	if err == nil {
+		t.Errorf("successfully read Parallel: 0, expected an error")
 	}
 }
