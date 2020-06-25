@@ -549,6 +549,144 @@ func TestFailCreateBadIfConditionalGraph(t *testing.T) {
 	}
 }
 
+func TestLimitParallel(t *testing.T) {
+	tf := &testFactory{}
+	sequencesFile := "../test/specs/decomm_limit_parallel.yaml"
+	cfg, _ := ReadConfig(sequencesFile)
+	omg := NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+	args := map[string]interface{}{
+		"cluster": "test-cluster-001",
+		"env":     "testing",
+	}
+
+	// create the graph
+	g, err := omg.CreateGraph("decommission-cluster", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// validate the adjacency list
+	startNode := g.First.Datum.Id().Id
+
+	verifyStep(g, g.Edges[startNode], 1, "get-instances", t)
+
+	currentStep := getNextStep(g.Edges, g.Edges[startNode])
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 3, "sequence_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 3, "check-ok", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 3, "check-ok-again", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 3, "sequence_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "check-ok", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "check-ok-again", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "prep-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "sequence_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-2", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-3", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "sequence_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "sequence_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-2", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-3", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "sequence_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "first-cleanup-job", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "second-cleanup-job", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	if len(currentStep) != 2 {
+		t.Fatalf("Expected %s to have 2 out edges", "second-cleanup-job")
+	}
+	if g.Vertices[currentStep[0]].Name != "third-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name != "third-cleanup-job" {
+		t.Fatalf("third-cleanup-job@ missing")
+	}
+
+	if g.Vertices[currentStep[0]].Name != "fourth-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name != "fourth-cleanup-job" {
+		t.Fatalf("fourth-cleanup-job@ missing")
+	}
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_decommission-cluster_end", t)
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // Util functions
 /////////////////////////////////////////////////////////////////////////////

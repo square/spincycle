@@ -16,6 +16,7 @@ type NodeSpec struct {
 	NodeType     string            `yaml:"type"`      // the type of job or sequence to create
 	Each         []string          `yaml:"each"`      // arguments to repeat over
 	Args         []*NodeArg        `yaml:"args"`      // expected arguments
+	Parallel     *uint             `yaml:"parallel"`  // max number of sequences to run in parallel
 	Sets         []string          `yaml:"sets"`      // expected job args to be set
 	Dependencies []string          `yaml:"deps"`      // nodes with out-edges leading to this node
 	Retry        uint              `yaml:"retry"`     // the number of times to retry a "job" that fails

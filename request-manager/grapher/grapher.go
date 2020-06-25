@@ -342,8 +342,37 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				// Insert all components between the start and end vertices.
+				// Place in parallel if possible, otherwise serialize.
+				// Each parallel component is wrapped between dummy nodes.
+				// n.Parallel == nil (i.e. Parallel field omitted in YAML) is a
+				// special case--we don't want to double-wrap it, because that'll break the
+				// existing test cases.
+				var currG *Graph
+				if n.Parallel != nil {
+					currG, err = o.newEmptyGraph("repeat_"+n.Name, nodeArgs)
+					if err != nil {
+						return nil, err
+					}
+				} else {
+					currG = g
+				}
+				prev := g.First
+				var count uint = 0
 				for _, c := range componentsForThisNode {
-					g.insertComponentBetween(c, g.First, g.Last)
+					currG.insertComponentBetween(c, currG.First, currG.Last)
+					count++
+					if n.Parallel != nil && count == *n.Parallel {
+						g.insertComponentBetween(currG, prev, g.Last)
+						prev = currG.Last
+						currG, err = o.newEmptyGraph("repeat_"+n.Name, nodeArgs)
+						if err != nil {
+							return nil, err
+						}
+						count = 0
+					}
+				}
+				if n.Parallel != nil && count != 0 {
+					g.insertComponentBetween(currG, prev, g.Last)
 				}
 
 				// Assert g is a well formed graph
