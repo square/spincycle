@@ -94,6 +94,9 @@ func ReadConfig(configFile string) (Config, error) {
 		sequence.Name = sequenceName
 		for nodeName, node := range sequence.Nodes {
 			node.Name = nodeName
+			if node.Parallel != nil && *node.Parallel == 0 {
+				return cfg, fmt.Errorf("Parallel: 0 in sequence %s, node %s", sequence.Name, node.Name)
+			}
 		}
 
 		// Validate ACLs, if any

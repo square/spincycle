@@ -237,6 +237,9 @@ func TestCreateDecomGraph(t *testing.T) {
 	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 4, "sequence_pre-flight-checks_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
@@ -252,7 +255,13 @@ func TestCreateDecomGraph(t *testing.T) {
 	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 1, "prep-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
@@ -271,6 +280,9 @@ func TestCreateDecomGraph(t *testing.T) {
 
 	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 4, "sequence_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
@@ -549,9 +561,17 @@ func TestFailCreateBadIfConditionalGraph(t *testing.T) {
 	}
 }
 
+func TestBadParallel(t *testing.T) {
+	sequencesFile := "../test/specs/bad-decomm-limit-parallel.yaml"
+	_, err := ReadConfig(sequencesFile)
+	if err == nil {
+		t.Errorf("successfully read Parallel: 0, expected an error")
+	}
+}
+
 func TestLimitParallel(t *testing.T) {
 	tf := &testFactory{}
-	sequencesFile := "../test/specs/decomm_limit_parallel.yaml"
+	sequencesFile := "../test/specs/decomm-limit-parallel.yaml"
 	cfg, _ := ReadConfig(sequencesFile)
 	omg := NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
 	args := map[string]interface{}{
