@@ -342,9 +342,9 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				// Insert all components between the start and end vertices.
-				// Place at most `parallel` components per parallel supercomponent..
-				// Serialize parallel supercomponents if `parallel` exceeds number of
-				// components.
+				// Place at most `parallel` components per parallel supercomponent.
+				// Serialize parallel supercomponents if number of components
+				// exceeds `parallel`.
 				// Each parallel supercomponent is wrapped between dummy nodes.
 				var parallel uint
 				if n.Parallel == nil {
