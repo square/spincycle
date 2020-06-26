@@ -1612,3 +1612,11 @@ func TestFailSpecBadStatic(t *testing.T) {
 		t.Errorf("accepted static arg with no default, expected error")
 	}
 }
+
+func TestFailSpecBadOptional(t *testing.T) {
+	sequencesFile := "../test/specs/spec-bad-optional.yaml"
+	_, err := ReadConfig(sequencesFile)
+	if err == nil {
+		t.Errorf("accepted optional arg with no default, expected error")
+	}
+}

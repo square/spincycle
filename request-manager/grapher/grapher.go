@@ -98,13 +98,13 @@ func (o *Grapher) RequestArgs(requestType string, args map[string]interface{}) (
 	for i, arg := range seq.Args.Optional {
 		val, ok := args[arg.Name]
 		if !ok {
-			val = arg.Default
+			val = *arg.Default
 		}
 		reqArgs = append(reqArgs, proto.RequestArg{
 			Pos:     i,
 			Name:    arg.Name,
 			Type:    proto.ARG_TYPE_OPTIONAL,
-			Default: arg.Default,
+			Default: *arg.Default,
 			Value:   val,
 			Given:   ok,
 		})
@@ -115,7 +115,7 @@ func (o *Grapher) RequestArgs(requestType string, args map[string]interface{}) (
 			Pos:   i,
 			Name:  arg.Name,
 			Type:  proto.ARG_TYPE_STATIC,
-			Value: arg.Default,
+			Value: *arg.Default,
 		})
 	}
 
@@ -154,14 +154,14 @@ func (o *Grapher) buildSequence(name string, seq *SequenceSpec, args map[string]
 	// Verify all optional arguments with defaults provided are included
 	for _, arg := range seq.Args.Optional {
 		if _, ok := args[arg.Name]; !ok {
-			args[arg.Name] = arg.Default
+			args[arg.Name] = *arg.Default
 		}
 	}
 
 	// Verify all static arguments with defaults provided are included
 	for _, arg := range seq.Args.Static {
 		if _, ok := args[arg.Name]; !ok {
-			args[arg.Name] = arg.Default
+			args[arg.Name] = *arg.Default
 		}
 	}
 	return o.buildComponent("sequence_"+name, seq.Nodes, args, seq.Retry)

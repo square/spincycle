@@ -8,6 +8,7 @@ sequences:
       optional:
         - name: foo
           desc: Args to shell command
+          default: ""
     nodes:
       job1name:
         category: conditional
