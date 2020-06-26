@@ -92,6 +92,13 @@ func testConditionalGrapher() *Grapher {
 	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
 }
 
+func testLimitParallelGrapher() *Grapher {
+	tf := &testFactory{}
+	sequencesFile := "../test/specs/decomm-limit-parallel.yaml"
+	cfg, _ := ReadConfig(sequencesFile)
+	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+}
+
 func TestNodeArgs(t *testing.T) {
 	omg := testGrapher()
 	args := map[string]interface{}{
@@ -237,6 +244,9 @@ func TestCreateDecomGraph(t *testing.T) {
 	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 4, "sequence_pre-flight-checks_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
@@ -252,7 +262,13 @@ func TestCreateDecomGraph(t *testing.T) {
 	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 1, "prep-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
@@ -271,6 +287,9 @@ func TestCreateDecomGraph(t *testing.T) {
 
 	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 4, "sequence_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
 
 	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
@@ -547,6 +566,141 @@ func TestFailCreateBadIfConditionalGraph(t *testing.T) {
 	if err == nil {
 		t.Errorf("no error creating grapher without default conditional, expected an error")
 	}
+}
+
+func TestCreateLimitParallel(t *testing.T) {
+	omg := testLimitParallelGrapher()
+	args := map[string]interface{}{
+		"cluster": "test-cluster-001",
+		"env":     "testing",
+	}
+
+	// create the graph
+	g, err := omg.CreateGraph("decommission-cluster", args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// validate the adjacency list
+	startNode := g.First.Datum.Id().Id
+
+	verifyStep(g, g.Edges[startNode], 1, "get-instances", t)
+
+	currentStep := getNextStep(g.Edges, g.Edges[startNode])
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 3, "sequence_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 3, "check-ok", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 3, "check-ok-again", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 3, "sequence_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_pre-flight-checks_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "check-ok", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "check-ok-again", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "prep-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "sequence_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-2", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-3", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "sequence_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "sequence_decommission-instances_start", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-1", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-2", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "decom-3", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 2, "sequence_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "first-cleanup-job", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "second-cleanup-job", t)
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	if len(currentStep) != 2 {
+		t.Fatalf("Expected %s to have 2 out edges", "second-cleanup-job")
+	}
+	if g.Vertices[currentStep[0]].Name != "third-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name != "third-cleanup-job" {
+		t.Fatalf("third-cleanup-job@ missing")
+	}
+
+	if g.Vertices[currentStep[0]].Name != "fourth-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name != "fourth-cleanup-job" {
+		t.Fatalf("fourth-cleanup-job@ missing")
+	}
+
+	currentStep = getNextStep(g.Edges, currentStep)
+	verifyStep(g, currentStep, 1, "sequence_decommission-cluster_end", t)
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1436,5 +1590,17 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 		if v.SequenceId != verticies[k].SequenceId {
 			t.Errorf("node '%s'.SequenceId = %s, expected %s", k, v.SequenceId, verticies[k].SequenceId)
 		}
+	}
+}
+
+// //////////////////////////////////////////////////////////////////////////
+// Spec tests
+// //////////////////////////////////////////////////////////////////////////
+
+func TestFailSpecBadParallel(t *testing.T) {
+	sequencesFile := "../test/specs/spec-bad-parallel.yaml"
+	_, err := ReadConfig(sequencesFile)
+	if err == nil {
+		t.Errorf("successfully read Parallel: 0, expected an error")
 	}
 }

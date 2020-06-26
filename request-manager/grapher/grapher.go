@@ -342,8 +342,39 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				// Insert all components between the start and end vertices.
+				// Place at most `parallel` components per parallel supercomponent.
+				// Serialize parallel supercomponents if number of components
+				// exceeds `parallel`.
+				// Each parallel supercomponent is wrapped between dummy nodes.
+				var parallel uint
+				if n.Parallel == nil {
+					parallel = uint(len(componentsForThisNode))
+				} else {
+					parallel = *n.Parallel
+				}
+
+				currG, err := o.newEmptyGraph("repeat_"+n.Name, nodeArgs)
+				if err != nil {
+					return nil, err
+				}
+
+				prev := g.First
+				var count uint = 0
 				for _, c := range componentsForThisNode {
-					g.insertComponentBetween(c, g.First, g.Last)
+					currG.insertComponentBetween(c, currG.First, currG.Last)
+					count++
+					if count == parallel {
+						g.insertComponentBetween(currG, prev, g.Last)
+						prev = currG.Last
+						currG, err = o.newEmptyGraph("repeat_"+n.Name, nodeArgs)
+						if err != nil {
+							return nil, err
+						}
+						count = 0
+					}
+				}
+				if count != 0 {
+					g.insertComponentBetween(currG, prev, g.Last)
 				}
 
 				// Assert g is a well formed graph
