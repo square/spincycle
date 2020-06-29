@@ -203,11 +203,8 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// ----------------------------------------------------------------------
 	// Run (non-blocking)
 
-	// TODO(felixp): if creating the request succeeded but starting it failed,
-	// mark the request as Failed. There's currently no way for a
-	// user to Start a request that's already been created, so otherwise
-	// the request will be Pending forever.
 	if err := api.rm.Start(req.Id); err != nil {
+		req.State = proto.STATE_FAIL
 		return handleError(err, c)
 	}
 
