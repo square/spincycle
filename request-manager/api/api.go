@@ -204,7 +204,7 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// Run (non-blocking)
 
 	if err := api.rm.Start(req.Id); err != nil {
-		req.State = proto.STATE_FAIL
+		api.rm.Fail(req.Id)
 		return handleError(err, c)
 	}
 

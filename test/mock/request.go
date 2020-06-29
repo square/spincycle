@@ -22,6 +22,7 @@ type RequestManager struct {
 	StartFunc     func(string) error
 	StopFunc      func(string) error
 	FinishFunc    func(string, proto.FinishRequest) error
+	FailFunc      func(string) error
 	SpecsFunc     func() []proto.RequestSpec
 	JobChainFunc  func(string) (proto.JobChain, error)
 	FindFunc      func(proto.RequestFilter) ([]proto.Request, error)
@@ -58,6 +59,13 @@ func (r *RequestManager) Start(reqId string) error {
 func (r *RequestManager) Finish(reqId string, finishParams proto.FinishRequest) error {
 	if r.FinishFunc != nil {
 		return r.FinishFunc(reqId, finishParams)
+	}
+	return nil
+}
+
+func (r *RequestManager) Fail(reqId string) error {
+	if r.FailFunc != nil {
+		return r.FailFunc(reqId)
 	}
 	return nil
 }
