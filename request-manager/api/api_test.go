@@ -119,6 +119,42 @@ func TestNewRequestHandlerRMError(t *testing.T) {
 	}
 }
 
+func TestNewRequestHandlerBadStart(t *testing.T) {
+	payload := `{"type":"something","args":{"first":"arg1","second":"arg2"}}`
+	// Create a mock request manager that will fail on Start, so that status will be set to FAIL.
+	var rmFinishParams proto.FinishRequest
+	rm := &mock.RequestManager{
+		StartFunc: func(string) error {
+			return mock.ErrRequestManager
+		},
+		FailFunc: func(string) error {
+			rmFinishParams.State = proto.STATE_FAIL
+			return nil
+		},
+	}
+	setup(rm, &mock.RequestResumer{}, &mock.JLStore{}, make(chan struct{}))
+	defer cleanup()
+
+	// Make the HTTP request.
+	statusCode, _, err := testutil.MakeHTTPRequest("POST", baseURL()+"requests", []byte(payload), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that the status code is what we expect.
+	if statusCode != http.StatusInternalServerError {
+		t.Errorf("response status = %d, expected %d", statusCode, http.StatusInternalServerError)
+	}
+
+	// Check that the request failed.
+	expectedFinishParams := proto.FinishRequest{
+		State: proto.STATE_FAIL,
+	}
+	if diff := deep.Equal(rmFinishParams, expectedFinishParams); diff != nil {
+		t.Error(diff)
+	}
+}
+
 func TestNewRequestHandlerSuccess(t *testing.T) {
 	payload := `{"type":"something","args":{"first":"arg1","second":"arg2"}}`
 	reqId := "abcd1234"

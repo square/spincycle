@@ -404,6 +404,8 @@ func (m *manager) Fail(requestId string) error {
 		return err
 	}
 
+	prevState := req.State
+
 	req.State = proto.STATE_FAIL
 	finishedAt := time.Now().UTC()
 	req.FinishedAt = &finishedAt
@@ -411,6 +413,10 @@ func (m *manager) Fail(requestId string) error {
 
 	err = m.updateRequest(req, proto.STATE_PENDING)
 	if err != nil {
+		if prevState != proto.STATE_PENDING {
+			// This should never happen - we never finish a request that isn't pending.
+			return serr.NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[prevState])
+		}
 		return err
 	}
 
