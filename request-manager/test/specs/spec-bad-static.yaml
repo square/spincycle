@@ -4,10 +4,8 @@ sequences:
       required:
         - name: cmd
           desc: Shell command name
-      optional:
-        - name: args
-          desc: Args to shell command
-          default: ""
+      static:
+        - name: args # this should fail because default isn't specified
     nodes:
       job1name:
         category: job

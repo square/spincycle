@@ -56,9 +56,9 @@ type SequenceArgs struct {
 
 // ArgSpec defines the structure expected from the config to define sequence args.
 type ArgSpec struct {
-	Name    string `yaml:"name"`
-	Desc    string `yaml:"desc"`
-	Default string `yaml:"default"`
+	Name    string  `yaml:"name"`
+	Desc    string  `yaml:"desc"`
+	Default *string `yaml:"default"`
 }
 
 // ACL represents one role-based ACL entry. Every auth.Caller (from the
@@ -92,6 +92,17 @@ func ReadConfig(configFile string) (Config, error) {
 
 	for sequenceName, sequence := range cfg.Sequences {
 		sequence.Name = sequenceName
+		for _, arg := range sequence.Args.Optional {
+			if arg.Default == nil {
+				return cfg, fmt.Errorf("optional arg %s in sequence %s was not given a default", arg.Name, sequence.Name)
+			}
+		}
+		for _, arg := range sequence.Args.Static {
+			if arg.Default == nil {
+				return cfg, fmt.Errorf("static arg %s in sequence %s was not given a default", arg.Name, sequence.Name)
+			}
+		}
+
 		for nodeName, node := range sequence.Nodes {
 			node.Name = nodeName
 			if node.Parallel != nil && *node.Parallel == 0 {
