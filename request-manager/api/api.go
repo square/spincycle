@@ -206,7 +206,7 @@ func (api *API) createRequestHandler(c echo.Context) error {
 
 	if err := api.rm.Start(req.Id); err != nil {
 		if err := api.rm.FailPending(req.Id); err != nil {
-			log.Errorf("error starting request in RM: %s", err)
+			log.Errorf("error starting request %s in RM: %s", req.Id, err)
 		}
 		return handleError(err, c)
 	}
