@@ -581,6 +581,78 @@ func TestFinish(t *testing.T) {
 	}
 }
 
+func TestFailNotPending(t *testing.T) {
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
+
+	reqId := "454ae2f98a05cv16sdwt" // request is running
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
+	err := m.FailPending(reqId)
+	switch err.(type) {
+	case serr.ErrInvalidState:
+	default:
+		t.Errorf("error = %s, expected %s", err, serr.NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[proto.STATE_RUNNING]))
+	}
+}
+
+func TestFailPending(t *testing.T) {
+	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
+	defer teardownManager(t, dbName)
+	reqId := "0874a524aa1edn3ysp00"
+
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
+
+	// Verify initial request state
+	req, err := m.Get(reqId)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+	if req.State != proto.STATE_PENDING {
+		t.Errorf("request state = %s, expected PENDING", proto.StateName[req.State])
+	}
+	if req.FinishedJobs != 0 {
+		t.Errorf("got FinishedJobs = %d, expected 0", req.FinishedJobs)
+	}
+	if req.FinishedAt != nil && !req.FinishedAt.IsZero() {
+		t.Errorf("got FinishedAt = %s, expected nil/NULL", req.FinishedAt)
+	}
+
+	// Fail pending request
+	err = m.FailPending(reqId)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	// Verify post-finish request state
+	req, err = m.Get(reqId)
+	if err != nil {
+		t.Errorf("err = %s, expected nil", err)
+	}
+	if req.State != proto.STATE_FAIL {
+		t.Errorf("request state = %d, expected %d", req.State, proto.STATE_FAIL)
+	}
+	if req.FinishedJobs != 0 {
+		t.Errorf("got FinishedJobs = %d, expected 0", req.FinishedJobs)
+	}
+	if req.FinishedAt.IsZero() {
+		t.Errorf("got FinishedAt = nil/NULL, expected a value")
+	}
+}
+
 func TestJobChainNotFound(t *testing.T) {
 	dbName := setupManager(t, rmtest.DataPath+"/jc-default.sql")
 	defer teardownManager(t, dbName)

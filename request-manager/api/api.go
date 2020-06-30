@@ -17,6 +17,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	log "github.com/sirupsen/logrus"
 
 	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/proto"
@@ -203,11 +204,10 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// ----------------------------------------------------------------------
 	// Run (non-blocking)
 
-	// TODO(felixp): if creating the request succeeded but starting it failed,
-	// mark the request as Failed. There's currently no way for a
-	// user to Start a request that's already been created, so otherwise
-	// the request will be Pending forever.
 	if err := api.rm.Start(req.Id); err != nil {
+		if err := api.rm.FailPending(req.Id); err != nil {
+			log.Errorf("error starting request %s in RM: %s", req.Id, err)
+		}
 		return handleError(err, c)
 	}
 
