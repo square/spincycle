@@ -127,7 +127,7 @@ func TestNewRequestHandlerBadStart(t *testing.T) {
 		StartFunc: func(string) error {
 			return mock.ErrRequestManager
 		},
-		FailFunc: func(string) error {
+		FailPendingFunc: func(string) error {
 			rmFinishParams.State = proto.STATE_FAIL
 			return nil
 		},

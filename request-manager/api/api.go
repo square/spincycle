@@ -17,6 +17,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	log "github.com/sirupsen/logrus"
 
 	serr "github.com/square/spincycle/errors"
 	"github.com/square/spincycle/proto"
@@ -204,7 +205,9 @@ func (api *API) createRequestHandler(c echo.Context) error {
 	// Run (non-blocking)
 
 	if err := api.rm.Start(req.Id); err != nil {
-		api.rm.Fail(req.Id)
+		if err := api.rm.FailPending(req.Id); err != nil {
+			log.Errorf("error starting request in RM: %s", err)
+		}
 		return handleError(err, c)
 	}
 

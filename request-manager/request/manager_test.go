@@ -594,7 +594,7 @@ func TestFailNotPending(t *testing.T) {
 		DefaultJRURL:   "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
-	err := m.Fail(reqId)
+	err := m.FailPending(reqId)
 	switch err.(type) {
 	case serr.ErrInvalidState:
 	default:
@@ -602,7 +602,7 @@ func TestFailNotPending(t *testing.T) {
 	}
 }
 
-func TestFail(t *testing.T) {
+func TestFailPending(t *testing.T) {
 	dbName := setupManager(t, rmtest.DataPath+"/request-default.sql")
 	defer teardownManager(t, dbName)
 	reqId := "0874a524aa1edn3ysp00"
@@ -632,7 +632,7 @@ func TestFail(t *testing.T) {
 	}
 
 	// Fail pending request
-	err = m.Fail(reqId)
+	err = m.FailPending(reqId)
 	if err != nil {
 		t.Errorf("error = %s, expected nil", err)
 	}

@@ -16,16 +16,16 @@ var (
 )
 
 type RequestManager struct {
-	CreateFunc    func(proto.CreateRequest) (proto.Request, error)
-	GetFunc       func(string) (proto.Request, error)
-	GetWithJCFunc func(string) (proto.Request, error)
-	StartFunc     func(string) error
-	StopFunc      func(string) error
-	FinishFunc    func(string, proto.FinishRequest) error
-	FailFunc      func(string) error
-	SpecsFunc     func() []proto.RequestSpec
-	JobChainFunc  func(string) (proto.JobChain, error)
-	FindFunc      func(proto.RequestFilter) ([]proto.Request, error)
+	CreateFunc      func(proto.CreateRequest) (proto.Request, error)
+	GetFunc         func(string) (proto.Request, error)
+	GetWithJCFunc   func(string) (proto.Request, error)
+	StartFunc       func(string) error
+	StopFunc        func(string) error
+	FinishFunc      func(string, proto.FinishRequest) error
+	FailPendingFunc func(string) error
+	SpecsFunc       func() []proto.RequestSpec
+	JobChainFunc    func(string) (proto.JobChain, error)
+	FindFunc        func(proto.RequestFilter) ([]proto.Request, error)
 }
 
 func (r *RequestManager) Create(reqParams proto.CreateRequest) (proto.Request, error) {
@@ -63,9 +63,9 @@ func (r *RequestManager) Finish(reqId string, finishParams proto.FinishRequest) 
 	return nil
 }
 
-func (r *RequestManager) Fail(reqId string) error {
-	if r.FailFunc != nil {
-		return r.FailFunc(reqId)
+func (r *RequestManager) FailPending(reqId string) error {
+	if r.FailPendingFunc != nil {
+		return r.FailPendingFunc(reqId)
 	}
 	return nil
 }

@@ -57,7 +57,7 @@ type Manager interface {
 	Finish(requestId string, finishParams proto.FinishRequest) error
 
 	// Fail a pending request (if it can't be started for some reason).
-	Fail(requestId string) error
+	FailPending(requestId string) error
 
 	// Specs returns a list of all the request specs the the RM knows about.
 	Specs() []proto.RequestSpec
@@ -398,7 +398,7 @@ func (m *manager) Finish(requestId string, finishParams proto.FinishRequest) err
 	return nil
 }
 
-func (m *manager) Fail(requestId string) error {
+func (m *manager) FailPending(requestId string) error {
 	req, err := m.Get(requestId)
 	if err != nil {
 		return err
@@ -414,7 +414,7 @@ func (m *manager) Fail(requestId string) error {
 	err = m.updateRequest(req, proto.STATE_PENDING)
 	if err != nil {
 		if prevState != proto.STATE_PENDING {
-			// This should never happen - we never finish a request that isn't pending.
+			// This should never happen - we never fail a request that isn't pending.
 			return serr.NewErrInvalidState(proto.StateName[proto.STATE_PENDING], proto.StateName[prevState])
 		}
 		return err
