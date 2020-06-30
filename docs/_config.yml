@@ -11,7 +11,7 @@ exclude:
   - Gemfile.lock
   - README.md
 
-remote_theme: pmarsceill/just-the-docs
+remote_theme: pmarsceill/just-the-docs@v0.2.8
 search_enabled: true
 aux_links:
   "Spin Cycle":
