@@ -431,6 +431,10 @@ func (t *traverser) runJobs() {
 			// Increment sequence try count if this is sequence start job, which
 			// currently means sequenceId == job.Id.
 			if t.chain.IsSequenceStartJob(job.Id) {
+				if t.chain.SequenceTries(job.Id) != 0 {
+					retryWait, _ := time.ParseDuration(job.SequenceRetryWait) // checked that this parses in RM
+					time.Sleep(retryWait)
+				}
 				t.chain.IncrementSequenceTries(job.Id, 1)
 				jLogger.Infof("sequence try %d", t.chain.SequenceTries(job.Id))
 			}

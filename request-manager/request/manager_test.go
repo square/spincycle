@@ -134,7 +134,7 @@ func TestCreate(t *testing.T) {
 	}
 	m := request.NewManager(cfg)
 
-	// gr uses spec a-b-c.yaml which has reqest "three-nodes"
+	// gr uses spec a-b-c.yaml which has request "three-nodes"
 	reqParams := proto.CreateRequest{
 		Type: "three-nodes",
 		User: "john",
@@ -178,7 +178,7 @@ func TestCreate(t *testing.T) {
 					Id:        "a@3",
 					Type:      "aJobType",
 					Retry:     1,
-					RetryWait: 500,
+					RetryWait: 500ms,
 					SequenceId: "sequence_three-nodes_start@1",
 					SequenceRetry: 0,
 				},
@@ -214,6 +214,9 @@ func TestCreate(t *testing.T) {
 	for _, job := range actualJobChain.Jobs {
 		if job.State != proto.STATE_PENDING {
 			t.Errorf("job %s has state %s, expected all jobs to be STATE_PENDING", job.Id, proto.StateName[job.State])
+		}
+		if job.Type == "aJobType" && job.RetryWait != "500ms" {
+			t.Errorf("job of type aJobType has RetryWait: %s, expected 500ms", job.RetryWait)
 		}
 	}
 
@@ -261,6 +264,49 @@ func TestCreate(t *testing.T) {
 	if len(actualJobChain.AdjacencyList) != 4 {
 		test.Dump(actualJobChain.Jobs)
 		t.Errorf("job chain AdjacencyList len = %d, expected 4", len(actualJobChain.AdjacencyList))
+	}
+}
+
+func TestCreateNestedSequence(t *testing.T) {
+	dbName := setupManager(t, "")
+	defer teardownManager(t, dbName)
+
+	cfg := request.ManagerConfig{
+		GrapherFactory: grf,
+		DBConnector:    dbc,
+		JRClient:       &mock.JRClient{},
+		ShutdownChan:   shutdownChan,
+		DefaultJRURL:   "http://defaulturl:1111",
+	}
+	m := request.NewManager(cfg)
+
+	// gr uses spec a-b-c.yaml which has request "retry-three-nodes"
+	// it's just request "three-nodes" (see previous test) with retry: 10
+	reqParams := proto.CreateRequest{
+		Type: "retry-three-nodes",
+		User: "john",
+		Args: map[string]interface{}{
+			"foo": "foo-value",
+		},
+	}
+
+	actualReq, err := m.Create(reqParams)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+
+	// We just want to check that sequence retries are set correctly.
+	seen := false
+	for _, job := range actualReq.JobChain.Jobs {
+		if job.SequenceRetry == 10 {
+			seen = true
+			if job.SequenceRetryWait != "500ms" {
+				t.Errorf("sequence three-nodes has retryWait: %s, expected retry: 500ms", job.SequenceRetryWait)
+			}
+		}
+	}
+	if !seen {
+		t.Errorf("no node with retry: 10, expected such a node")
 	}
 }
 

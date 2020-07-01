@@ -1620,3 +1620,19 @@ func TestFailSpecBadOptional(t *testing.T) {
 		t.Errorf("accepted optional arg with no default, expected error")
 	}
 }
+
+func TestFailSpecBadRetry(t *testing.T) {
+	sequencesFile := "../test/specs/spec-bad-retry.yaml"
+	_, err := ReadConfig(sequencesFile)
+	if err == nil {
+		t.Errorf("accepted retryWait: with retry: 0, expected error")
+	}
+}
+
+func TestFailSpecBadRetryDuration(t *testing.T) {
+	sequencesFile := "../test/specs/spec-bad-retry-duration.yaml"
+	_, err := ReadConfig(sequencesFile)
+	if err == nil {
+		t.Errorf("accepted bad retryWait: duration, expected error")
+	}
+}

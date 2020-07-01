@@ -114,6 +114,68 @@ func TestRunNotComplete(t *testing.T) {
 	}
 }
 
+// Test sequence retry wait.
+func TestSequenceRetryWait(t *testing.T) {
+	longWait := "2s"
+	longWaitDuration, _ := time.ParseDuration(longWait)
+
+	elapsed0 := testSequenceRetryWait(t, "0s")
+	if elapsed0 >= longWaitDuration {
+		t.Errorf("simple sequence in testSequenceRetryWait took %s to complete, expected < %s", elapsed0.String(), longWait)
+	}
+
+	elapsed1 := testSequenceRetryWait(t, longWait)
+	if elapsed1 < longWaitDuration {
+		t.Errorf("retried sequence with sequence retryWait: %s finished in %s, expected > %s", longWait, elapsed1.String(), longWait)
+	}
+}
+
+func testSequenceRetryWait(t *testing.T, sequenceRetryWait string) time.Duration {
+	requestId := "test_sequence_retry_wait"
+	chainRepo := chain.NewMemoryRepo()
+	rf := &mock.RunnerFactory{
+		RunnersToReturn: map[string]*mock.Runner{
+			"job0": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_COMPLETE}},
+			"job1": &mock.Runner{RunReturn: runner.Return{FinalState: proto.STATE_FAIL}},
+		},
+	}
+	rmc := &mock.RMClient{}
+	shutdownChan := make(chan struct{})
+
+	jc := &proto.JobChain{
+		RequestId: requestId,
+		Jobs: map[string]proto.Job{
+			"job0": proto.Job{
+				Id:                "job0",
+				State:             proto.STATE_PENDING,
+				SequenceId:        "job0",
+				SequenceRetry:     1,
+				SequenceRetryWait: sequenceRetryWait,
+			},
+			"job1": proto.Job{
+				Id:         "job1",
+				State:      proto.STATE_PENDING,
+				SequenceId: "job0",
+			},
+		},
+		AdjacencyList: map[string][]string{
+			"job0": {"job1"},
+		},
+	}
+	c := chain.NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+	traverser := chain.NewTraverser(chain.TraverserConfig{c, chainRepo, rf, rmc, shutdownChan, timeout, timeout})
+
+	start := time.Now()
+	traverser.Run()
+	elapsed := time.Now().Sub(start)
+
+	if c.State() != proto.STATE_FAIL {
+		t.Errorf("chain state = %d, expected %d", c.State(), proto.STATE_FAIL)
+	}
+
+	return time.Duration(elapsed)
+}
+
 // Resume a suspended job chain.
 func TestResume(t *testing.T) {
 	// Job chain:

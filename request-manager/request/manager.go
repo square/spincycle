@@ -156,16 +156,17 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 			return req, err
 		}
 		job := proto.Job{
-			Type:          node.Datum.Id().Type,
-			Id:            node.Datum.Id().Id,
-			Name:          node.Datum.Id().Name,
-			Bytes:         bytes,
-			Args:          node.Args,
-			Retry:         node.Retry,
-			RetryWait:     node.RetryWait,
-			SequenceId:    node.SequenceId,
-			SequenceRetry: node.SequenceRetry,
-			State:         proto.STATE_PENDING,
+			Type:              node.Datum.Id().Type,
+			Id:                node.Datum.Id().Id,
+			Name:              node.Datum.Id().Name,
+			Bytes:             bytes,
+			Args:              node.Args,
+			Retry:             node.Retry,
+			RetryWait:         node.RetryWait,
+			SequenceId:        node.SequenceId,
+			SequenceRetry:     node.SequenceRetry,
+			SequenceRetryWait: node.SequenceRetryWait,
+			State:             proto.STATE_PENDING,
 		}
 		jc.Jobs[jobId] = job
 	}
