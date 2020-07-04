@@ -34,14 +34,19 @@ type NodeArg struct {
 
 // SequenceSpec defines the structure expected from the config yaml file to
 // define each sequence
+// If a field is in the yaml, it appears here, but the reverse is not true; some
+// fields here are only for information-passing purposes, and not read in from
+// the yaml
 type SequenceSpec struct {
-	Name      string               `yaml:"name"`    // name of the sequence
-	Args      SequenceArgs         `yaml:"args"`    // arguments to the sequence
-	Nodes     map[string]*NodeSpec `yaml:"nodes"`   // list of nodes that are a part of the sequence
-	Request   bool                 `yaml:"request"` // whether or not the sequence spec is a user request
-	ACL       []ACL                `yaml:"acl"`     // allowed caller roles (optional)
-	Retry     uint                 `yaml:"-"    `   // the number of times to retry the sequence if it fails
-	RetryWait string               `yaml:"_"`       // the time to sleep between sequence retries
+	/* Read in from yaml. */
+	Name    string               `yaml:"name"`    // name of the sequence
+	Args    SequenceArgs         `yaml:"args"`    // arguments to the sequence
+	Nodes   map[string]*NodeSpec `yaml:"nodes"`   // list of nodes that are a part of the sequence
+	Request bool                 `yaml:"request"` // whether or not the sequence spec is a user request
+	ACL     []ACL                `yaml:"acl"`     // allowed caller roles (optional)
+	/* Information-passing fields. */
+	Retry     uint   `yaml:"-"` // the number of times to retry the sequence if it fails
+	RetryWait string `yaml:"-"` // the time to sleep between sequence retries
 }
 
 // SequenceArgs defines the structure expected from the config file to define

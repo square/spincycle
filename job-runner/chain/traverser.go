@@ -411,6 +411,24 @@ func (t *traverser) runJobs() {
 		go func(job proto.Job) {
 			jLogger := t.logger.WithFields(log.Fields{"job_id": job.Id, "sequence_id": job.SequenceId, "sequence_try": t.chain.SequenceTries(job.Id)})
 
+			// If this is sequence start job (which currently means sequenceId == job.Id),
+			// wait for duration of SequenceRetryWait, then increment sequence try count.
+			if t.chain.IsSequenceStartJob(job.Id) {
+				if t.chain.SequenceTries(job.Id) != 0 {
+					jLogger.Infof(fmt.Sprintf("waiting %s before retrying sequence_id %s", job.SequenceRetryWait, job.SequenceId))
+					retryWait, _ := time.ParseDuration(job.SequenceRetryWait) // checked that this parses in RM
+					select {
+					case <-time.After(retryWait): // wait before retry
+					case <-t.stopChan:
+						jLogger.Infof("traverser was stopped - exiting sequence retry wait early and not running job")
+						atomic.AddInt64(&t.pending, -1)
+						return
+					}
+				}
+				t.chain.IncrementSequenceTries(job.Id, 1)
+				jLogger.Infof("sequence try %d", t.chain.SequenceTries(job.Id))
+			}
+
 			// Always send the finished job to doneJobChan to be reaped. If the
 			// reaper isn't reaping any more jobs (if this job took too long to
 			// finish after being stopped), sending to doneJobChan won't be
@@ -427,17 +445,6 @@ func (t *traverser) runJobs() {
 				// is empty.
 				t.runnerRepo.Remove(job.Id)
 			}()
-
-			// Increment sequence try count if this is sequence start job, which
-			// currently means sequenceId == job.Id.
-			if t.chain.IsSequenceStartJob(job.Id) {
-				if t.chain.SequenceTries(job.Id) != 0 {
-					retryWait, _ := time.ParseDuration(job.SequenceRetryWait) // checked that this parses in RM
-					time.Sleep(retryWait)
-				}
-				t.chain.IncrementSequenceTries(job.Id, 1)
-				jLogger.Infof("sequence try %d", t.chain.SequenceTries(job.Id))
-			}
 
 			// Job tries for current sequence try and total tries for all seq tries.
 			// For new chains, these are zero. For suspended/resumed chains they can
