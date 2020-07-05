@@ -1,0 +1,105 @@
+---
+sequences:
+  seq-name:
+    request: true
+    args:
+      required:
+        - name: twas
+          desc: "brillig, and the slithy toves"
+        - name: did
+          desc: "gyre and gimble in the wabe:"
+      optional:
+        - name: all
+          desc: "mimsy were the borogoves,"
+          default: "1m"
+        - name: and
+          desc: "the mome raths"
+          default: "12h"
+      static:
+        - name: outgrabe
+          default: "62s"
+    nodes:
+      # ---------------------------------------------------------------------
+      # “Beware the Jabberwock, my son!
+      job:
+        category: job
+        type: job
+        args:
+          - expected: the
+            given: jaws
+        sets: # Test - notation
+          - that
+          - bite
+          - the
+          - claws  # that catch!
+          - beware # the Jubjub bird, and shun
+        retry: 3
+        retryWait: 2s
+        deps: []
+      job:
+        category: job
+        type: job # The frumious”
+        args:
+          - expected: bandersnatch
+            given: bandersnatc
+        sets: [he] # Test [] notation with one element
+        deps: [job]
+
+      # ---------------------------------------------------------------------
+      # took his vorpal sword in
+      job:
+        category: job
+        type: job
+        args:
+          - expected: hand
+            given: long
+          - expected: time
+            given: the
+          - expected: manxome
+            given: foe
+        sets: [he,sought] # Test [] notation with multiple arguments
+        deps: [job]
+
+      # ---------------------------------------------------------------------
+      # So rested he by the Tumtum tree
+      job:
+        category: conditional
+        if: guilty
+        eq:
+          true: behead
+          default: behead
+        args:
+          - expected: and
+            given: stood
+          - expected: awhile
+            given: in
+        sets: [] # Test empty sets
+        sets:
+        deps: [jobs]
+
+      # ---------------------------------------------------------------------
+      # thought.
+      # And, as in uffish thought he stood,
+      # The Jabberwock, with eyes
+      job:
+        category: job
+        type: job
+        args:
+          - expected: of
+            given: flame
+        deps: []
+        retry: 3
+        sets: [came, whiffling, through,the,tulgey, wood] # Test [] notation with spaces
+        retryWait: 3s
+
+          job:
+                sets: [and, burbled, as] # Test other indentation
+
+
+			job:
+				sets: [it, came]
+   job:
+    sets: # Test other indentation
+         - lewis
+         - carroll
+         - jabberwocky # Test ending the file on a set block
