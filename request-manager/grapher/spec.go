@@ -18,7 +18,7 @@ type NodeSpec struct {
 	Each         []string          `yaml:"each"`      // arguments to repeat over
 	Args         []*NodeArg        `yaml:"args"`      // expected arguments
 	Parallel     *uint             `yaml:"parallel"`  // max number of sequences to run in parallel
-	Sets         []string          `yaml:"sets"`      // expected job args to be set
+	Sets         []NodeSet         `yaml:"sets"`      // expected job args to be set
 	Dependencies []string          `yaml:"deps"`      // nodes with out-edges leading to this node
 	Retry        uint              `yaml:"retry"`     // the number of times to retry a "job" that fails
 	RetryWait    string            `yaml:"retryWait"` // the time to sleep between "job" retries
@@ -30,6 +30,12 @@ type NodeSpec struct {
 type NodeArg struct {
 	Expected string `yaml:"expected"` // the name of the argument that this job expects
 	Given    string `yaml:"given"`    // the name of the argument that will be given to this job
+}
+
+// NodeSet defines the structure expected from the yaml file to define the args a job sets.
+type NodeSet struct {
+	Arg string `yaml:"arg"` // the name of the argument this job outputs by default
+	As  string `yaml:"as"`  // the name of the argument this job should output
 }
 
 // SequenceSpec defines the structure expected from the config yaml file to
