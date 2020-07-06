@@ -642,7 +642,7 @@ func (o *Grapher) setNodeArgs(n *NodeSpec, argsTo, argsFrom map[string]interface
 		var val interface{}
 		val, ok = argsFrom[key.Arg]
 		if !ok {
-			return fmt.Errorf("expected %s to set %s as %s in jobargs", n.NodeType, key.Arg, key.As)
+			return fmt.Errorf("expected %s to set %s in jobargs", n.NodeType, key.Arg)
 		}
 		argsTo[key.As] = val
 	}
