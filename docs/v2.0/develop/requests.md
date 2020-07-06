@@ -75,9 +75,12 @@ A job node specifies a job to run. (If this was a tree data structure, these wou
           - expected: cluster
             given: cluster
         sets:
-          - app   # string
-          - env   # string
-          - nodes # []string
+          - arg: app   # string
+            as: app
+          - arg: env   # string
+            as: env
+          - arg: nodes # []string
+            as: nodes
         retry: 2
         retryWait: 3s
         deps: []
@@ -94,13 +97,15 @@ All node specs begin with a node name: "expand-cluster", in this case. Node name
 
 makes Spin Cycle do `jobArgs["hostname"] = jobArgs["host"]` before passing `jobArgs` to the job.
 
-If expected == given, both must still be specified.
+Even if `expected == given`, both must still be specified.
 
 Only job args listed under `args:` are passed to the job. If a job needs arg "foo" but "foo" is not listed, then `jobArgs["foo"]` will be nil in the job. This requirement is strict and somewhat tedious, but it makes specs complete self-describing and easy to follow because there are no "hidden" args.
 
 If a job has optional args, they must be listed so they are passed to the job, in case they exist. The job is responsible for using the optional args or not. (Note: "optional" here is not the same as sequence-level optional args.)
 
-`sets:` specifies the job args that the job sets. The RM checks this. In the example above, the job sets "app", "env", and "node" in `jobArgs`. After calling the job's `Create` method, the RM checks that all three are set in `jobArgs` (with any value, including nil). Like `args:`, this is strict but makes it possible to follow every arg through different sequences. It also makes it explicit which jobs set which args.
+`sets:` specifies the job args that the job sets. The RM checks this. `arg:` and `as:` are to `sets:` as `expected:` and `given:` are to `args:` above: `arg:` is the job arg name set by the job, and `as:` is the job arg name in the specs to use. Even if `arg == as`, both must still be specified.
+
+In the example above, the job sets "app", "env", and "node" in `jobArgs`. After calling the job's `Create` method, the RM checks that all three are set in `jobArgs` (with any value, including nil). Like `args:`, this is strict but makes it possible to follow every arg through different sequences. It also makes it explicit which jobs set which args.
 
 `retry:` and `retryWait:` specify how many times the JR should retry the job if `Run` does not return `proto.STATE_COMPLETE`. The job is always ran once, so total runs is 1 + `retry`. `retryWait` is the wait time between tries. It is a [time.Duration string](https://golang.org/pkg/time/#ParseDuration) like "3s" or "500ms". If not specified, the default is no wait between tries.
 
