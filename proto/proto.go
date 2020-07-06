@@ -61,17 +61,18 @@ const (
 // Job represents one job in a job chain. Jobs are identified by Id, which
 // must be unique within a job chain.
 type Job struct {
-	Id            string                 `json:"id"`                  // unique id
-	Name          string                 `json:"name"`                // name of the job
-	Type          string                 `json:"type"`                // user-specific job type
-	Bytes         []byte                 `json:"bytes,omitempty"`     // return value of Job.Serialize method
-	State         byte                   `json:"state"`               // STATE_* const
-	Args          map[string]interface{} `json:"args,omitempty"`      // the jobArgs a job was created with
-	Data          map[string]interface{} `json:"data,omitempty"`      // job-specific data during Job.Run
-	Retry         uint                   `json:"retry"`               // retry N times if first run fails
-	RetryWait     string                 `json:"retryWait,omitempty"` // wait between tries (duration string: "N{ms|s|m|h}", default: 0s)
-	SequenceId    string                 `json:"sequenceId"`          // Job.Id of first job in sequence
-	SequenceRetry uint                   `json:"sequenceRetry"`       // retry sequence N times if first run fails. Only set for first job in sequence.
+	Id                string                 `json:"id"`                          // unique id
+	Name              string                 `json:"name"`                        // name of the job
+	Type              string                 `json:"type"`                        // user-specific job type
+	Bytes             []byte                 `json:"bytes,omitempty"`             // return value of Job.Serialize method
+	State             byte                   `json:"state"`                       // STATE_* const
+	Args              map[string]interface{} `json:"args,omitempty"`              // the jobArgs a job was created with
+	Data              map[string]interface{} `json:"data,omitempty"`              // job-specific data during Job.Run
+	Retry             uint                   `json:"retry"`                       // retry N times if first run fails
+	RetryWait         string                 `json:"retryWait,omitempty"`         // wait between tries (duration string: "N{ms|s|m|h}", default: 0s)
+	SequenceId        string                 `json:"sequenceId"`                  // Job.Id of first job in sequence
+	SequenceRetry     uint                   `json:"sequenceRetry"`               // retry sequence N times if first run fails. Only set for first job in sequence.
+	SequenceRetryWait string                 `json:"sequenceRetryWait,omitempty"` // wait between sequence tries (duration string: "N{ms|s|m|h}", default: 0s)
 }
 
 // JobChain represents a directed acyclic graph of jobs for one request.

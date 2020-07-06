@@ -27,15 +27,16 @@ type Graph struct {
 // should be retried on error. Next defines all the out edges
 // from Node, and Prev defines all the in edges to Node.
 type Node struct {
-	Datum         job.Job                // Data stored at this Node
-	Next          map[string]*Node       // out edges ( node id -> Node )
-	Prev          map[string]*Node       // in edges ( node id -> Node )
-	Name          string                 // the name of the node
-	Args          map[string]interface{} // the args the node was created with
-	Retry         uint                   // the number of times to retry a node
-	RetryWait     string                 // the time, in seconds, to sleep between retries
-	SequenceId    string                 // ID for first node in sequence
-	SequenceRetry uint                   // Number of times to retry a sequence. Only set for first node in sequence.
+	Datum             job.Job                // Data stored at this Node
+	Next              map[string]*Node       // out edges ( node id -> Node )
+	Prev              map[string]*Node       // in edges ( node id -> Node )
+	Name              string                 // the name of the node
+	Args              map[string]interface{} // the args the node was created with
+	Retry             uint                   // the number of times to retry a node
+	RetryWait         string                 // the time to sleep between retries
+	SequenceId        string                 // ID for first node in sequence
+	SequenceRetry     uint                   // Number of times to retry a sequence. Only set for first node in sequence.
+	SequenceRetryWait string                 // the time to sleep between sequence retries
 }
 
 // returns true iff the graph has at least one cycle in it

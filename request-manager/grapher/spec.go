@@ -5,6 +5,7 @@ package grapher
 import (
 	"fmt"
 	"io/ioutil"
+	"time"
 
 	"gopkg.in/yaml.v2"
 )
@@ -20,7 +21,7 @@ type NodeSpec struct {
 	Sets         []string          `yaml:"sets"`      // expected job args to be set
 	Dependencies []string          `yaml:"deps"`      // nodes with out-edges leading to this node
 	Retry        uint              `yaml:"retry"`     // the number of times to retry a "job" that fails
-	RetryWait    string            `yaml:"retryWait"` // the time, in seconds, to sleep between "job" retries
+	RetryWait    string            `yaml:"retryWait"` // the time to sleep between "job" retries
 	If           string            `yaml:"if"`        // the name of the jobArg to check for a conditional value
 	Eq           map[string]string `yaml:"eq"`        // conditional values mapping to appropriate sequence names
 }
@@ -33,13 +34,19 @@ type NodeArg struct {
 
 // SequenceSpec defines the structure expected from the config yaml file to
 // define each sequence
+// If a field is in the yaml, it appears here, but the reverse is not true; some
+// fields here are only for information-passing purposes, and not read in from
+// the yaml
 type SequenceSpec struct {
+	/* Read in from yaml. */
 	Name    string               `yaml:"name"`    // name of the sequence
 	Args    SequenceArgs         `yaml:"args"`    // arguments to the sequence
 	Nodes   map[string]*NodeSpec `yaml:"nodes"`   // list of nodes that are a part of the sequence
-	Retry   uint                 `yaml:"retry"`   // the number of times to retry the sequence if it fails
 	Request bool                 `yaml:"request"` // whether or not the sequence spec is a user request
 	ACL     []ACL                `yaml:"acl"`     // allowed caller roles (optional)
+	/* Information-passing fields. */
+	Retry     uint   `yaml:"-"` // the number of times to retry the sequence if it fails
+	RetryWait string `yaml:"-"` // the time to sleep between sequence retries
 }
 
 // SequenceArgs defines the structure expected from the config file to define
@@ -108,6 +115,20 @@ func ReadConfig(configFile string) (Config, error) {
 			if node.Parallel != nil && *node.Parallel == 0 {
 				return cfg, fmt.Errorf("parallel: 0 in sequence %s node %s, expected parallel > 0", sequence.Name, node.Name)
 			}
+			if node.Retry > 0 {
+				// retry is set, so parse retryWait if set, else default to 0s
+				if node.RetryWait != "" {
+					if _, err := time.ParseDuration(node.RetryWait); err != nil {
+						return cfg, fmt.Errorf("error in '%s %s' node: retryWait: %s is not a valid duration:  %s", node.NodeType, node.Name, node.RetryWait, err)
+					}
+				} else {
+					node.RetryWait = "0s"
+				}
+			} else if node.RetryWait != "" {
+				// If no retry, then retryWait shouldn't be set
+				return cfg, fmt.Errorf("error in '%s %s' node: retryWait: %s is set but retry is not set", node.NodeType, node.Name, node.RetryWait)
+			}
+
 		}
 
 		// Validate ACLs, if any

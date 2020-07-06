@@ -1,5 +1,23 @@
 ---
 sequences:
+  retry-three-nodes:
+    request: true
+    args:
+      required:
+        - name: foo
+      optional:
+        - name: bar
+          default: 175
+    nodes:
+      node:
+        category: sequence
+        type: three-nodes
+        args:
+          - expected: foo
+            given: foo
+        deps: []
+        retry: 10
+        retryWait: 500ms
   three-nodes:
     request: true
     args:

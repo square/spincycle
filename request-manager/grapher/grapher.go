@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/square/spincycle/job"
 	"github.com/square/spincycle/proto"
@@ -164,7 +163,7 @@ func (o *Grapher) buildSequence(name string, seq *SequenceSpec, args map[string]
 			args[arg.Name] = *arg.Default
 		}
 	}
-	return o.buildComponent("sequence_"+name, seq.Nodes, args, seq.Retry)
+	return o.buildComponent("sequence_"+name, seq.Nodes, args, seq.Retry, seq.RetryWait)
 }
 
 func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string]interface{}) (*Graph, error) {
@@ -219,7 +218,7 @@ func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string
 
 // buildComponent, given a set of node specs, and node args, create a graph that represents the list of node specs,
 // nodeArgs represents the arguments that will be passed into the nodes on creation
-func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nodeArgs map[string]interface{}, sequenceRetry uint) (*Graph, error) {
+func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nodeArgs map[string]interface{}, sequenceRetry uint, sequenceRetryWait string) (*Graph, error) {
 
 	// Start with an empty graph. Enforce a
 	// single source and a single sink node here.
@@ -231,6 +230,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 	// Store configured retry from sequence spec on the first node in the
 	// sequence
 	g.First.SequenceRetry = sequenceRetry
+	g.First.SequenceRetryWait = sequenceRetryWait
 
 	//////////////////////////////////////////////////////
 	// First, construct all subcomponents of this graph
@@ -303,6 +303,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 						return nil, fmt.Errorf("in seq %s, node %s: sequence '%s' does not exist", name, n.Name, n.NodeType)
 					}
 					sequence.Retry = n.Retry
+					sequence.RetryWait = n.RetryWait
 					g, err = o.buildSequence(n.Name, sequence, nodeArgsCopy)
 					if err != nil {
 						return nil, fmt.Errorf("in seq %s, node %s: cannot build sequence '%s': %s", name, n.Name, sequence.Name, err)
@@ -760,20 +761,6 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 	err = rj.Create(nodeArgs)
 	if err != nil {
 		return nil, fmt.Errorf("Error creating '%s %s' job: %s", j.NodeType, j.Name, err)
-	}
-
-	if j.Retry > 0 {
-		// retry is set, so parse retryWait if set, else default to 0s
-		if j.RetryWait != "" {
-			if _, err := time.ParseDuration(j.RetryWait); err != nil {
-				return nil, fmt.Errorf("Error creating '%s %s' job: retryWait: %s is not a valid duration:  %s", j.NodeType, j.Name, j.RetryWait, err)
-			}
-		} else {
-			j.RetryWait = "0s"
-		}
-	} else if j.RetryWait != "" {
-		// If no retry, then retryWait shouldn't be set
-		return nil, fmt.Errorf("Error creating '%s %s' job: retryWait: %s is set but retry is not set", j.NodeType, j.Name, j.RetryWait)
 	}
 
 	return &Node{
