@@ -415,7 +415,7 @@ func (t *traverser) runJobs() {
 			// wait for duration of SequenceRetryWait, then increment sequence try count.
 			if t.chain.IsSequenceStartJob(job.Id) {
 				if t.chain.SequenceTries(job.Id) != 0 {
-					jLogger.Infof(fmt.Sprintf("waiting %s before retrying sequence_id %s", job.SequenceRetryWait, job.SequenceId))
+					jLogger.Infof(fmt.Sprintf("waiting %s before retrying sequence", job.SequenceRetryWait))
 					retryWait, _ := time.ParseDuration(job.SequenceRetryWait) // checked that this parses in RM
 					select {
 					case <-time.After(retryWait): // wait before retry
