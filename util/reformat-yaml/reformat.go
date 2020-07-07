@@ -77,7 +77,7 @@ func main() {
 					inp = inp[:i+5] + comment
 					for _, arg := range args {
 						arg = strings.TrimSpace(arg)
-						inp += fmt.Sprintf("\n%s- arg: %s\n%s  as: %s", indent, arg, indent, arg)
+						inp += fmt.Sprintf("\n%s- arg: %s", indent, arg)
 					}
 					// Case: empty list
 				} else {
@@ -98,7 +98,7 @@ func main() {
 					fmt.Printf("%s line %d: already in sets/as format\n", filename, line)
 					inp += comment
 				} else {
-					inp = fmt.Sprintf("%s- arg: %s%s\n%s  as: %s", indent, arg, comment, indent, arg)
+					inp = fmt.Sprintf("%s- arg: %s%s", indent, arg, comment)
 				}
 				// Case: exit `sets` block
 			} else {

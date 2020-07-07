@@ -34,8 +34,8 @@ type NodeArg struct {
 
 // NodeSet defines the structure expected from the yaml file to define the args a job sets.
 type NodeSet struct {
-	Arg string `yaml:"arg"` // the name of the argument this job outputs by default
-	As  string `yaml:"as"`  // the name of the argument this job should output
+	Arg string  `yaml:"arg"` // the name of the argument this job outputs by default
+	As  *string `yaml:"as"`  // the name of the argument this job should output
 }
 
 // SequenceSpec defines the structure expected from the config yaml file to
@@ -135,6 +135,11 @@ func ReadConfig(configFile string) (Config, error) {
 				return cfg, fmt.Errorf("error in '%s %s' node: retryWait: %s is set but retry is not set", node.NodeType, node.Name, node.RetryWait)
 			}
 
+			for i, nodeSet := range node.Sets {
+				if nodeSet.As == nil {
+					node.Sets[i].As = &nodeSet.Arg
+				}
+			}
 		}
 
 		// Validate ACLs, if any

@@ -35,7 +35,6 @@ sequences:
             given: foo
         sets:
           - arg: aArg
-            as: aArg
         deps: []
         retry: 1
         retryWait: 500ms

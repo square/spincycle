@@ -13,7 +13,6 @@ sequences:
             given: host
         sets:
           - arg: instances
-            as: instances
       pre-flight-checks:
         category: sequence
         type: check-instance-is-ok

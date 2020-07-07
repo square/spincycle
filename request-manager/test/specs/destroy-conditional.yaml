@@ -52,7 +52,6 @@ sequences:
             given: container
         sets:
           - arg: physicalhost
-            as: physicalhost
         deps: []
       destroy-2:
         category: job
@@ -75,7 +74,6 @@ sequences:
             given: container
         sets:
           - arg: physicalhost
-            as: physicalhost
         deps: []
   double-conditional:
     args:
@@ -139,7 +137,6 @@ sequences:
             given: container
         sets:
           - arg: physicalhost
-            as: physicalhost
         deps: []
       archive-2:
         category: job
