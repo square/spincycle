@@ -137,12 +137,12 @@ func ReadConfig(configFile string) (Config, error) {
 
 			for i, nodeSet := range node.Sets {
 				if nodeSet.As == nil {
-					node.Sets[i].As = &nodeSet.Arg
+					node.Sets[i].As = &node.Sets[i].Arg
 				}
 			}
 			for i, nodeArg := range node.Args {
 				if nodeArg.Given == nil {
-					node.Args[i].Given = &nodeArg.Expected
+					node.Args[i].Given = &node.Args[i].Expected
 				}
 			}
 		}
