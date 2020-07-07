@@ -14,14 +14,14 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/square/spincycle/config"
-	"github.com/square/spincycle/request-manager/api"
-	"github.com/square/spincycle/request-manager/app"
-	"github.com/square/spincycle/request-manager/auth"
-	"github.com/square/spincycle/request-manager/grapher"
-	"github.com/square/spincycle/request-manager/joblog"
-	"github.com/square/spincycle/request-manager/request"
-	"github.com/square/spincycle/request-manager/status"
+	"github.com/square/spincycle/v2/config"
+	"github.com/square/spincycle/v2/request-manager/api"
+	"github.com/square/spincycle/v2/request-manager/app"
+	"github.com/square/spincycle/v2/request-manager/auth"
+	"github.com/square/spincycle/v2/request-manager/grapher"
+	"github.com/square/spincycle/v2/request-manager/joblog"
+	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/status"
 )
 
 var (

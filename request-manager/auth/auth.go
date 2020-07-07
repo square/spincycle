@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/proto"
 )
 
 // Caller represents an HTTP client making a request. Callers are determined by

@@ -19,14 +19,14 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	log "github.com/sirupsen/logrus"
 
-	serr "github.com/square/spincycle/errors"
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/app"
-	"github.com/square/spincycle/request-manager/auth"
-	"github.com/square/spincycle/request-manager/joblog"
-	"github.com/square/spincycle/request-manager/request"
-	"github.com/square/spincycle/request-manager/status"
-	v "github.com/square/spincycle/version"
+	serr "github.com/square/spincycle/v2/errors"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/app"
+	"github.com/square/spincycle/v2/request-manager/auth"
+	"github.com/square/spincycle/v2/request-manager/joblog"
+	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/status"
+	v "github.com/square/spincycle/v2/version"
 )
 
 const (

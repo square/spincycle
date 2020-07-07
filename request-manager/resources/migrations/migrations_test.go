@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	testdb "github.com/square/spincycle/request-manager/test/db"
+	testdb "github.com/square/spincycle/v2/request-manager/test/db"
 
 	"github.com/go-test/deep"
 )

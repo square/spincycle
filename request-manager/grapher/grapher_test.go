@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
-	"github.com/square/spincycle/job"
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/id"
-	"github.com/square/spincycle/test/mock"
+	"github.com/square/spincycle/v2/job"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/id"
+	"github.com/square/spincycle/v2/test/mock"
 )
 
 type testFactory struct{}

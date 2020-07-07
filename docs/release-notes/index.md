@@ -9,7 +9,7 @@ permalink: /release-notes
 
 ## v2.0
 
-### v2.0.0 (released tbd)
+### v2.0.0 (released 2020-07-07)
 
 * Request specs use backwards-incompatible sets-arg-as syntax. Script to upgrade [here](https://github.com/square/spincycle/tree/master/util/reformat-yaml/).
 

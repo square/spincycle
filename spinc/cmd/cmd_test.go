@@ -5,8 +5,8 @@ package cmd_test
 import (
 	"testing"
 
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/spinc/cmd"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/spinc/cmd"
 )
 
 // args is used in ps_test and status_test (and maybe others)

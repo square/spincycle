@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/spinc/app"
-	"github.com/square/spincycle/spinc/cmd"
-	"github.com/square/spincycle/spinc/config"
-	"github.com/square/spincycle/test/mock"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/spinc/app"
+	"github.com/square/spincycle/v2/spinc/cmd"
+	"github.com/square/spincycle/v2/spinc/config"
+	"github.com/square/spincycle/v2/test/mock"
 )
 
 func TestPs(t *testing.T) {

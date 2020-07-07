@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/go-sql-driver/mysql"
-	rmtest "github.com/square/spincycle/request-manager/test"
-	"github.com/square/spincycle/test"
+	rmtest "github.com/square/spincycle/v2/request-manager/test"
+	"github.com/square/spincycle/v2/test"
 )
 
 type manager struct {

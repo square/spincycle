@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/proto"
 )
 
 // MakeHTTPRequest is a helper function for making an http request. The response

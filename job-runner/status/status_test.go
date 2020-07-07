@@ -10,10 +10,10 @@ import (
 	"github.com/orcaman/concurrent-map"
 
 	"github.com/go-test/deep"
-	"github.com/square/spincycle/job-runner/status"
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/test"
-	"github.com/square/spincycle/test/mock"
+	"github.com/square/spincycle/v2/job-runner/status"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/test"
+	"github.com/square/spincycle/v2/test/mock"
 )
 
 func TestRunning(t *testing.T) {

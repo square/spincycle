@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/spinc/app"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/spinc/app"
 )
 
 type Running struct {

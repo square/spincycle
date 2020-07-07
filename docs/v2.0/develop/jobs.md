@@ -7,7 +7,7 @@ nav_order: 2
 
 # Jobs
 
-A job is an atomic, reusable unit of work. Under the hood, requests are directed acyclic graphs with jobs as the vertices. Ideally, every job in a request is a single step or task to accomplish the request. Outside a request, the best jobs are generic and reusable. For example, a job that adds a virtual IP address to a network interface is generic and reusable in many different requests. Inevitably, however, some jobs will be specific and used in only a single requests. The main goal is that one job does one thing. More reusable jobs makes your [jobs repo](/spincycle/v1.0/learn-more/jobs-repo) more values, and new requests faster to create.
+A job is an atomic, reusable unit of work. Under the hood, requests are directed acyclic graphs with jobs as the vertices. Ideally, every job in a request is a single step or task to accomplish the request. Outside a request, the best jobs are generic and reusable. For example, a job that adds a virtual IP address to a network interface is generic and reusable in many different requests. Inevitably, however, some jobs will be specific and used in only a single requests. The main goal is that one job does one thing. More reusable jobs makes your [jobs repo](/spincycle/v2.0/learn-more/jobs-repo) more values, and new requests faster to create.
 
 **Every job must implement the [job.Job interface](https://godoc.org/github.com/square/spincycle/job#Job)**. Spin Cycle only uses this interface, so it has zero knowledge of job implementation details.
 

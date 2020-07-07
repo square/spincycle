@@ -11,16 +11,16 @@ import (
 
 	"github.com/go-test/deep"
 
-	serr "github.com/square/spincycle/errors"
-	"github.com/square/spincycle/job"
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/grapher"
-	"github.com/square/spincycle/request-manager/id"
-	"github.com/square/spincycle/request-manager/request"
-	rmtest "github.com/square/spincycle/request-manager/test"
-	testdb "github.com/square/spincycle/request-manager/test/db"
-	"github.com/square/spincycle/test"
-	"github.com/square/spincycle/test/mock"
+	serr "github.com/square/spincycle/v2/errors"
+	"github.com/square/spincycle/v2/job"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/grapher"
+	"github.com/square/spincycle/v2/request-manager/id"
+	"github.com/square/spincycle/v2/request-manager/request"
+	rmtest "github.com/square/spincycle/v2/request-manager/test"
+	testdb "github.com/square/spincycle/v2/request-manager/test/db"
+	"github.com/square/spincycle/v2/test"
+	"github.com/square/spincycle/v2/test/mock"
 )
 
 var dbm testdb.Manager

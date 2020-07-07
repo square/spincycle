@@ -5,7 +5,7 @@ package mock
 import (
 	"errors"
 
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/proto"
 )
 
 var (

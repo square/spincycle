@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
-	"github.com/square/spincycle/config"
+	"github.com/square/spincycle/v2/config"
 )
 
 func createTempFile(t *testing.T, content []byte) string {

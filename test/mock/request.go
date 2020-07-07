@@ -6,8 +6,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/auth"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/auth"
 )
 
 var (

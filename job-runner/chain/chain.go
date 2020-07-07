@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/proto"
 )
 
 // chain represents a job chain and some meta information about it.

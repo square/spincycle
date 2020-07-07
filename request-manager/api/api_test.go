@@ -13,13 +13,13 @@ import (
 	"github.com/go-test/deep"
 	"github.com/labstack/echo/v4"
 
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/api"
-	"github.com/square/spincycle/request-manager/app"
-	"github.com/square/spincycle/request-manager/auth"
-	testutil "github.com/square/spincycle/test"
-	"github.com/square/spincycle/test/mock"
-	v "github.com/square/spincycle/version"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/api"
+	"github.com/square/spincycle/v2/request-manager/app"
+	"github.com/square/spincycle/v2/request-manager/auth"
+	testutil "github.com/square/spincycle/v2/test"
+	"github.com/square/spincycle/v2/test/mock"
+	v "github.com/square/spincycle/v2/version"
 )
 
 var server *httptest.Server

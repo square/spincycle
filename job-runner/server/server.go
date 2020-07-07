@@ -15,14 +15,14 @@ import (
 	"github.com/orcaman/concurrent-map"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/square/spincycle/config"
-	"github.com/square/spincycle/job-runner/api"
-	"github.com/square/spincycle/job-runner/app"
-	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/runner"
-	"github.com/square/spincycle/job-runner/status"
-	"github.com/square/spincycle/jobs"
-	"github.com/square/spincycle/request-manager"
+	"github.com/square/spincycle/v2/config"
+	"github.com/square/spincycle/v2/job-runner/api"
+	"github.com/square/spincycle/v2/job-runner/app"
+	"github.com/square/spincycle/v2/job-runner/chain"
+	"github.com/square/spincycle/v2/job-runner/runner"
+	"github.com/square/spincycle/v2/job-runner/status"
+	"github.com/square/spincycle/v2/jobs"
+	"github.com/square/spincycle/v2/request-manager"
 )
 
 type Server struct {

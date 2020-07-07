@@ -5,8 +5,8 @@ package main
 import (
 	"log"
 
-	"github.com/square/spincycle/request-manager/app"
-	"github.com/square/spincycle/request-manager/server"
+	"github.com/square/spincycle/v2/request-manager/app"
+	"github.com/square/spincycle/v2/request-manager/server"
 )
 
 func main() {

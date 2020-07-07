@@ -3,11 +3,11 @@
 // Package jobs implements all SpinCycle jobs and a factory to create them. This package
 // is intended to be overwritten with a custom jobs package with factory and job
 // implementations that make sense for your domain. For an example jobs package, look at
-// the package github.com/square/spincycle/dev/jobs.
+// the package github.com/square/spincycle/v2/dev/jobs.
 package jobs
 
 import (
-	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/v2/job"
 )
 
 // Factory is a package variable referenced from other modules. It is the main entry point

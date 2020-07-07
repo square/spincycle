@@ -11,13 +11,13 @@ import (
 
 	"github.com/orcaman/concurrent-map"
 
-	"github.com/square/spincycle/job-runner/api"
-	"github.com/square/spincycle/job-runner/app"
-	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/proto"
-	testutil "github.com/square/spincycle/test"
-	"github.com/square/spincycle/test/mock"
-	v "github.com/square/spincycle/version"
+	"github.com/square/spincycle/v2/job-runner/api"
+	"github.com/square/spincycle/v2/job-runner/app"
+	"github.com/square/spincycle/v2/job-runner/chain"
+	"github.com/square/spincycle/v2/proto"
+	testutil "github.com/square/spincycle/v2/test"
+	"github.com/square/spincycle/v2/test/mock"
+	v "github.com/square/spincycle/v2/version"
 )
 
 var (

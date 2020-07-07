@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/proto"
 )
 
 func TestStatusFilterString(t *testing.T) {

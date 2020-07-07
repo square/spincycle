@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/square/spincycle/config"
-	"github.com/square/spincycle/request-manager"
+	"github.com/square/spincycle/v2/config"
+	"github.com/square/spincycle/v2/request-manager"
 )
 
 type Context struct {

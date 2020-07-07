@@ -9,11 +9,11 @@ import (
 
 	"github.com/go-test/deep"
 
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/status"
-	rmtest "github.com/square/spincycle/request-manager/test"
-	testdb "github.com/square/spincycle/request-manager/test/db"
-	"github.com/square/spincycle/test/mock"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/status"
+	rmtest "github.com/square/spincycle/v2/request-manager/test"
+	testdb "github.com/square/spincycle/v2/request-manager/test/db"
+	"github.com/square/spincycle/v2/test/mock"
 )
 
 var dbm testdb.Manager

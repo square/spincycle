@@ -6,8 +6,8 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/square/spincycle/job-runner/runner"
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/job-runner/runner"
+	"github.com/square/spincycle/v2/proto"
 )
 
 var (

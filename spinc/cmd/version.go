@@ -5,8 +5,8 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/square/spincycle/spinc/app"
-	v "github.com/square/spincycle/version"
+	"github.com/square/spincycle/v2/spinc/app"
+	v "github.com/square/spincycle/v2/version"
 )
 
 type Version struct {
