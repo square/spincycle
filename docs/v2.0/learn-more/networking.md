@@ -17,6 +17,6 @@ Solid lines indicate specific connections. When a user wants the status of a req
 
 The bottom diagram is a typical production deployment: N-many RM and N-many JR, both behind load balancers. Users communicate with any RM, and the RM run requests on any JR via load balancing. The RM still communicate directly with specific JR to get request status (solid line).
 
-JR instances report [server.addr](/spincycle/v1.0/operate/configure.html#jr.server.addr) as their address.
+JR instances report [server.addr](/spincycle/v2.0/operate/configure.html#jr.server.addr) as their address.
 
 TLS is supported for all connectinos.

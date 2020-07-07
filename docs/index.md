@@ -21,26 +21,26 @@ Spin Cycle was purpose-built for platform automation at scale:
 Spin Cycle can do anything you can program. The database team at [Square](https://squareup.com/) uses it to provision and decommission databases, safely stop and start hosts, upgrade MySQL and Docker images, reconfigure services, and more.
 
 ## Learn More
-* [Basic Concepts](v1.0/learn-more/basic-concepts)&nbsp;&#x2728;
-* [Jobs Repo](v1.0/learn-more/jobs-repo)
-* [Networking](v1.0/learn-more/networking)
-* [Support](v1.0/learn-more/support)
+* [Basic Concepts](v2.0/learn-more/basic-concepts)&nbsp;&#x2728;
+* [Jobs Repo](v2.0/learn-more/jobs-repo)
+* [Networking](v2.0/learn-more/networking)
+* [Support](v2.0/learn-more/support)
 
 ## Operate
-* [Deploy](v1.0/operate/deploy)
-* [Configure](v1.0/operate/configure)
-* [spinc (CLI)](v1.0/operate/spinc)
-* [Auth](v1.0/operate/auth)
+* [Deploy](v2.0/operate/deploy)
+* [Configure](v2.0/operate/configure)
+* [spinc (CLI)](v2.0/operate/spinc)
+* [Auth](v2.0/operate/auth)
 
 ## Develop
-* [Dev Env](v1.0/develop/dev-env)
-* [Jobs](v1.0/develop/jobs)
-* [Requests](v1.0/develop/requests)
-* [Extensions](v1.0/develop/extensions)
+* [Dev Env](v2.0/develop/dev-env)
+* [Jobs](v2.0/develop/jobs)
+* [Requests](v2.0/develop/requests)
+* [Extensions](v2.0/develop/extensions)
 
 ## API
-* [Overview](v1.0/api/overview)
-* [Endpoints](v1.0/api/endpoints)
+* [Overview](v2.0/api/overview)
+* [Endpoints](v2.0/api/endpoints)
 
 ## Release Notes
 * [Release Notes](release-notes)

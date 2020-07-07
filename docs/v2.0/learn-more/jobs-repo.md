@@ -7,7 +7,7 @@ nav_order: 2
 
 # Jobs Repo
 
-The jobs repo is a Go package called `jobs` that contains your jobs and a factory for making them. When building Spin Cycle, the open-source code is "linked" to your jobs repo. (See [Building](/spincycle/v1.0/operate/deploy.html#building).) There are four requirements for your jobs repo:
+The jobs repo is a Go package called `jobs` that contains your jobs and a factory for making them. When building Spin Cycle, the open-source code is "linked" to your jobs repo. (See [Building](/spincycle/v2.0/operate/deploy.html#building).) There are four requirements for your jobs repo:
 
 1. Package name `jobs`
 1. Defines package variable `var Factory job.Factory`

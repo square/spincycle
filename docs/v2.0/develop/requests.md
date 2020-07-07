@@ -7,7 +7,7 @@ nav_order: 3
 
 # Requests
 
-Requests are specified in YAML files. On startup, the Request Manager (RM) reads all specs: all the .yaml files in [specs.dir](/spincycle/v1.0/operate/configure#rm.specs.dir). Subdirectories are not currently supported, so be sure to combine all specs in one directory.
+Requests are specified in YAML files. On startup, the Request Manager (RM) reads all specs: all the .yaml files in [specs.dir](/spincycle/v2.0/operate/configure#rm.specs.dir). Subdirectories are not currently supported, so be sure to combine all specs in one directory.
 
 All spec files have the same syntax. The RM combines specs from multiple files to complete a request. One sequence per file and descriptively named files help keep all the specs oranized and easy to find by humans.
 
@@ -43,7 +43,7 @@ sequences:
 
 This defines one or more sequences under `sequences:`. Although multiple sequence can be defined in a single file, we suggest one sequence per file.
 
-The example above defines one sequence called "stop-container". (We would name this file stop-container.yaml.) If `request: true`, the sequence is a request that callers can make. This also makes [spinc](/spincycle/v1.0/operate/spinc) (ran without any command line options) list the request. Set `request: true` only for top-level sequences that you want to expose to users as requests. All requests are sequences, but not all sequences are requests. To distinguish:
+The example above defines one sequence called "stop-container". (We would name this file stop-container.yaml.) If `request: true`, the sequence is a request that callers can make. This also makes [spinc](/spincycle/v2.0/operate/spinc) (ran without any command line options) list the request. Set `request: true` only for top-level sequences that you want to expose to users as requests. All requests are sequences, but not all sequences are requests. To distinguish:
 
 * request: a sequence with `request: true`
 * non-request sequence (NRS): a sequence with `request: false` (usually omitted)
@@ -57,7 +57,7 @@ Sequences have three types of arguments (args): required, optional, and static.
 * `optional:` args are optional. If not explicitly given, the default value in the spec is used. In the example above, arg "restart" defaults to an empty string unless the user provides a value.
 * `static:` args are fixed values. Static arg "slackChan" has value "#dba". Static args are useful when the value is known but differs in different sequences. For example, another request might set slackChan=#yourTeam to get Slack notifications at #yourTeam instead of #dba. This could also be solved by making slackChan a required or optional arg.
 
-In [job args](/spincycle/v1.0/develop/jobs#job-args-and-data), there are no distinctions. `jobArgs["slackChan"]` is the same as `jobArgs["containerName"]`, and jobs can change its value.
+In [job args](/spincycle/v2.0/develop/jobs#job-args-and-data), there are no distinctions. `jobArgs["slackChan"]` is the same as `jobArgs["containerName"]`, and jobs can change its value.
 
 ## Node Specs
 
@@ -83,7 +83,7 @@ A job node specifies a job to run. (If this was a tree data structure, these wou
         deps: []
 ```
 
-All node specs begin with a node name: "expand-cluster", in this case. Node names must be unique within the sequence. (Spin Cycle makes nodes unique within a request by assigning them an internal job ID.) `category: job` makes this node a job node. `type:` specifies the job type: "etre/expand-cluster". The `jobs.Factory` in your [jobs repo](http://localhost:4000/spincycle/v1.0/learn-more/jobs-repo) must be able to make a job of this type.
+All node specs begin with a node name: "expand-cluster", in this case. Node names must be unique within the sequence. (Spin Cycle makes nodes unique within a request by assigning them an internal job ID.) `category: job` makes this node a job node. `type:` specifies the job type: "etre/expand-cluster". The `jobs.Factory` in your [jobs repo](http://localhost:4000/spincycle/v2.0/learn-more/jobs-repo) must be able to make a job of this type.
 
 `args:` lists all job args that the job requires. `expected:` is the job arg name that the job expects, and `given:` is the job arg name in the specs to use. In other words,  `jobArgs[expected] = jobArgs[given]`. This is useful because it is nearly impossible to make all job args in specs match all job args in jobs. For example, a spec might use "host" for a server's hostname, but a job uses "hostname". In this case,
 
@@ -179,7 +179,7 @@ Conditional nodes can be used to switch between alternatives or, like the exampl
 
 ## Sequence Expansion
 
-[Sequence expansion](/spincycle/v1.0/learn-more/basic-concepts#sequence-expansion) is possible in sequence and conditional nodes with `each:`:
+[Sequence expansion](/spincycle/v2.0/learn-more/basic-concepts#sequence-expansion) is possible in sequence and conditional nodes with `each:`:
 
 ```yaml
       decomm-nodes:

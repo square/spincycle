@@ -7,7 +7,7 @@ nav_order: 4
 
 # Extensions
 
-Extensions are user-provided plugins, hooks, and factories. Extensions allow you to extend and modify how core parts of Spin Cycle work without changing the core code. As an open source project, Spin Cycle cannot include all possible solutions out of the box. [Auth](/spincycle/v1.0/operate/auth), for example, is user-specific. The auth plugin lets you tailor Spin Cycle auth for your security.
+Extensions are user-provided plugins, hooks, and factories. Extensions allow you to extend and modify how core parts of Spin Cycle work without changing the core code. As an open source project, Spin Cycle cannot include all possible solutions out of the box. [Auth](/spincycle/v2.0/operate/auth), for example, is user-specific. The auth plugin lets you tailor Spin Cycle auth for your security.
 
 The `app` packages  define and document all the extensions:
 
@@ -71,7 +71,7 @@ vendor/
 
 Open-source Spin Cycle is a vendor package: `vendor/github.com/square/spincycle`. The main.go files contain your extensions, and you build the binaries from these instead of the open-source files.
 
-Like a [normal build](/spincycle/v1.0/operate/deploy#building), your `jobs/` repo is needed, but the symlink is different:
+Like a [normal build](/spincycle/v2.0/operate/deploy#building), your `jobs/` repo is needed, but the symlink is different:
 
 ```sh
 $ rm -f vendor/github.com/square/spincycle/jobs

@@ -14,7 +14,7 @@ nav_order: 2
 ---
 
 ## Requests
-All things related to Spin Cycle [requests](/spincycle/v1.0/learn-more/basic-concepts#request).
+All things related to Spin Cycle [requests](/spincycle/v2.0/learn-more/basic-concepts#request).
 
 ### Create and start a new request
 <div class="code-example" markdown="1">

@@ -13,16 +13,16 @@ The Request Manager (RM) and Job Runner (JR) binaries are configured with a YAML
 2. Config file
 3. Environment variables
 
-The built-in defaults are only sufficient to run a local development instance. You can [compile the binaries](/spincycle/v1.0/operate/deploy.html#building) and run them without any options, using only the built-in default configs.
+The built-in defaults are only sufficient to run a local development instance. You can [compile the binaries](/spincycle/v2.0/operate/deploy.html#building) and run them without any options, using only the built-in default configs.
 
 For a production deploy, you must provide a YAML config file or environment variables to configure Spin Cycle to your infrastructure. These are the most important config values:
 
 | Request Manager | Job Runner |
 | --------------- | ---------- |
-| [server.addr](/spincycle/v1.0/operate/configure.html#rm.server.addr) | [server.addr](/spincycle/v1.0/operate/configure.html#jr.server.addr) |
-| [jr_client.url](/spincycle/v1.0/operate/configure.html#rm.jr_client.url) | [rm_client.url](/spincycle/v1.0/operate/configure.html#jr.rm_client.url) |
-| [mysql.dsn](/spincycle/v1.0/operate/configure.html#rm.mysql.dsn) | &nbsp; |
-| [specs.dir](/spincycle/v1.0/operate/configure.html#rm.specs.dir) | &nbsp; |
+| [server.addr](/spincycle/v2.0/operate/configure.html#rm.server.addr) | [server.addr](/spincycle/v2.0/operate/configure.html#jr.server.addr) |
+| [jr_client.url](/spincycle/v2.0/operate/configure.html#rm.jr_client.url) | [rm_client.url](/spincycle/v2.0/operate/configure.html#jr.rm_client.url) |
+| [mysql.dsn](/spincycle/v2.0/operate/configure.html#rm.mysql.dsn) | &nbsp; |
+| [specs.dir](/spincycle/v2.0/operate/configure.html#rm.specs.dir) | &nbsp; |
 
 The RM and JR log the final config on startup.
 
