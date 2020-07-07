@@ -62,7 +62,6 @@ sequences:
         type: jobs/a
         args:
           - expected: hostname
-            given: hostname
         sets:
           - arg: new-arg
         deps: []
@@ -71,7 +70,6 @@ sequences:
         type: jobs/b
         args: []
           - expected: new-arg
-            given: new-arg
         sets: []
         deps: [job-a]
       do-seq-2:
