@@ -63,7 +63,8 @@ sequences:
         args:
           - expected: hostname
             given: hostname
-        sets: [new-arg]
+        sets:
+          - arg: new-arg
         deps: []
       job-b:
         category: job

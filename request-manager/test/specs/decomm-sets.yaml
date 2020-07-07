@@ -20,6 +20,7 @@ sequences:
             given: cluster
         sets:
           - arg: instances
+            as: instances0
         deps: []
         retry: 3
         retryWait: 10s
@@ -32,29 +33,30 @@ sequences:
           - expected: env
             given: env
           - expected: instances
-            given: instances
+            given: instances0
         sets: []
         deps: [pre-flight-checks]
       pre-flight-checks:
         category: sequence
         type: check-instance-is-ok
         each:
-          - instances:instance   # repeat for each instance in instances
+          - instances0:instance   # repeat for each instance in instances
                                  # i.e. each iteration of the sequence check-instance-is-ok will
                                  #      expect a variable "instance" to be set in job args
         args:
           - expected: instances
-            given: instances
+            given: instances0
         deps: [get-instances]
-        retryWait: 10s # specifies duration with retry: 0
+        retry: 3
+        retryWait: 10s # this should be ignored
       decommission-instances:
         category: sequence
         type: decommission-instance
         each:
-          - instances:instance # repeat for each instance in instances
+          - instances0:instance # repeat for each instance in instances
         args:
           - expected: instances
-            given: instances
+            given: instances0
         deps: [prep-1]
       first-cleanup-job:
         category: job
@@ -102,13 +104,14 @@ sequences:
             given: instance
         sets:
           - arg: physicalhost
+            as: physicalhost0
         deps: []
       check-ok-again:
         category: job
         type: check-ok-2
         args:
           - expected: hostAddr
-            given: physicalhost
+            given: physicalhost0
           - expected: nodeAddr
             given: instance
         sets: []
@@ -128,6 +131,7 @@ sequences:
             given: instance
         sets:
           - arg: physicalhost
+            as: physicalhost
         deps: []
       decom-2:
         category: job

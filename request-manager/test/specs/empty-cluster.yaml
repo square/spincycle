@@ -14,7 +14,8 @@ sequences:
         args:
           - expected: cluster
             given: cluster
-        sets: [instances] # instances is an empty slice
+        sets: # instances is an empty slice
+          - arg: instances
         deps: []
       pre-flight-checks:
         category: sequence

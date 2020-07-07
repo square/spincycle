@@ -631,7 +631,8 @@ func (o *Grapher) remapNodeArgs(n *NodeSpec, args map[string]interface{}) (map[s
 }
 
 // Given a node definition and two args sets. Copy the arguments that
-// are defined in the "sets" clause into the main args map.
+// are defined in the "sets/arg" clause into the main args map under
+// the name defined by the "sets/as" field.
 func (o *Grapher) setNodeArgs(n *NodeSpec, argsTo, argsFrom map[string]interface{}) error {
 	if len(n.Sets) == 0 {
 		return nil
@@ -639,11 +640,11 @@ func (o *Grapher) setNodeArgs(n *NodeSpec, argsTo, argsFrom map[string]interface
 	for _, key := range n.Sets {
 		var ok bool
 		var val interface{}
-		val, ok = argsFrom[key]
+		val, ok = argsFrom[key.Arg]
 		if !ok {
-			return fmt.Errorf("expected %s to set %s in jobargs", n.NodeType, key)
+			return fmt.Errorf("expected %s to set %s in jobargs", n.NodeType, key.Arg)
 		}
-		argsTo[key] = val
+		argsTo[*key.As] = val
 	}
 
 	return nil

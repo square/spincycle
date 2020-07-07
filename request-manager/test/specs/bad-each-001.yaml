@@ -11,7 +11,8 @@ sequences:
         args:
           - expected: host
             given: host
-        sets: [instances]
+        sets:
+          - arg: instances
       pre-flight-checks:
         category: sequence
         type: check-instance-is-ok

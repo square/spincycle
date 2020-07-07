@@ -33,7 +33,8 @@ sequences:
         args:
           - expected: foo
             given: foo
-        sets: [aArg]
+        sets:
+          - arg: aArg
         deps: []
         retry: 1
         retryWait: 500ms

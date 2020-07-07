@@ -50,7 +50,8 @@ sequences:
         args:
           - expected: container
             given: container
-        sets: [physicalhost]
+        sets:
+          - arg: physicalhost
         deps: []
       destroy-2:
         category: job
@@ -71,7 +72,8 @@ sequences:
         args:
           - expected: container
             given: container
-        sets: [physicalhost]
+        sets:
+          - arg: physicalhost
         deps: []
   double-conditional:
     args:
@@ -133,7 +135,8 @@ sequences:
         args:
           - expected: container
             given: container
-        sets: [physicalhost]
+        sets:
+          - arg: physicalhost
         deps: []
       archive-2:
         category: job

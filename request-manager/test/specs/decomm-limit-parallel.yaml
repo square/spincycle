@@ -18,7 +18,8 @@ sequences:
         args:
           - expected: cluster
             given: cluster
-        sets: [instances]
+        sets:
+          - arg: instances
         deps: []
         retry: 3
         retryWait: 10s
@@ -102,7 +103,8 @@ sequences:
         args:
           - expected: container
             given: instance
-        sets: [physicalhost]
+        sets:
+          - arg: physicalhost
         deps: []
       check-ok-again:
         category: job
@@ -127,7 +129,8 @@ sequences:
         args:
           - expected: container
             given: instance
-        sets: [physicalhost]
+        sets:
+          - arg: physicalhost
         deps: []
       decom-2:
         category: job
