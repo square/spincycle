@@ -14,7 +14,7 @@ usage: reformat [input file path] [output file path]
 
 ## Why is reformatting necessary?
 
-See the [release notes](https://github.com/square/spincycle/blob/master/docs/release-notes/index.md).
+See the [release notes](https://square.github.io/spincycle/release-notes).
 
 
 * In cases where a job does not set any args, i.e. `sets: []`, the reformatter does nothing; this line passes through the reformatter as is.
@@ -60,7 +60,10 @@ The reformatter infers the indent size from the `sets:` line.
 
 * If using `sets: [...]` notation, a closing bracket must be provided. Otherwise, the reformatter throws an error. (This is illegal YAML anyway.)
 
-## What the reformatter isn't
+## Limitations, and what the reformatter isn't
+
+The reformatter will always recognize `#` as the start of a comment. (This only matters for `sets:` blocks.) So, `sets: "string#"` will parse incorrectly.
+
+Similarly, "`sets:`" will always be considered the start of a `sets:` block. So, `blah: "sets:"` will parse incorrectly.
 
 Note that the reformatter does _not_ check syntax for any other part of the YAML file; any line not part of a `sets` block will pass through as is.
-

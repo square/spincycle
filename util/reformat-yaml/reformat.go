@@ -54,16 +54,18 @@ func main() {
 			inp = inp[:i]
 		}
 
-		// Case: first line of `sets` block
 		if i := strings.Index(inp, "sets:"); i != -1 {
+			// Case: first line of `sets` block
+
 			if i%4 != 0 {
 				fmt.Printf("%s line %d: Expected four (equal) indents on line\n", filename, line)
 				os.Exit(1)
 			}
 			indent = inp[:i] + inp[:i/4]
 
-			// Case: `sets: [...]` notation
 			if j := strings.Index(inp, "["); j != -1 {
+				// Case: `sets: [...]` notation
+
 				// Assume this indicates the end of the list
 				k := strings.LastIndex(inp, "]")
 				if k == -1 {
@@ -71,27 +73,27 @@ func main() {
 					os.Exit(1)
 				}
 
-				// Case: non-empty list
 				if j+1 < k {
+					// Case: non-empty list
 					args := strings.Split(inp[j+1:k], ",")
 					inp = inp[:i+5] + comment
 					for _, arg := range args {
 						arg = strings.TrimSpace(arg)
 						inp += fmt.Sprintf("\n%s- arg: %s", indent, arg)
 					}
-					// Case: empty list
 				} else {
+					// Case: empty list
 					inp += comment
 				}
-				// Case: `sets:\n -` notation
 			} else {
+				// Case: `sets:\n -` notation
 				sets = true
 				inp += comment
 			}
-			// Case: currently in a `sets` block
 		} else if sets {
-			// Case: still in a `sets` block
+			// Case: currently in a `sets` block
 			if strings.Contains(inp, indent+"-") {
+				// Case: still in a `sets` block
 				i := strings.IndexRune(inp, '-')
 				arg := strings.TrimSpace(inp[i+1:])
 				if strings.Index(arg, "arg:") == 0 {
@@ -100,13 +102,13 @@ func main() {
 				} else {
 					inp = fmt.Sprintf("%s- arg: %s%s", indent, arg, comment)
 				}
-				// Case: exit `sets` block
 			} else {
+				// Case: exit `sets` block
 				sets = false
 				inp += comment
 			}
-			// Case: not a `sets` block
 		} else {
+			// Case: not a `sets` block
 			inp += comment
 		}
 
