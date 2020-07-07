@@ -5,7 +5,7 @@ package chain
 import (
 	"fmt"
 
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/proto"
 )
 
 // ErrInvalidChain is the error returned when a chain is not valid.

@@ -18,11 +18,11 @@ import (
 	"github.com/rs/xid"
 	log "github.com/sirupsen/logrus"
 
-	serr "github.com/square/spincycle/errors"
-	jr "github.com/square/spincycle/job-runner"
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/grapher"
-	"github.com/square/spincycle/retry"
+	serr "github.com/square/spincycle/v2/errors"
+	jr "github.com/square/spincycle/v2/job-runner"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/grapher"
+	"github.com/square/spincycle/v2/retry"
 )
 
 const (

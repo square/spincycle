@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
-	jr "github.com/square/spincycle/job-runner"
-	"github.com/square/spincycle/proto"
+	jr "github.com/square/spincycle/v2/job-runner"
+	"github.com/square/spincycle/v2/proto"
 )
 
 func TestNewJobChain(t *testing.T) {

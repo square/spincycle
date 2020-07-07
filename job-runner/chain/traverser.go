@@ -10,10 +10,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/square/spincycle/job-runner/runner"
-	"github.com/square/spincycle/proto"
-	rm "github.com/square/spincycle/request-manager"
-	"github.com/square/spincycle/retry"
+	"github.com/square/spincycle/v2/job-runner/runner"
+	"github.com/square/spincycle/v2/proto"
+	rm "github.com/square/spincycle/v2/request-manager"
+	"github.com/square/spincycle/v2/retry"
 )
 
 var (

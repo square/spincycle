@@ -1,4 +1,4 @@
-module github.com/square/spincycle
+module github.com/square/spincycle/v2
 
 go 1.13
 

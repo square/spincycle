@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net/url"
 
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/proto"
 )
 
 var (

@@ -14,11 +14,11 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/orcaman/concurrent-map"
 
-	"github.com/square/spincycle/job-runner/app"
-	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/status"
-	"github.com/square/spincycle/proto"
-	v "github.com/square/spincycle/version"
+	"github.com/square/spincycle/v2/job-runner/app"
+	"github.com/square/spincycle/v2/job-runner/chain"
+	"github.com/square/spincycle/v2/job-runner/status"
+	"github.com/square/spincycle/v2/proto"
+	v "github.com/square/spincycle/v2/version"
 )
 
 const (

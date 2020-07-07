@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/square/spincycle/spinc/app"
+	"github.com/square/spincycle/v2/spinc/app"
 )
 
 var (

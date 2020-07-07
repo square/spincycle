@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/square/spincycle/job"
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/job"
+	"github.com/square/spincycle/v2/proto"
 )
 
 // Factory is a job.Factory that makes "shell-command" type jobs.

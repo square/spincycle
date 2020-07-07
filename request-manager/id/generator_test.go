@@ -5,7 +5,7 @@ package id_test
 import (
 	"testing"
 
-	"github.com/square/spincycle/request-manager/id"
+	"github.com/square/spincycle/v2/request-manager/id"
 )
 
 func TestGeneratorLongIds(t *testing.T) {

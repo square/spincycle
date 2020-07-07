@@ -7,10 +7,10 @@ import (
 	"github.com/orcaman/concurrent-map"
 	log "github.com/sirupsen/logrus"
 
-	serr "github.com/square/spincycle/errors"
-	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager"
+	serr "github.com/square/spincycle/v2/errors"
+	"github.com/square/spincycle/v2/job-runner/chain"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager"
 )
 
 type Manager interface {

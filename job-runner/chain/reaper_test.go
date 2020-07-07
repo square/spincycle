@@ -8,11 +8,11 @@ import (
 
 	"github.com/go-test/deep"
 	log "github.com/sirupsen/logrus"
-	"github.com/square/spincycle/job-runner/chain"
-	"github.com/square/spincycle/job-runner/runner"
-	"github.com/square/spincycle/proto"
-	testutil "github.com/square/spincycle/test"
-	"github.com/square/spincycle/test/mock"
+	"github.com/square/spincycle/v2/job-runner/chain"
+	"github.com/square/spincycle/v2/job-runner/runner"
+	"github.com/square/spincycle/v2/proto"
+	testutil "github.com/square/spincycle/v2/test"
+	"github.com/square/spincycle/v2/test/mock"
 )
 
 // Get a default factory to use for testing. Tests probably need to re-set

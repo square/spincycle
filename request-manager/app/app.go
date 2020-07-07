@@ -13,15 +13,15 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/square/spincycle/config"
-	jr "github.com/square/spincycle/job-runner"
-	"github.com/square/spincycle/jobs"
-	"github.com/square/spincycle/request-manager/auth"
-	"github.com/square/spincycle/request-manager/grapher"
-	"github.com/square/spincycle/request-manager/id"
-	"github.com/square/spincycle/request-manager/joblog"
-	"github.com/square/spincycle/request-manager/request"
-	"github.com/square/spincycle/request-manager/status"
+	"github.com/square/spincycle/v2/config"
+	jr "github.com/square/spincycle/v2/job-runner"
+	"github.com/square/spincycle/v2/jobs"
+	"github.com/square/spincycle/v2/request-manager/auth"
+	"github.com/square/spincycle/v2/request-manager/grapher"
+	"github.com/square/spincycle/v2/request-manager/id"
+	"github.com/square/spincycle/v2/request-manager/joblog"
+	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/status"
 )
 
 // Context represents the config, core service singletons, and 3rd-party extensions.

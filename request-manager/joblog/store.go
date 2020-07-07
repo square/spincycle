@@ -7,8 +7,8 @@ import (
 	"context"
 	"database/sql"
 
-	serr "github.com/square/spincycle/errors"
-	"github.com/square/spincycle/proto"
+	serr "github.com/square/spincycle/v2/errors"
+	"github.com/square/spincycle/v2/proto"
 )
 
 // A Store reads and writes job logs to/from a persistent datastore.

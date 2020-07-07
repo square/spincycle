@@ -5,7 +5,7 @@ package grapher
 import (
 	"fmt"
 
-	"github.com/square/spincycle/job"
+	"github.com/square/spincycle/v2/job"
 )
 
 // Graph represents a graph. It represents a graph via

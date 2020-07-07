@@ -15,10 +15,10 @@ import (
 	"github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
 
-	serr "github.com/square/spincycle/errors"
-	jr "github.com/square/spincycle/job-runner"
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/retry"
+	serr "github.com/square/spincycle/v2/errors"
+	jr "github.com/square/spincycle/v2/job-runner"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/retry"
 )
 
 const (

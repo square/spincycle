@@ -9,10 +9,10 @@ import (
 	"os"
 	"time"
 
-	rm "github.com/square/spincycle/request-manager"
-	"github.com/square/spincycle/spinc/app"
-	"github.com/square/spincycle/spinc/cmd"
-	"github.com/square/spincycle/spinc/config"
+	rm "github.com/square/spincycle/v2/request-manager"
+	"github.com/square/spincycle/v2/spinc/app"
+	"github.com/square/spincycle/v2/spinc/cmd"
+	"github.com/square/spincycle/v2/spinc/config"
 )
 
 // Run runs spinc and exits when done. When using a standard spinc bin, Run is

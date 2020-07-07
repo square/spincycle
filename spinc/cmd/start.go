@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/spinc/app"
-	"github.com/square/spincycle/spinc/prompt"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/spinc/app"
+	"github.com/square/spincycle/v2/spinc/prompt"
 )
 
 type Start struct {

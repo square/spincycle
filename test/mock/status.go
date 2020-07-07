@@ -3,7 +3,7 @@
 package mock
 
 import (
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/proto"
 )
 
 type JRStatus struct {

@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/square/spincycle/proto"
-	testutil "github.com/square/spincycle/test"
+	"github.com/square/spincycle/v2/proto"
+	testutil "github.com/square/spincycle/v2/test"
 )
 
 func TestValidateJobChain(t *testing.T) {

@@ -3,8 +3,8 @@
 package grapher
 
 import (
-	"github.com/square/spincycle/job"
-	"github.com/square/spincycle/proto"
+	"github.com/square/spincycle/v2/job"
+	"github.com/square/spincycle/v2/proto"
 )
 
 // noop is the default node spec for sequence fan-out (source) and fan-in (sink) nodes.

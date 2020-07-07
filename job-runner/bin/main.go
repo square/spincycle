@@ -5,8 +5,8 @@ package main
 import (
 	"log"
 
-	"github.com/square/spincycle/job-runner/app"
-	"github.com/square/spincycle/job-runner/server"
+	"github.com/square/spincycle/v2/job-runner/app"
+	"github.com/square/spincycle/v2/job-runner/server"
 )
 
 func main() {

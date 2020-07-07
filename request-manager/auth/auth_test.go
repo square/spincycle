@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/square/spincycle/proto"
-	"github.com/square/spincycle/request-manager/auth"
-	"github.com/square/spincycle/test/mock"
+	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/auth"
+	"github.com/square/spincycle/v2/test/mock"
 )
 
 func TestManagerAuthenticate(t *testing.T) {

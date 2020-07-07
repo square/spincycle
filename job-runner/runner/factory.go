@@ -3,9 +3,9 @@
 package runner
 
 import (
-	"github.com/square/spincycle/job"
-	"github.com/square/spincycle/proto"
-	rm "github.com/square/spincycle/request-manager"
+	"github.com/square/spincycle/v2/job"
+	"github.com/square/spincycle/v2/proto"
+	rm "github.com/square/spincycle/v2/request-manager"
 )
 
 // A Factory makes a Runner for one job. There are two try counts: prevTries and

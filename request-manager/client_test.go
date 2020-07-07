@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/go-test/deep"
-	"github.com/square/spincycle/proto"
-	rm "github.com/square/spincycle/request-manager"
+	"github.com/square/spincycle/v2/proto"
+	rm "github.com/square/spincycle/v2/request-manager"
 )
 
 var (

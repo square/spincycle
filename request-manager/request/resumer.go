@@ -14,9 +14,9 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	serr "github.com/square/spincycle/errors"
-	jr "github.com/square/spincycle/job-runner"
-	"github.com/square/spincycle/proto"
+	serr "github.com/square/spincycle/v2/errors"
+	jr "github.com/square/spincycle/v2/job-runner"
+	"github.com/square/spincycle/v2/proto"
 )
 
 var (

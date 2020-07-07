@@ -9,8 +9,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/square/spincycle/request-manager"
-	"github.com/square/spincycle/spinc/config"
+	"github.com/square/spincycle/v2/request-manager"
+	"github.com/square/spincycle/v2/spinc/config"
 )
 
 var (
