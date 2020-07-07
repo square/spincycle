@@ -607,7 +607,7 @@ func (o *Grapher) allArgsPresent(n *NodeSpec, args map[string]interface{}) bool 
 		if arg.Expected == iterator {
 			continue // this one we can expect to not have
 		}
-		if _, ok := args[arg.Given]; !ok {
+		if _, ok := args[*arg.Given]; !ok {
 			return false
 		}
 	}
@@ -622,9 +622,9 @@ func (o *Grapher) remapNodeArgs(n *NodeSpec, args map[string]interface{}) (map[s
 	nodeArgs2 := map[string]interface{}{}
 	for _, arg := range n.Args {
 		var ok bool
-		nodeArgs2[arg.Expected], ok = args[arg.Given]
+		nodeArgs2[arg.Expected], ok = args[*arg.Given]
 		if !ok {
-			return nil, fmt.Errorf("cannot create job %s: missing %s from job args", n.NodeType, arg.Given)
+			return nil, fmt.Errorf("cannot create job %s: missing %s from job args", n.NodeType, *arg.Given)
 		}
 	}
 	return nodeArgs2, nil

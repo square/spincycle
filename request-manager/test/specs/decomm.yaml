@@ -28,9 +28,7 @@ sequences:
         type: prep-job-1
         args:
           - expected: cluster
-            given: cluster
           - expected: env
-            given: env
           - expected: instances
             given: instances
         sets: []

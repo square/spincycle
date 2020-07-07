@@ -28,8 +28,8 @@ type NodeSpec struct {
 
 // NodeArg defines the structure expected from the yaml file to define a job's args.
 type NodeArg struct {
-	Expected string `yaml:"expected"` // the name of the argument that this job expects
-	Given    string `yaml:"given"`    // the name of the argument that will be given to this job
+	Expected string  `yaml:"expected"` // the name of the argument that this job expects
+	Given    *string `yaml:"given"`    // the name of the argument that will be given to this job
 }
 
 // NodeSet defines the structure expected from the yaml file to define the args a job sets.
@@ -138,6 +138,11 @@ func ReadConfig(configFile string) (Config, error) {
 			for i, nodeSet := range node.Sets {
 				if nodeSet.As == nil {
 					node.Sets[i].As = &nodeSet.Arg
+				}
+			}
+			for i, nodeArg := range node.Args {
+				if nodeArg.Given == nil {
+					node.Args[i].Given = &nodeArg.Expected
 				}
 			}
 		}

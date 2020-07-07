@@ -94,13 +94,15 @@ All node specs begin with a node name: "expand-cluster", in this case. Node name
 
 makes Spin Cycle do `jobArgs["hostname"] = jobArgs["host"]` before passing `jobArgs` to the job.
 
-Even if `expected == given`, both must still be specified.
+If `expected == given`, `given:` may be omitted.
 
 Only job args listed under `args:` are passed to the job. If a job needs arg "foo" but "foo" is not listed, then `jobArgs["foo"]` will be nil in the job. This requirement is strict and somewhat tedious, but it makes specs complete self-describing and easy to follow because there are no "hidden" args.
 
 If a job has optional args, they must be listed so they are passed to the job, in case they exist. The job is responsible for using the optional args or not. (Note: "optional" here is not the same as sequence-level optional args.)
 
-`sets:` specifies the job args that the job sets. The RM checks this. `arg:` and `as:` are to `sets:` as `expected:` and `given:` are to `args:` above: `arg:` is the job arg name set by the job, and `as:` is the job arg name in the specs to use. For `sets:`, if `arg == as`, `as:` is unnecessary.
+`sets:` specifies the job args that the job sets. The RM checks this. `arg:` and `as:` are to `sets:` as `expected:` and `given:` are to `args:` above: `arg:` is the job arg name set by the job, and `as:` is the job arg name in the specs to use.
+
+If `arg == as`, `as:` may be omitted.
 
 In the example above, the job sets "app", "env", and "node" in `jobArgs`. After calling the job's `Create` method, the RM checks that all three are set in `jobArgs` (with any value, including nil). Like `args:`, this is strict but makes it possible to follow every arg through different sequences. It also makes it explicit which jobs set which args.
 
