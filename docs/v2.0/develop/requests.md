@@ -76,11 +76,8 @@ A job node specifies a job to run. (If this was a tree data structure, these wou
             given: cluster
         sets:
           - arg: app   # string
-            as: app
           - arg: env   # string
-            as: env
           - arg: nodes # []string
-            as: nodes
         retry: 2
         retryWait: 3s
         deps: []
@@ -103,7 +100,7 @@ Only job args listed under `args:` are passed to the job. If a job needs arg "fo
 
 If a job has optional args, they must be listed so they are passed to the job, in case they exist. The job is responsible for using the optional args or not. (Note: "optional" here is not the same as sequence-level optional args.)
 
-`sets:` specifies the job args that the job sets. The RM checks this. `arg:` and `as:` are to `sets:` as `expected:` and `given:` are to `args:` above: `arg:` is the job arg name set by the job, and `as:` is the job arg name in the specs to use. Even if `arg == as`, both must still be specified.
+`sets:` specifies the job args that the job sets. The RM checks this. `arg:` and `as:` are to `sets:` as `expected:` and `given:` are to `args:` above: `arg:` is the job arg name set by the job, and `as:` is the job arg name in the specs to use. For `sets:`, if `arg == as`, `as:` is unnecessary.
 
 In the example above, the job sets "app", "env", and "node" in `jobArgs`. After calling the job's `Create` method, the RM checks that all three are set in `jobArgs` (with any value, including nil). Like `args:`, this is strict but makes it possible to follow every arg through different sequences. It also makes it explicit which jobs set which args.
 

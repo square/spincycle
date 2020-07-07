@@ -27,11 +27,8 @@ See the [release notes](https://github.com/square/spincycle/blob/master/docs/rel
   ```
   sets: # comment
     - arg: arg1
-      as: arg1
     - arg: arg2
-      as: arg2
     - arg: arg3
-      as: arg3
    ```
 
 * These lines:
@@ -45,11 +42,8 @@ See the [release notes](https://github.com/square/spincycle/blob/master/docs/rel
   ```
   sets: # comment
     - arg: arg1
-      as: arg1
     - arg: arg2 #comment2
-      as: arg2
     - arg: arg3
-      as: arg3
    ```
 
 As noted in the above examples, the reformatter preserves comments.

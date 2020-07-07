@@ -31,7 +31,7 @@ permalink: /release-notes
     ...
     sets:
       - arg: new-arg
-        as: new-arg
+        as: renamed-arg # optional if new-arg == renamed-arg
   ```
 
 ## v1.0
