@@ -56,7 +56,7 @@ The reformatter infers the indent size from the `sets:` line.
   * Four spaces before the `sets:` statement is valid.
   * Eight spaces before the `sets:` statement is valid.
   * Ten spaces before the `sets:` statement will throw an error.
-  * Three spaces and a tab before the `sets:` statement will throw an error.
+  * Three spaces and a tab before the `sets:` statement will throw an error. (You also shouldn't be using tabs in a YAML file.)
 
 * If using `sets: [...]` notation, a closing bracket must be provided. Otherwise, the reformatter throws an error. (This is illegal YAML anyway.)
 

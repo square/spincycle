@@ -36,9 +36,10 @@ func main() {
 
 	/* Process files. */
 	scanner := bufio.NewScanner(f)
-	var indent string // the YAML indent currently being used
-	var line uint     // line number
-	var sets bool     // whether we're currently within a "sets "block
+	var indent string     // the YAML indent for sets list
+	var setsIndent string // the YAML indent for `sets:` line
+	var line uint         // line number
+	var sets bool         // whether we're currently within a "sets "block
 	for scanner.Scan() {
 		inp := scanner.Text()
 		line++
@@ -61,6 +62,7 @@ func main() {
 				fmt.Printf("%s line %d: Expected four (equal) indents on line\n", filename, line)
 				os.Exit(1)
 			}
+			setsIndent = inp[:i]
 			indent = inp[:i] + inp[:i/4]
 
 			if j := strings.Index(inp, "["); j != -1 {
@@ -92,7 +94,7 @@ func main() {
 			}
 		} else if sets {
 			// Case: currently in a `sets` block
-			if strings.Contains(inp, indent+"-") {
+			if strings.Contains(inp, setsIndent+" -") {
 				// Case: still in a `sets` block
 				i := strings.IndexRune(inp, '-')
 				arg := strings.TrimSpace(inp[i+1:])
