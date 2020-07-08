@@ -410,9 +410,16 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 		if nodesCount == len(nodesToBeDone) {
 			missingArgsNodes := []string{}
 			for n, _ := range nodesToBeDone {
-				missingArgsNodes = append(missingArgsNodes, n.Name)
+				// Figure out which args are missing
+				missingArgs := []string{}
+				for _, arg := range n.Args {
+					if _, ok := nodeArgs[arg.Expected]; !ok {
+						missingArgs = append(missingArgs, arg.Expected)
+					}
+				}
+				missingArgsNodes = append(missingArgsNodes, fmt.Sprintf("(job: %s, missing: %s)", n.Name, strings.Join(missingArgs, ", ")))
 			}
-			return nil, fmt.Errorf("Job Args are missing for %v", missingArgsNodes)
+			return nil, fmt.Errorf("Job Args are missing: %v", missingArgsNodes)
 		}
 
 		nodesCount = len(nodesToBeDone)
