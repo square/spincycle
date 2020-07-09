@@ -251,7 +251,11 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 
 			// First check that all arguments required for the node are present.
 			// If not all arguments are present, then find another node to construct
-			if !o.allArgsPresent(n, nodeArgs) {
+			missingArgs, err := o.getMissingArgs(n, nodeArgs)
+			if err != nil {
+				return nil, err
+			}
+			if len(missingArgs) != 0 {
 				continue
 			}
 
@@ -410,9 +414,13 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 		if nodesCount == len(nodesToBeDone) {
 			missingArgsNodes := []string{}
 			for n, _ := range nodesToBeDone {
-				missingArgsNodes = append(missingArgsNodes, n.Name)
+				missingArgs, err := o.getMissingArgs(n, nodeArgs)
+				if err != nil {
+					return nil, err
+				}
+				missingArgsNodes = append(missingArgsNodes, fmt.Sprintf("(job: %s, missing: %s)", n.Name, strings.Join(missingArgs, ", ")))
 			}
-			return nil, fmt.Errorf("Job Args are missing for %v", missingArgsNodes)
+			return nil, fmt.Errorf("Job Args are missing: %v", missingArgsNodes)
 		}
 
 		nodesCount = len(nodesToBeDone)
@@ -570,11 +578,11 @@ func (o *Grapher) getIterators(n *NodeSpec, args map[string]interface{}) ([]stri
 	return iterators, iterateOvers, nil
 }
 
-// Assert that all arguments required (as defined in the "args" clause in the yaml)
-// are present. Returns true if all required arguments are present, and false otherwise.
-func (o *Grapher) allArgsPresent(n *NodeSpec, args map[string]interface{}) bool {
+// Returns a list of node args that aren't present in the args map.
+func (o *Grapher) getMissingArgs(n *NodeSpec, args map[string]interface{}) ([]string, error) {
 	iterateSet := ""
 	iterator := ""
+	missing := []string{}
 
 	// Assert that the iterable variable is present.
 	for _, each := range n.Each {
@@ -585,20 +593,20 @@ func (o *Grapher) allArgsPresent(n *NodeSpec, args map[string]interface{}) bool 
 		// This is malformed input.
 		// @todo: this syntax error is ignored
 		if len(strings.Split(each, ":")) != 2 {
-			return false
+			return missing, fmt.Errorf("in node %s: malformed input to `each:`", n.Name)
 		}
 
 		iterator = strings.Split(each, ":")[1]
 		iterateSet = strings.Split(each, ":")[0]
 		if _, ok := args[iterateSet]; !ok {
-			return false
+			missing = append(missing, iterateSet)
 		}
 	}
 
 	// Assert that the conditional variable is present.
 	if n.If != "" {
 		if _, ok := args[n.If]; !ok {
-			return false
+			missing = append(missing, n.If)
 		}
 	}
 
@@ -608,10 +616,11 @@ func (o *Grapher) allArgsPresent(n *NodeSpec, args map[string]interface{}) bool 
 			continue // this one we can expect to not have
 		}
 		if _, ok := args[*arg.Given]; !ok {
-			return false
+			missing = append(missing, *arg.Given)
 		}
 	}
-	return true
+
+	return missing, nil
 }
 
 // Given a node definition and an args, copy args into a new map,
