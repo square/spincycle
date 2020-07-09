@@ -137,7 +137,7 @@ All node specs begin with a node name: "notify-app-owners", in this case. `categ
             given: env
         deps: [expand-cluster]
         retry: 9
-        retryWait: 5000 # ms
+        retryWait: 5000ms
 ```
 
 When the RM encounters this sequence node, it looks for a sequence called "notify-app-owners". (We would put that sequence in a file named notify-app-owners.yaml.) It replaces the sequence node with all the nodes in the target sequence. Since sequences can have required args, the sequence node must specify the `args:` to pass to the sequence (as if the sequence was a request). The same rules about `args:`, `exepected:`, and `given:` apply. The only difference is that the job args are passed to a sequence instead of a job.
