@@ -59,7 +59,7 @@ _Job args are almost always the correct choice_. You only need to use job data i
 
 ### Job Data and Suspending Requests
 
-When jobs are suspended, job data is stored in a JSON file. When jobs are resumed, they are unserialized via [json.Unmarshal](https://golang.org/pkg/encoding/json/#Unmarshal), which may change the types of some data, e.g. all numbers become type `float64`, and all arrays become `[]interface{}`. (See the json documentation for more.) Jobs must be able to handle these altered data types in order for a request to be resumed successfully.
+When jobs are suspended, job data is stored as JSON. When jobs are resumed, they are unserialized via [json.Unmarshal](https://golang.org/pkg/encoding/json/#Unmarshal), which may change the types of some data, e.g. all numbers become type `float64`, and all arrays become `[]interface{}`. (See the json documentation for more.) Jobs must be able to handle these altered data types in order for a request to be resumed successfully.
 
 ## Job Patterns
 
