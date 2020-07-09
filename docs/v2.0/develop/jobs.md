@@ -57,6 +57,10 @@ Occasionally, there is a need for run-time data: `Run(jobData map[string]interfa
 
 _Job args are almost always the correct choice_. You only need to use job data if the information _must_ be obtained when it is used. Else, use job args to ensure that Spin Cycle can record a complete, immutable snapshot of all work it will (or did) do for the request.
 
+### Job Data and Suspending Requests
+
+When jobs are suspended, job data is stored as JSON. When jobs are resumed, they are unserialized via [json.Unmarshal](https://golang.org/pkg/encoding/json/#Unmarshal), which may change the types of some data, e.g. all numbers become type `float64`, and all arrays become `[]interface{}`. (See the json documentation for more.) Jobs must be able to handle these altered data types in order for a request to be resumed successfully.
+
 ## Job Patterns
 
 Every job must implement the [job.Job interface](https://godoc.org/github.com/square/spincycle/job#Job), but some jobs really only need the `Create` or `Run` methods to do all work. This is normal and produces two common "job patterns".
