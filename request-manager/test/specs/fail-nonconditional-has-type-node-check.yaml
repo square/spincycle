@@ -1,0 +1,10 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a: # Nonconditional nodes must specify type
+        category: job
+        deps: []

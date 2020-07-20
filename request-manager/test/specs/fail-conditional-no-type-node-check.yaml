@@ -1,0 +1,11 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: conditional
+        type: job-type-a # conditionals can't specify a type
+        deps: []

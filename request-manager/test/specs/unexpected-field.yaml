@@ -1,0 +1,13 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+        - default: 100 # this should have a name
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        deps: []
+        alice: 1 # unexpected fields generate warnings

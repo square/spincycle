@@ -1,0 +1,14 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        args:
+          - expected: required-a
+        deps: []
+        retry: string # should be an uint

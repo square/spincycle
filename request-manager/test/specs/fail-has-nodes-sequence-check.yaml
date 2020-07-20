@@ -1,0 +1,7 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes: # there should be some nodes

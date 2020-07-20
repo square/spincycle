@@ -1,0 +1,15 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        each:
+          - required-a # this should be in format `arg:alias`
+        args:
+          - expected: required-a
+        deps: []

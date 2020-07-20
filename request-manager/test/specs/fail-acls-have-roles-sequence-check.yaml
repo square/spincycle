@@ -1,0 +1,13 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    acl:
+      - admin: true # must specify a role
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        deps: []

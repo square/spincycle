@@ -1,0 +1,29 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: sequence
+        type: seq-b
+        each:
+          - required-a:required-as # Specify in `each` and `args`
+          - required-c:required-cs # Specify only here
+        args: # missing required arg required-d
+          - expected: required-a
+          - expected: required-b # Specify only here
+        deps: []
+  seq-b:
+    args:
+      required:
+        - name: required-a
+        - name: required-b
+        - name: required-c
+        - name: required-d
+    nodes:
+      node-b:
+        category: job
+        type: job-type-b
+        deps: []

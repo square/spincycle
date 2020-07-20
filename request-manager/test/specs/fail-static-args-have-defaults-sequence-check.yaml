@@ -1,0 +1,15 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+      static:
+        - name: static-a
+          default: value-a
+        - name: static-b # this should have a default
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        deps: []

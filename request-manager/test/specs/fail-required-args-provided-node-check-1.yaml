@@ -1,0 +1,23 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: sequence
+        type: seq-b
+        args: # missing required arg required-b
+          - expected: required-a
+        deps: []
+  seq-b:
+    args:
+      required:
+        - name: required-a
+        - name: required-b
+    nodes:
+      node-b:
+        category: job
+        type: job-type-b
+        deps: []

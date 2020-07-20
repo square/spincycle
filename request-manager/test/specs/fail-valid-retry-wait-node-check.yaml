@@ -1,0 +1,15 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        args:
+          - expected: required-a
+        deps: []
+        retry: 3
+        retryWait: 500 # not a valid duration string

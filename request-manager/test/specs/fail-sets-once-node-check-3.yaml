@@ -1,0 +1,15 @@
+---
+sequences:
+  seq-a:
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        sets: # arg-x set twice
+          - arg: arg-a
+            as: arg-x
+          - arg: arg-x
+        deps: []
