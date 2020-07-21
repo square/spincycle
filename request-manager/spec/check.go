@@ -8,9 +8,9 @@ import (
 
 /* Runs checks on allSpecs. */
 func RunChecks(allSpecs Specs) error {
-	sequenceErrors := makeSequenceErrors()
-	nodeErrors := makeNodeErrors(allSpecs)
-	nodeWarnings := makeNodeWarnings()
+	sequenceErrors := makeSequenceErrorChecks()
+	nodeErrors := makeNodeErrorChecks(allSpecs)
+	nodeWarnings := makeNodeWarningChecks()
 
 	for _, sequence := range allSpecs.Sequences {
 		for _, sequenceCheck := range sequenceErrors {
@@ -39,7 +39,7 @@ func RunChecks(allSpecs Specs) error {
 /* ========================================================================== */
 /* Add new checks here. Order shouldn't matter. */
 
-func makeSequenceErrors() []SequenceCheck {
+func makeSequenceErrorChecks() []SequenceCheck {
 	return []SequenceCheck{
 		RequiredArgsNamedSequenceCheck{},
 		OptionalArgsNamedSequenceCheck{},
@@ -47,6 +47,8 @@ func makeSequenceErrors() []SequenceCheck {
 
 		OptionalArgsHaveDefaultsSequenceCheck{},
 		StaticArgsHaveDefaultsSequenceCheck{},
+
+		NoDuplicateArgsSequenceCheck{},
 
 		HasNodesSequenceCheck{},
 
@@ -56,15 +58,16 @@ func makeSequenceErrors() []SequenceCheck {
 	}
 }
 
-func makeNodeErrors(allSpecs Specs) []NodeCheck {
+func makeNodeErrorChecks(allSpecs Specs) []NodeCheck {
 	return []NodeCheck{
 		HasCategoryNodeCheck{},
 		ValidCategoryNodeCheck{},
 
 		ValidEachNodeCheck{},
-
+		EachOnceNodeCheck{},
 		ArgsAreNamedNodeCheck{},
 		ArgsOnceNodeCheck{},
+		ArgsEachOnceNodeCheck{},
 		SetsAreNamedNodeCheck{},
 		SetsOnceNodeCheck{},
 
@@ -85,9 +88,11 @@ func makeNodeErrors(allSpecs Specs) []NodeCheck {
 	}
 }
 
-func makeNodeWarnings() []NodeCheck {
+func makeNodeWarningChecks() []NodeCheck {
 	return []NodeCheck{
+		EachNotRenamedNodeCheck{},
 		ArgsNotRenamedNodeCheck{},
+		ArgsEachNotRenamedNodeCheck{},
 		SetsNotRenamedNodeCheck{},
 	}
 }

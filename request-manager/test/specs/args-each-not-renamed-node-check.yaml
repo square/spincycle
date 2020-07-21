@@ -4,10 +4,12 @@ sequences:
     args:
       required:
         - name: required-a
-    acl:
-        - ops: ["start"]
     nodes:
       node-a:
         category: job
         type: job-type-a
+        each:
+          - arg-a:alias-a
+        args:
+          - expected: arg-a
         deps: []

@@ -13,7 +13,7 @@ type RequiredArgsNamedSequenceCheck struct{}
 func (check RequiredArgsNamedSequenceCheck) CheckSequence(sequence SequenceSpec) error {
 	for _, arg := range sequence.Args.Required {
 		if arg.Name == nil {
-			return MissingValueError{sequence.Name, nil, "name", "required for required args"}
+			return MissingValueError{sequence.Name, nil, "required -> name", "required for required args"}
 		}
 	}
 
@@ -27,7 +27,7 @@ type OptionalArgsNamedSequenceCheck struct{}
 func (check OptionalArgsNamedSequenceCheck) CheckSequence(sequence SequenceSpec) error {
 	for _, arg := range sequence.Args.Optional {
 		if arg.Name == nil {
-			return MissingValueError{sequence.Name, nil, "name", "required for optional args"}
+			return MissingValueError{sequence.Name, nil, "optional -> name", "required for optional args"}
 		}
 	}
 
@@ -41,7 +41,7 @@ type StaticArgsNamedSequenceCheck struct{}
 func (check StaticArgsNamedSequenceCheck) CheckSequence(sequence SequenceSpec) error {
 	for _, arg := range sequence.Args.Static {
 		if arg.Name == nil {
-			return MissingValueError{sequence.Name, nil, "name", "required for static args"}
+			return MissingValueError{sequence.Name, nil, "static -> name", "required for static args"}
 		}
 	}
 
@@ -55,7 +55,7 @@ type OptionalArgsHaveDefaultsSequenceCheck struct{}
 func (check OptionalArgsHaveDefaultsSequenceCheck) CheckSequence(sequence SequenceSpec) error {
 	for _, arg := range sequence.Args.Optional {
 		if arg.Default == nil {
-			return MissingValueError{sequence.Name, nil, "default", "required for optional args"}
+			return MissingValueError{sequence.Name, nil, "optional -> default", "required for optional args"}
 		}
 	}
 
@@ -69,8 +69,31 @@ type StaticArgsHaveDefaultsSequenceCheck struct{}
 func (check StaticArgsHaveDefaultsSequenceCheck) CheckSequence(sequence SequenceSpec) error {
 	for _, arg := range sequence.Args.Static {
 		if arg.Default == nil {
-			return MissingValueError{sequence.Name, nil, "default", "required for static args"}
+			return MissingValueError{sequence.Name, nil, "static -> default", "required for static args"}
 		}
+	}
+
+	return nil
+}
+
+/* ========================================================================== */
+type NoDuplicateArgsSequenceCheck struct{}
+
+/* Args should appear once per sequence. */
+func (check NoDuplicateArgsSequenceCheck) CheckSequence(sequence SequenceSpec) error {
+	seen := map[string]bool{}
+	values := map[string]bool{}
+	for _, args := range [][]*ArgSpec{sequence.Args.Required, sequence.Args.Optional, sequence.Args.Static} {
+		for _, arg := range args {
+			if arg.Name != nil && seen[*arg.Name] {
+				values[*arg.Name] = true
+			}
+			seen[*arg.Name] = true
+		}
+	}
+
+	if len(values) > 0 {
+		return DuplicateValueError{sequence.Name, nil, "sequence args -> name", stringSetToArray(values), "sequence args must have unique names within the sequence"}
 	}
 
 	return nil
@@ -95,7 +118,7 @@ type AdminXorOpsSequenceCheck struct{}
 func (check AdminXorOpsSequenceCheck) CheckSequence(sequence SequenceSpec) error {
 	for _, acl := range sequence.ACL {
 		if acl.Admin && len(acl.Ops) != 0 {
-			return InvalidValueError{sequence.Name, nil, "admin", "true", "admin=false; alternatively, remove ops"}
+			return InvalidValueError{sequence.Name, nil, "acl -> admin", []string{"true"}, "admin=false; alternatively, remove ops"}
 		}
 	}
 
@@ -109,7 +132,7 @@ type AclsHaveRolesSequenceCheck struct{}
 func (check AclsHaveRolesSequenceCheck) CheckSequence(sequence SequenceSpec) error {
 	for _, acl := range sequence.ACL {
 		if acl.Role == "" {
-			return MissingValueError{sequence.Name, nil, "role", "field is required"}
+			return MissingValueError{sequence.Name, nil, "acl -> role", "field is required"}
 		}
 	}
 
@@ -122,11 +145,16 @@ type NoDuplicateAclRolesSequenceCheck struct{}
 /* ACL roles must not be duplicated. */
 func (check NoDuplicateAclRolesSequenceCheck) CheckSequence(sequence SequenceSpec) error {
 	seen := map[string]bool{}
+	values := map[string]bool{}
 	for _, acl := range sequence.ACL {
 		if seen[acl.Role] {
-			return DuplicateValueError{sequence.Name, nil, "role", acl.Role}
+			values[acl.Role] = true
 		}
 		seen[acl.Role] = true
+	}
+
+	if len(values) > 0 {
+		return DuplicateValueError{sequence.Name, nil, "acl -> role", stringSetToArray(values), ""}
 	}
 
 	return nil
