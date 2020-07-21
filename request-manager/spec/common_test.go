@@ -18,7 +18,7 @@ const (
 
 func runSequenceCheckOn(check SequenceCheck, filename string) error {
 	filepath := specsDir + filename
-	allSpecs, err := ParseSpec(filepath)
+	allSpecs, err, _ := ParseSpec(filepath)
 	if err != nil {
 		return err
 	}
@@ -32,7 +32,7 @@ func runSequenceCheckOn(check SequenceCheck, filename string) error {
 
 func runNodeCheckOn(check NodeCheck, filename string) error {
 	filepath := specsDir + filename
-	allSpecs, err := ParseSpec(filepath)
+	allSpecs, err, _ := ParseSpec(filepath)
 	if err != nil {
 		return err
 	}

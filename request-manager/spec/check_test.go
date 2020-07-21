@@ -11,9 +11,12 @@ import (
 
 func TestRunChecks(t *testing.T) {
 	sequencesFile := specsDir + "decomm.yaml"
-	allSpecs, _ := ParseSpec(sequencesFile)
-	err := RunChecks(allSpecs)
-	if err != nil {
-		t.Errorf("decomm.yaml failed check, expected success: %s", err.Error())
+	allSpecs, _, _ := ParseSpec(sequencesFile)
+	err, warn := RunChecks(allSpecs)
+	if len(err) > 0 {
+		t.Errorf("decomm.yaml failed check, expected success: %v", err)
+	}
+	if len(warn) > 0 {
+		t.Errorf("decomm.yaml produced warnings, expected none: %v", warn)
 	}
 }

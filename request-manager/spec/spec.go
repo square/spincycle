@@ -3,7 +3,6 @@
 package spec
 
 import (
-	"fmt"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 )
@@ -90,21 +89,20 @@ type Specs struct {
 // ParseSpec will read from specFile and return a Config that the user
 // can then use for NewGrapher(). specFile is expected to be in the yaml
 // format specified.
-func ParseSpec(specFile string) (Specs, error) {
-	var spec Specs
+func ParseSpec(specFile string) (spec Specs, err, warning error) {
 	sequenceData, err := ioutil.ReadFile(specFile)
 	if err != nil {
-		return spec, err
+		return
 	}
 
 	/* Emit warning if unexpected or duplicate fields are present. */
 	/* Error if specs are incorrectly formatted or fields are of incorrect type. */
 	err = yaml.UnmarshalStrict(sequenceData, &spec)
 	if err != nil {
-		fmt.Println(err)
+		warning = err
 		err = yaml.Unmarshal(sequenceData, &spec)
 		if err != nil {
-			return spec, err
+			return
 		}
 	}
 
@@ -132,7 +130,7 @@ func ParseSpec(specFile string) (Specs, error) {
 
 	}
 
-	return spec, nil
+	return
 }
 
 func (j *NodeSpec) isJob() bool {

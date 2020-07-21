@@ -2,12 +2,8 @@
 
 package spec
 
-import (
-	"fmt"
-)
-
 /* Runs checks on allSpecs. */
-func RunChecks(allSpecs Specs) error {
+func RunChecks(allSpecs Specs) (errors, warnings []error) {
 	sequenceErrors := makeSequenceErrorChecks()
 	nodeErrors := makeNodeErrorChecks(allSpecs)
 	nodeWarnings := makeNodeWarningChecks()
@@ -15,25 +11,25 @@ func RunChecks(allSpecs Specs) error {
 	for _, sequence := range allSpecs.Sequences {
 		for _, sequenceCheck := range sequenceErrors {
 			if err := sequenceCheck.CheckSequence(*sequence); err != nil {
-				return err
+				errors = append(errors, err)
 			}
 		}
 
 		for _, node := range sequence.Nodes {
 			for _, nodeCheck := range nodeErrors {
 				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
-					return err
+					errors = append(errors, err)
 				}
 			}
 			for _, nodeCheck := range nodeWarnings {
 				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
-					fmt.Printf("Warning: %s\n", err.Error())
+					warnings = append(warnings, err)
 				}
 			}
 		}
 	}
 
-	return nil
+	return
 }
 
 /* ========================================================================== */
