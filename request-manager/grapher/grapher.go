@@ -11,6 +11,7 @@ import (
 	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/proto"
 	"github.com/square/spincycle/v2/request-manager/id"
+	"github.com/square/spincycle/v2/request-manager/spec"
 )
 
 const DEFAULT = "default"
@@ -21,8 +22,8 @@ const DEFAULT = "default"
 // CreateGraph will create a graph. The user must provide a Sequence Type, to indicate
 // what graph will be created.
 type Grapher struct {
-	AllSequences map[string]*SequenceSpec // All sequences that were read in from the Config
-	JobFactory   job.Factory              // factory to create nodes' jobs.
+	AllSequences map[string]*spec.SequenceSpec // All sequences that were read in from spec.Specs
+	JobFactory   job.Factory                   // factory to create nodes' jobs.
 
 	idgen id.Generator // Generates UIDs for the nodes created by the Grapher.
 	req   proto.Request
@@ -33,10 +34,10 @@ type Grapher struct {
 // An id generator must also be provided (used for generating ids for nodes).
 //
 // A new Grapher should be made for every request.
-func NewGrapher(req proto.Request, nf job.Factory, cfg Config, idgen id.Generator) *Grapher {
+func NewGrapher(req proto.Request, nf job.Factory, specs spec.Specs, idgen id.Generator) *Grapher {
 	o := &Grapher{
 		JobFactory:   nf,
-		AllSequences: cfg.Sequences,
+		AllSequences: specs.Sequences,
 		idgen:        idgen,
 		req:          req,
 	}
@@ -52,12 +53,12 @@ type GrapherFactory interface {
 // grapherFactory implements the GrapherFactory interface.
 type grapherFactory struct {
 	jf     job.Factory
-	config Config
+	config spec.Specs
 	idf    id.GeneratorFactory
 }
 
 // NewGrapherFactory creates a GrapherFactory.
-func NewGrapherFactory(jf job.Factory, cfg Config, idf id.GeneratorFactory) GrapherFactory {
+func NewGrapherFactory(jf job.Factory, cfg spec.Specs, idf id.GeneratorFactory) GrapherFactory {
 	return &grapherFactory{
 		jf:     jf,
 		config: cfg,
@@ -81,13 +82,13 @@ func (o *Grapher) RequestArgs(requestType string, args map[string]interface{}) (
 	}
 
 	for i, arg := range seq.Args.Required {
-		val, ok := args[arg.Name]
+		val, ok := args[*arg.Name]
 		if !ok {
-			return nil, fmt.Errorf("required arg '%s' not set", arg.Name)
+			return nil, fmt.Errorf("required arg '%s' not set", *arg.Name)
 		}
 		reqArgs = append(reqArgs, proto.RequestArg{
 			Pos:   i,
-			Name:  arg.Name,
+			Name:  *arg.Name,
 			Type:  proto.ARG_TYPE_REQUIRED,
 			Value: val,
 			Given: true,
@@ -95,13 +96,13 @@ func (o *Grapher) RequestArgs(requestType string, args map[string]interface{}) (
 	}
 
 	for i, arg := range seq.Args.Optional {
-		val, ok := args[arg.Name]
+		val, ok := args[*arg.Name]
 		if !ok {
 			val = *arg.Default
 		}
 		reqArgs = append(reqArgs, proto.RequestArg{
 			Pos:     i,
-			Name:    arg.Name,
+			Name:    *arg.Name,
 			Type:    proto.ARG_TYPE_OPTIONAL,
 			Default: *arg.Default,
 			Value:   val,
@@ -112,7 +113,7 @@ func (o *Grapher) RequestArgs(requestType string, args map[string]interface{}) (
 	for i, arg := range seq.Args.Static {
 		reqArgs = append(reqArgs, proto.RequestArg{
 			Pos:   i,
-			Name:  arg.Name,
+			Name:  *arg.Name,
 			Type:  proto.ARG_TYPE_STATIC,
 			Value: *arg.Default,
 		})
@@ -136,48 +137,48 @@ func (o *Grapher) CreateGraph(sequenceName string, args map[string]interface{}) 
 	return g, nil
 }
 
-func (o *Grapher) Sequences() map[string]*SequenceSpec {
+func (o *Grapher) Sequences() map[string]*spec.SequenceSpec {
 	return o.AllSequences
 }
 
 // buildSequence will take in a sequence spec and return a Graph that represents the sequence
-func (o *Grapher) buildSequence(name string, seq *SequenceSpec, args map[string]interface{}) (*Graph, error) {
+func (o *Grapher) buildSequence(name string, seq *spec.SequenceSpec, args map[string]interface{}) (*Graph, error) {
 
 	// Verify all required arguments are present
 	for _, arg := range seq.Args.Required {
-		if _, ok := args[arg.Name]; !ok {
-			return nil, fmt.Errorf("required arg '%s' not set", arg.Name)
+		if _, ok := args[*arg.Name]; !ok {
+			return nil, fmt.Errorf("required arg '%s' not set", *arg.Name)
 		}
 	}
 
 	// Verify all optional arguments with defaults provided are included
 	for _, arg := range seq.Args.Optional {
-		if _, ok := args[arg.Name]; !ok {
-			args[arg.Name] = *arg.Default
+		if _, ok := args[*arg.Name]; !ok {
+			args[*arg.Name] = *arg.Default
 		}
 	}
 
 	// Verify all static arguments with defaults provided are included
 	for _, arg := range seq.Args.Static {
-		if _, ok := args[arg.Name]; !ok {
-			args[arg.Name] = *arg.Default
+		if _, ok := args[*arg.Name]; !ok {
+			args[*arg.Name] = *arg.Default
 		}
 	}
 	return o.buildComponent("sequence_"+name, seq.Nodes, args, seq.Retry, seq.RetryWait)
 }
 
-func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string]interface{}) (*Graph, error) {
+func (o *Grapher) buildConditional(name string, n *spec.NodeSpec, nodeArgs map[string]interface{}) (*Graph, error) {
 	// Node is a conditional, check the value of the "if" jobArg
-	if n.If == "" {
+	if n.If == nil {
 		return nil, fmt.Errorf("no 'if: arg' specified")
 	}
-	val, ok := nodeArgs[n.If]
+	val, ok := nodeArgs[*n.If]
 	if !ok {
-		return nil, fmt.Errorf("'if' arg '%s' not set", n.If)
+		return nil, fmt.Errorf("'if' arg '%s' not set", *n.If)
 	}
 	valstring, ok := val.(string)
 	if !ok {
-		return nil, fmt.Errorf("'if' arg '%s' is not a string", n.If)
+		return nil, fmt.Errorf("'if' arg '%s' is not a string", *n.If)
 	}
 	// Based on value of "if" jobArg, get which sequence to execute
 	seqName, ok := n.Eq[valstring]
@@ -190,13 +191,13 @@ func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string
 				values = append(values, k)
 			}
 			sort.Strings(values)
-			return nil, fmt.Errorf("'if: %s' value '%s' does not match any options: %s", n.If, valstring, strings.Join(values, ", "))
+			return nil, fmt.Errorf("'if: %s' value '%s' does not match any options: %s", *n.If, valstring, strings.Join(values, ", "))
 		}
 	}
 	// Build the correct sequence
 	sequence, ok := o.AllSequences[seqName]
 	if !ok {
-		return nil, fmt.Errorf("conditional sequence '%s' for 'if: %s' value '%s' does not exist", seqName, n.If, valstring)
+		return nil, fmt.Errorf("conditional sequence '%s' for 'if: %s' value '%s' does not exist", seqName, *n.If, valstring)
 	}
 	sequence.Retry = n.Retry
 	s, err := o.buildSequence(seqName, sequence, nodeArgs)
@@ -218,7 +219,7 @@ func (o *Grapher) buildConditional(name string, n *NodeSpec, nodeArgs map[string
 
 // buildComponent, given a set of node specs, and node args, create a graph that represents the list of node specs,
 // nodeArgs represents the arguments that will be passed into the nodes on creation
-func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nodeArgs map[string]interface{}, sequenceRetry uint, sequenceRetryWait string) (*Graph, error) {
+func (o *Grapher) buildComponent(name string, nodeDefs map[string]*spec.NodeSpec, nodeArgs map[string]interface{}, sequenceRetry uint, sequenceRetryWait string) (*Graph, error) {
 
 	// Start with an empty graph. Enforce a
 	// single source and a single sink node here.
@@ -236,10 +237,10 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 	// First, construct all subcomponents of this graph
 
 	// components is a map of all sub-components of this graph
-	components := map[*NodeSpec]*Graph{}
+	components := map[*spec.NodeSpec]*Graph{}
 
 	// nodesToBeDone is a map of all jobs that have not yet been built
-	nodesToBeDone := map[*NodeSpec]bool{}
+	nodesToBeDone := map[*spec.NodeSpec]bool{}
 	for _, node := range nodeDefs {
 		nodesToBeDone[node] = true
 	}
@@ -288,23 +289,25 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 				}
 
 				// Add the "if" to the node args if it's present
-				if ifArg, ok := nodeArgs[n.If]; ok {
-					nodeArgsCopy[n.If] = ifArg
+				if n.If != nil {
+					if ifArg, ok := nodeArgs[*n.If]; ok {
+						nodeArgsCopy[*n.If] = ifArg
+					}
 				}
 
 				// Build next graph component and assert that it's valid
 				var g *Graph
-				if n.isConditional() {
+				if n.IsConditional() {
 					// Node is a conditional
 					g, err = o.buildConditional(name, n, nodeArgsCopy)
 					if err != nil {
 						return nil, fmt.Errorf("in seq %s, node %s: %s", name, n.Name, err)
 					}
-				} else if n.isSequence() {
+				} else if n.IsSequence() {
 					// Node is a sequence, recursively construct its components
-					sequence, ok := o.AllSequences[n.NodeType]
+					sequence, ok := o.AllSequences[*n.NodeType]
 					if !ok {
-						return nil, fmt.Errorf("in seq %s, node %s: sequence '%s' does not exist", name, n.Name, n.NodeType)
+						return nil, fmt.Errorf("in seq %s, node %s: sequence '%s' does not exist", name, n.Name, *n.NodeType)
 					}
 					sequence.Retry = n.Retry
 					sequence.RetryWait = n.RetryWait
@@ -430,13 +433,13 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 	// Second, put all subcomponents together to create graph
 
 	// Create list of all components to add to graph
-	componentsToAdd := map[*NodeSpec]*Graph{}
+	componentsToAdd := map[*spec.NodeSpec]*Graph{}
 	for k, v := range components {
 		componentsToAdd[k] = v
 	}
 
 	// Repeat until all components have been added to graph
-	componentsAdded := map[*NodeSpec]bool{}
+	componentsAdded := map[*spec.NodeSpec]bool{}
 	componentsRemaining := len(componentsToAdd)
 	for componentsRemaining > 0 {
 
@@ -527,7 +530,7 @@ func (o *Grapher) buildComponent(name string, nodeDefs map[string]*NodeSpec, nod
 // and the singleton [""], to indicate that only one iteration is needed.
 //
 // Precondition: the iteratable must already be present in args
-func (o *Grapher) getIterators(n *NodeSpec, args map[string]interface{}) ([]string, [][]interface{}, error) {
+func (o *Grapher) getIterators(n *spec.NodeSpec, args map[string]interface{}) ([]string, [][]interface{}, error) {
 	empty := []string{""}
 	empties := [][]interface{}{[]interface{}{""}}
 	if len(n.Each) == 0 {
@@ -579,7 +582,7 @@ func (o *Grapher) getIterators(n *NodeSpec, args map[string]interface{}) ([]stri
 }
 
 // Returns a list of node args that aren't present in the args map.
-func (o *Grapher) getMissingArgs(n *NodeSpec, args map[string]interface{}) ([]string, error) {
+func (o *Grapher) getMissingArgs(n *spec.NodeSpec, args map[string]interface{}) ([]string, error) {
 	iterateSet := ""
 	iterator := ""
 	missing := []string{}
@@ -604,15 +607,15 @@ func (o *Grapher) getMissingArgs(n *NodeSpec, args map[string]interface{}) ([]st
 	}
 
 	// Assert that the conditional variable is present.
-	if n.If != "" {
-		if _, ok := args[n.If]; !ok {
-			missing = append(missing, n.If)
+	if n.If != nil {
+		if _, ok := args[*n.If]; !ok {
+			missing = append(missing, *n.If)
 		}
 	}
 
 	// Assert all other defined args are present
 	for _, arg := range n.Args {
-		if arg.Expected == iterator {
+		if *arg.Expected == iterator {
 			continue // this one we can expect to not have
 		}
 		if _, ok := args[*arg.Given]; !ok {
@@ -627,13 +630,13 @@ func (o *Grapher) getMissingArgs(n *NodeSpec, args map[string]interface{}) ([]st
 // but also rename the arguments as defined in the "args" clause.
 // A shallow copy is sufficient because args values should never
 // change.
-func (o *Grapher) remapNodeArgs(n *NodeSpec, args map[string]interface{}) (map[string]interface{}, error) {
+func (o *Grapher) remapNodeArgs(n *spec.NodeSpec, args map[string]interface{}) (map[string]interface{}, error) {
 	nodeArgs2 := map[string]interface{}{}
 	for _, arg := range n.Args {
 		var ok bool
-		nodeArgs2[arg.Expected], ok = args[*arg.Given]
+		nodeArgs2[*arg.Expected], ok = args[*arg.Given]
 		if !ok {
-			return nil, fmt.Errorf("cannot create job %s: missing %s from job args", n.NodeType, *arg.Given)
+			return nil, fmt.Errorf("cannot create job %s: missing %s from job args", *n.NodeType, *arg.Given)
 		}
 	}
 	return nodeArgs2, nil
@@ -642,16 +645,16 @@ func (o *Grapher) remapNodeArgs(n *NodeSpec, args map[string]interface{}) (map[s
 // Given a node definition and two args sets. Copy the arguments that
 // are defined in the "sets/arg" clause into the main args map under
 // the name defined by the "sets/as" field.
-func (o *Grapher) setNodeArgs(n *NodeSpec, argsTo, argsFrom map[string]interface{}) error {
+func (o *Grapher) setNodeArgs(n *spec.NodeSpec, argsTo, argsFrom map[string]interface{}) error {
 	if len(n.Sets) == 0 {
 		return nil
 	}
 	for _, key := range n.Sets {
 		var ok bool
 		var val interface{}
-		val, ok = argsFrom[key.Arg]
+		val, ok = argsFrom[*key.Arg]
 		if !ok {
-			return fmt.Errorf("expected %s to set %s in jobargs", n.NodeType, key.Arg)
+			return fmt.Errorf("expected %s to set %s in jobargs", *n.NodeType, *key.Arg)
 		}
 		argsTo[*key.As] = val
 	}
@@ -660,7 +663,7 @@ func (o *Grapher) setNodeArgs(n *NodeSpec, argsTo, argsFrom map[string]interface
 }
 
 // Builds a graph containing a single node
-func (o *Grapher) buildSingleVertexGraph(nodeDef *NodeSpec, nodeArgs map[string]interface{}) (*Graph, error) {
+func (o *Grapher) buildSingleVertexGraph(nodeDef *spec.NodeSpec, nodeArgs map[string]interface{}) (*Graph, error) {
 	n, err := o.newNode(nodeDef, nodeArgs)
 	if err != nil {
 		return nil, err
@@ -747,7 +750,7 @@ func (o *Grapher) newNoopNode(name string, nodeArgs map[string]interface{}) (*No
 }
 
 // newNode creates a node for the given job j
-func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, error) {
+func (o *Grapher) newNode(j *spec.NodeSpec, nodeArgs map[string]interface{}) (*Node, error) {
 	// Make a copy of the nodeArgs before this node gets created and potentially
 	// adds additional keys to the nodeArgs. A shallow copy is sufficient because
 	// args values should never change.
@@ -759,18 +762,18 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 	// Make the name of this node unique within the request by assigning it an id.
 	id, err := o.idgen.UID()
 	if err != nil {
-		return nil, fmt.Errorf("Error making id for '%s %s' job: %s", j.NodeType, j.Name, err)
+		return nil, fmt.Errorf("Error making id for '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
 	// Create the job
-	rj, err := o.JobFactory.Make(job.NewIdWithRequestId(j.NodeType, j.Name, id, o.req.Id))
+	rj, err := o.JobFactory.Make(job.NewIdWithRequestId(*j.NodeType, j.Name, id, o.req.Id))
 	if err != nil {
-		return nil, fmt.Errorf("Error making '%s %s' job: %s", j.NodeType, j.Name, err)
+		return nil, fmt.Errorf("Error making '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
 	err = rj.Create(nodeArgs)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating '%s %s' job: %s", j.NodeType, j.Name, err)
+		return nil, fmt.Errorf("Error creating '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
 	return &Node{
@@ -786,7 +789,7 @@ func (o *Grapher) newNode(j *NodeSpec, nodeArgs map[string]interface{}) (*Node, 
 
 // containsAll is a convenience function for checking membership in a map.
 // Returns true if m contains every elements in ss
-func containsAll(m map[*NodeSpec]bool, ss []string, nodes map[string]*NodeSpec) bool {
+func containsAll(m map[*spec.NodeSpec]bool, ss []string, nodes map[string]*spec.NodeSpec) bool {
 	for _, s := range ss {
 		name := nodes[s]
 		if _, ok := m[name]; !ok {

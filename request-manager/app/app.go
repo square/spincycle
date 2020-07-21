@@ -21,6 +21,7 @@ import (
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/joblog"
 	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/request-manager/status"
 )
 
@@ -30,7 +31,7 @@ import (
 type Context struct {
 	// User-provided config from config file
 	Config config.RequestManager
-	Specs  grapher.Config
+	Specs  spec.Specs
 
 	// Core service singletons, not user-configurable
 	RM     request.Manager
@@ -68,7 +69,7 @@ type Hooks struct {
 
 	// LoadSpecs loads the request specification files (specs). This hook overrides
 	// the default function. Spin Cycle fails to start if it returns an error.
-	LoadSpecs func(Context) (grapher.Config, error)
+	LoadSpecs func(Context) (spec.Specs, error)
 
 	// SetUsername sets proto.Request.User. The auth.Plugin.Authenticate method is
 	// called first which sets the username to Caller.Name. This hook is called after
@@ -136,9 +137,9 @@ func LoadConfig(ctx Context) (config.RequestManager, error) {
 }
 
 // LoadSpecs is the default LoadSpecs hook.
-func LoadSpecs(ctx Context) (grapher.Config, error) {
-	specs := grapher.Config{
-		Sequences: map[string]*grapher.SequenceSpec{},
+func LoadSpecs(ctx Context) (spec.Specs, error) {
+	specs := spec.Specs{
+		Sequences: map[string]*spec.SequenceSpec{},
 	}
 	// For each config in the cfg.SpecFileDir directory, read the file and
 	// then aggregate all of the resulting configs into a single struct.
@@ -148,14 +149,29 @@ func LoadSpecs(ctx Context) (grapher.Config, error) {
 		return specs, err
 	}
 	for _, f := range specFiles {
-		spec, err := grapher.ReadConfig(filepath.Join(specsDir, f.Name()))
+		spec, err, warning := spec.ParseSpec(filepath.Join(specsDir, f.Name()))
 		if err != nil {
 			return specs, fmt.Errorf("error reading spec file %s: %s", f.Name(), err)
+		}
+		if warning != nil {
+			log.Printf("Warning: %s\n", warning.Error())
 		}
 		for name, spec := range spec.Sequences {
 			specs.Sequences[name] = spec
 		}
 	}
+
+	errors, warnings := spec.RunChecks(specs)
+	if len(errors) > 0 {
+		for _, err = range errors {
+			log.Printf("Error: %s\n", err.Error())
+		}
+		return specs, fmt.Errorf("specs file(s) failed static check(s), run spinc-linter on specs or see log for more details")
+	}
+	for _, warning := range warnings {
+		log.Printf("Warning: %s\n", warning.Error())
+	}
+
 	return specs, nil
 }
 

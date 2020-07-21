@@ -452,7 +452,7 @@ func (m *manager) Specs() []proto.RequestSpec {
 		}
 		for _, arg := range req[name].Args.Required {
 			a := proto.RequestArg{
-				Name: arg.Name,
+				Name: *arg.Name,
 				Desc: arg.Desc,
 				Type: proto.ARG_TYPE_REQUIRED,
 			}
@@ -460,7 +460,7 @@ func (m *manager) Specs() []proto.RequestSpec {
 		}
 		for _, arg := range req[name].Args.Optional {
 			a := proto.RequestArg{
-				Name:    arg.Name,
+				Name:    *arg.Name,
 				Desc:    arg.Desc,
 				Type:    proto.ARG_TYPE_OPTIONAL,
 				Default: arg.Default,

@@ -133,14 +133,14 @@ func ParseSpec(specFile string) (spec Specs, err, warning error) {
 	return
 }
 
-func (j *NodeSpec) isJob() bool {
+func (j *NodeSpec) IsJob() bool {
 	return j.Category != nil && *j.Category == "job"
 }
 
-func (j *NodeSpec) isSequence() bool {
+func (j *NodeSpec) IsSequence() bool {
 	return j.Category != nil && *j.Category == "sequence"
 }
 
-func (j *NodeSpec) isConditional() bool {
+func (j *NodeSpec) IsConditional() bool {
 	return j.Category != nil && *j.Category == "conditional"
 }

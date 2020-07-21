@@ -18,9 +18,9 @@ import (
 	"github.com/square/spincycle/v2/request-manager/api"
 	"github.com/square/spincycle/v2/request-manager/app"
 	"github.com/square/spincycle/v2/request-manager/auth"
-	"github.com/square/spincycle/v2/request-manager/grapher"
 	"github.com/square/spincycle/v2/request-manager/joblog"
 	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/request-manager/status"
 )
 
@@ -270,7 +270,7 @@ func (s *Server) waitForShutdown() {
 }
 
 // MapACL maps spec file ACL to auth.ACL structure.
-func mapACL(specs grapher.Config) map[string][]auth.ACL {
+func mapACL(specs spec.Specs) map[string][]auth.ACL {
 	acl := map[string][]auth.ACL{}
 	for name, spec := range specs.Sequences {
 		if len(spec.ACL) == 0 {

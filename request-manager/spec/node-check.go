@@ -29,7 +29,7 @@ type ValidCategoryNodeCheck struct{}
 
 /* `category: (job | sequence | conditional)` */
 func (check ValidCategoryNodeCheck) CheckNode(sequenceName string, node NodeSpec) error {
-	if !node.isJob() && !node.isSequence() && !node.isConditional() {
+	if !node.IsJob() && !node.IsSequence() && !node.IsConditional() {
 		return InvalidValueError{sequenceName, &node.Name, "category", []string{*node.Category}, "(job | sequence | conditional)"}
 	}
 
@@ -334,7 +334,7 @@ type ConditionalNoTypeNodeCheck struct{}
 
 /* Conditional nodes may not specify a type. */
 func (check ConditionalNoTypeNodeCheck) CheckNode(sequenceName string, node NodeSpec) error {
-	if node.isConditional() {
+	if node.IsConditional() {
 		if node.NodeType != nil {
 			return InvalidValueError{sequenceName, &node.Name, "type", []string{*node.NodeType}, "no value; conditional nodes may not specify a type"}
 		}
@@ -348,7 +348,7 @@ type ConditionalHasIfNodeCheck struct{}
 
 /* `Conditional nodes must specify `if`. */
 func (check ConditionalHasIfNodeCheck) CheckNode(sequenceName string, node NodeSpec) error {
-	if node.isConditional() {
+	if node.IsConditional() {
 		if node.If == nil {
 			return MissingValueError{sequenceName, &node.Name, "if", "required for conditional nodes"}
 		}
@@ -362,7 +362,7 @@ type ConditionalHasEqNodeCheck struct{}
 
 /* Conditional nodes must specify `eq`. */
 func (check ConditionalHasEqNodeCheck) CheckNode(sequenceName string, node NodeSpec) error {
-	if node.isConditional() {
+	if node.IsConditional() {
 		if len(node.Eq) == 0 {
 			return MissingValueError{sequenceName, &node.Name, "eq", "required for conditional nodes"}
 		}
@@ -376,7 +376,7 @@ type NonconditionalHasTypeNodeCheck struct{}
 
 /* Nonconditional nodes must specify a type. */
 func (check NonconditionalHasTypeNodeCheck) CheckNode(sequenceName string, node NodeSpec) error {
-	if !node.isConditional() {
+	if !node.IsConditional() {
 		if node.NodeType == nil {
 			return MissingValueError{sequenceName, &node.Name, "type", "required for nonconditional nodes"}
 		}
@@ -390,7 +390,7 @@ type NonconditionalNoIfNodeCheck struct{}
 
 /* Nononditional nodes may not specify `if`. */
 func (check NonconditionalNoIfNodeCheck) CheckNode(sequenceName string, node NodeSpec) error {
-	if !node.isConditional() {
+	if !node.IsConditional() {
 		if node.If != nil {
 			return InvalidValueError{sequenceName, &node.Name, "if", []string{*node.If}, "no value; noncoditional nodes may not specify if"}
 		}
@@ -404,7 +404,7 @@ type NonconditionalNoEqNodeCheck struct{}
 
 /* Nononditional nodes may not specify `eq`. */
 func (check NonconditionalNoEqNodeCheck) CheckNode(sequenceName string, node NodeSpec) error {
-	if !node.isConditional() {
+	if !node.IsConditional() {
 		if len(node.Eq) != 0 {
 			eq := fmt.Sprintf("%v", node.Eq)
 			return InvalidValueError{sequenceName, &node.Name, "eq", []string{eq}, "no value; noncoditional nodes may not specify eq"}

@@ -11,6 +11,7 @@ import (
 	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/proto"
 	"github.com/square/spincycle/v2/request-manager/id"
+	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/test/mock"
 )
 
@@ -81,29 +82,29 @@ var req = proto.Request{Id: "reqABC"}
 func testGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm.yaml"
-	cfg, _ := ReadConfig(sequencesFile)
-	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+	specs, _, _ := spec.ParseSpec(sequencesFile)
+	return NewGrapher(req, tf, specs, id.NewGenerator(4, 100))
 }
 
 func testConditionalGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/destroy-conditional.yaml"
-	cfg, _ := ReadConfig(sequencesFile)
-	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+	specs, _, _ := spec.ParseSpec(sequencesFile)
+	return NewGrapher(req, tf, specs, id.NewGenerator(4, 100))
 }
 
 func testLimitParallelGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm-limit-parallel.yaml"
-	cfg, _ := ReadConfig(sequencesFile)
-	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+	specs, _, _ := spec.ParseSpec(sequencesFile)
+	return NewGrapher(req, tf, specs, id.NewGenerator(4, 100))
 }
 
 func testSetsGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm-sets.yaml"
-	cfg, _ := ReadConfig(sequencesFile)
-	return NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+	specs, _, _ := spec.ParseSpec(sequencesFile)
+	return NewGrapher(req, tf, specs, id.NewGenerator(4, 100))
 }
 
 func TestNodeArgs(t *testing.T) {
@@ -427,8 +428,8 @@ func TestCreateDecomSetsGraph(t *testing.T) {
 func TestCreateDecomGraphNoNodes(t *testing.T) {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/empty-cluster.yaml"
-	cfg, _ := ReadConfig(sequencesFile)
-	omg := NewGrapher(req, tf, cfg, id.NewGenerator(4, 100))
+	spec, _, _ := spec.ParseSpec(sequencesFile)
+	omg := NewGrapher(req, tf, spec, id.NewGenerator(4, 100))
 
 	args := map[string]interface{}{
 		"cluster": "empty-cluster-001",
@@ -1445,7 +1446,7 @@ func TestOptArgs001(t *testing.T) {
 	tf := &mock.JobFactory{
 		Created: map[string]*mock.Job{},
 	}
-	s, err := ReadConfig("../test/specs/opt-args-001.yaml")
+	s, err, _ := spec.ParseSpec("../test/specs/opt-args-001.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1489,7 +1490,7 @@ func TestOptArgs001(t *testing.T) {
 	tf = &mock.JobFactory{
 		Created: map[string]*mock.Job{},
 	}
-	s, err = ReadConfig("../test/specs/opt-args-001.yaml")
+	s, err, _ = spec.ParseSpec("../test/specs/opt-args-001.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1539,7 +1540,7 @@ func TestBadEach001(t *testing.T) {
 			"get-instances": job,
 		},
 	}
-	s, err := ReadConfig("../test/specs/bad-each-001.yaml")
+	s, err, _ := spec.ParseSpec("../test/specs/bad-each-001.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1604,7 +1605,7 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 	// This spec has "if: foo" where "foo" is an optional arg with no value,
 	// so grapher should use "default: defaultSeq", which we can see below in
 	// "sequence_defaultSeq_start/end" nodes.
-	cfg, err := ReadConfig("../test/specs/cond-args-001.yaml")
+	specs, err, _ := spec.ParseSpec("../test/specs/cond-args-001.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1618,7 +1619,7 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 		},
 	}
 
-	gr := NewGrapher(req, &testFactory{}, cfg, idgen)
+	gr := NewGrapher(req, &testFactory{}, specs, idgen)
 	args := map[string]interface{}{
 		"cmd": "cmd-val",
 	}

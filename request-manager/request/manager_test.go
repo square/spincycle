@@ -17,6 +17,7 @@ import (
 	"github.com/square/spincycle/v2/request-manager/grapher"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/spec"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
 	testdb "github.com/square/spincycle/v2/request-manager/test/db"
 	"github.com/square/spincycle/v2/test"
@@ -54,7 +55,7 @@ func setupManager(t *testing.T, dataFile string) string {
 
 	// Create a mock grapher factory.
 	if grf == nil {
-		spec, err := grapher.ReadConfig(rmtest.SpecPath + "/a-b-c.yaml")
+		spec, err, _ := spec.ParseSpec(rmtest.SpecPath + "/a-b-c.yaml")
 		if err != nil {
 			t.Fatal(err)
 		}

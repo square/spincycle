@@ -1,17 +1,21 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2020, Square, Inc.
 
 package grapher
 
 import (
 	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/proto"
+	"github.com/square/spincycle/v2/request-manager/spec"
 )
 
+var category = "job"
+var nodeType = "noop"
+
 // noop is the default node spec for sequence fan-out (source) and fan-in (sink) nodes.
-var noopSpec = &NodeSpec{
+var noopSpec = &spec.NodeSpec{
 	Name:     "noop",
-	Category: "job",
-	NodeType: "noop",
+	Category: &category,
+	NodeType: &nodeType,
 }
 
 // noopJob is a no-op job that does nothing and always returns success. It's used
