@@ -2,36 +2,6 @@
 
 package spec
 
-/* Runs checks on allSpecs. */
-func RunChecks(allSpecs Specs) (errors, warnings []error) {
-	sequenceErrors := makeSequenceErrorChecks()
-	nodeErrors := makeNodeErrorChecks(allSpecs)
-	nodeWarnings := makeNodeWarningChecks()
-
-	for _, sequence := range allSpecs.Sequences {
-		for _, sequenceCheck := range sequenceErrors {
-			if err := sequenceCheck.CheckSequence(*sequence); err != nil {
-				errors = append(errors, err)
-			}
-		}
-
-		for _, node := range sequence.Nodes {
-			for _, nodeCheck := range nodeErrors {
-				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
-					errors = append(errors, err)
-				}
-			}
-			for _, nodeCheck := range nodeWarnings {
-				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
-					warnings = append(warnings, err)
-				}
-			}
-		}
-	}
-
-	return
-}
-
 /* ========================================================================== */
 /* Add new checks here. Order shouldn't matter. */
 

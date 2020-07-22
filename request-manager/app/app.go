@@ -5,10 +5,8 @@ package app
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -138,41 +136,7 @@ func LoadConfig(ctx Context) (config.RequestManager, error) {
 
 // LoadSpecs is the default LoadSpecs hook.
 func LoadSpecs(ctx Context) (spec.Specs, error) {
-	specs := spec.Specs{
-		Sequences: map[string]*spec.SequenceSpec{},
-	}
-	// For each config in the cfg.SpecFileDir directory, read the file and
-	// then aggregate all of the resulting configs into a single struct.
-	specsDir := ctx.Config.Specs.Dir
-	specFiles, err := ioutil.ReadDir(specsDir)
-	if err != nil {
-		return specs, err
-	}
-	for _, f := range specFiles {
-		spec, err, warning := spec.ParseSpec(filepath.Join(specsDir, f.Name()))
-		if err != nil {
-			return specs, fmt.Errorf("error reading spec file %s: %s", f.Name(), err)
-		}
-		if warning != nil {
-			log.Printf("Warning: %s\n", warning.Error())
-		}
-		for name, spec := range spec.Sequences {
-			specs.Sequences[name] = spec
-		}
-	}
-
-	errors, warnings := spec.RunChecks(specs)
-	if len(errors) > 0 {
-		for _, err = range errors {
-			log.Printf("Error: %s\n", err.Error())
-		}
-		return specs, fmt.Errorf("specs file(s) failed static check(s), run spinc-linter on specs or see log for more details")
-	}
-	for _, warning := range warnings {
-		log.Printf("Warning: %s\n", warning.Error())
-	}
-
-	return specs, nil
+	return spec.Parse(ctx.Config.Specs.Dir, log.Printf)
 }
 
 // MakeGrapher is the default MakeGrapher factory.

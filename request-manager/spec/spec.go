@@ -2,11 +2,6 @@
 
 package spec
 
-import (
-	"gopkg.in/yaml.v2"
-	"io/ioutil"
-)
-
 // NodeSpec defines the structure expected from the yaml file to define each nodes.
 type NodeSpec struct {
 	Name         string            `yaml:"-"`         // unique name assigned to this node
@@ -84,53 +79,6 @@ type ACL struct {
 // All sequences in the yaml. Also contains the user defined no-op job.
 type Specs struct {
 	Sequences map[string]*SequenceSpec `yaml:"sequences"`
-}
-
-// ParseSpec will read from specFile and return a Config that the user
-// can then use for NewGrapher(). specFile is expected to be in the yaml
-// format specified.
-func ParseSpec(specFile string) (spec Specs, err, warning error) {
-	sequenceData, err := ioutil.ReadFile(specFile)
-	if err != nil {
-		return
-	}
-
-	/* Emit warning if unexpected or duplicate fields are present. */
-	/* Error if specs are incorrectly formatted or fields are of incorrect type. */
-	err = yaml.UnmarshalStrict(sequenceData, &spec)
-	if err != nil {
-		warning = err
-		err = yaml.Unmarshal(sequenceData, &spec)
-		if err != nil {
-			return
-		}
-	}
-
-	for sequenceName, sequence := range spec.Sequences {
-		sequence.Name = sequenceName
-
-		for nodeName, node := range sequence.Nodes {
-			node.Name = nodeName
-
-			// Set various optional fields if they were excluded.
-			for i, nodeSet := range node.Sets {
-				if nodeSet.As == nil {
-					node.Sets[i].As = node.Sets[i].Arg
-				}
-			}
-			for i, nodeArg := range node.Args {
-				if nodeArg.Given == nil {
-					node.Args[i].Given = node.Args[i].Expected
-				}
-			}
-			if node.Retry > 0 && node.RetryWait == "" {
-				node.RetryWait = "0s"
-			}
-		}
-
-	}
-
-	return
 }
 
 func (j *NodeSpec) IsJob() bool {
