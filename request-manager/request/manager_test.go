@@ -55,7 +55,7 @@ func setupManager(t *testing.T, dataFile string) string {
 
 	// Create a mock grapher factory.
 	if grf == nil {
-		spec, err, _ := spec.ParseSpec(rmtest.SpecPath + "/a-b-c.yaml")
+		spec, err := spec.ParseSpec(rmtest.SpecPath+"/a-b-c.yaml", func(s string, a ...interface{}) {})
 		if err != nil {
 			t.Fatal(err)
 		}

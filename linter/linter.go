@@ -1,4 +1,4 @@
-// Copyright 2017-2020, Square, Inc.
+// Copyright 2020, Square, Inc.
 
 package linter
 
@@ -31,7 +31,10 @@ func Run(ctx app.Context) error {
 		return err
 	}
 
-	_ = specs
+	err = spec.RunChecks(specs, printf)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -1,13 +1,10 @@
-// Copyright 2017-2020, Square, Inc.
+// Copyright 2020, Square, Inc.
 
 package spec
 
 import (
 	"testing"
 )
-
-/* ========================================================================= */
-// SequenceCheck tests
 
 func TestFailRequiredArgsNamedSequenceCheck(t *testing.T) {
 	filename := "fail-required-args-named-sequence-check.yaml"

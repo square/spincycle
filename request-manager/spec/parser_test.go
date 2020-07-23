@@ -1,19 +1,17 @@
-// Copyright 2017-2020, Square, Inc.
+// Copyright 2020, Square, Inc.
 
 package spec
 
 import (
 	"fmt"
 	"gopkg.in/yaml.v2"
+	"strings"
 	"testing"
 )
 
-/* ========================================================================= */
-// Parse tests
-
 func TestParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "decomm.yaml"
-	_, err, _ := ParseSpec(sequencesFile)
+	_, err := ParseSpec(sequencesFile, printf)
 	if err != nil {
 		t.Errorf("failed to read decomm.yaml, expected success")
 	}
@@ -21,7 +19,7 @@ func TestParseSpec(t *testing.T) {
 
 func TestFailParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "fail-parse-spec.yaml" // mistmatched type
-	_, err, _ := ParseSpec(sequencesFile)
+	_, err := ParseSpec(sequencesFile, printf)
 	if err == nil {
 		t.Errorf("unmarshaled string into uint")
 	} else {
@@ -36,30 +34,35 @@ func TestFailParseSpec(t *testing.T) {
 
 func TestWarnParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "warn-parse-spec.yaml" // duplicated field
-	_, _, warn := ParseSpec(sequencesFile)
-	if warn == nil {
+
+	var warning string
+	logFunc := func(s string, args ...interface{}) { warning = fmt.Sprintf(s, args...) }
+
+	ParseSpec(sequencesFile, logFunc)
+	if warning == "" {
 		t.Errorf("failed to give warning for duplicated field")
+	} else if strings.Contains(strings.ToLower(warning), "warning") {
+		fmt.Println(warning)
 	} else {
-		switch warn.(type) {
-		case *yaml.TypeError:
-			fmt.Println(warn.Error())
-		default:
-			t.Errorf("expected yaml.TypeError, got %T: %s", warn, warn.Error())
-		}
+		t.Errorf("expected warning containing 'warning' as substring, got: %s", warning)
 	}
 }
 
-/* ========================================================================= */
 // Make sure checks run correctly
-
 func TestRunChecks(t *testing.T) {
 	sequencesFile := specsDir + "decomm.yaml"
-	allSpecs, _, _ := ParseSpec(sequencesFile)
-	err, warn := RunChecks(allSpecs)
-	if len(err) > 0 {
+
+	var warning string
+	logFunc := func(s string, args ...interface{}) { warning = fmt.Sprintf(s, args...) }
+
+	allSpecs, _ := ParseSpec(sequencesFile, logFunc)
+	err := RunChecks(allSpecs, logFunc)
+	if err != nil {
 		t.Errorf("decomm.yaml failed check, expected success: %v", err)
 	}
-	if len(warn) > 0 {
-		t.Errorf("decomm.yaml produced warnings, expected none: %v", warn)
+	if strings.Contains(strings.ToLower(warning), "warning") {
+		t.Errorf("decomm.yaml produced warnings, expected none: %v", warning)
+	} else if warning != "" {
+		t.Errorf("unexpected output by RunChecks via `logfunc`: %s", warning)
 	}
 }

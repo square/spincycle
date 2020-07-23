@@ -82,28 +82,28 @@ var req = proto.Request{Id: "reqABC"}
 func testGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm.yaml"
-	specs, _, _ := spec.ParseSpec(sequencesFile)
+	specs, _ := spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	return NewGrapher(req, tf, specs, id.NewGenerator(4, 100))
 }
 
 func testConditionalGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/destroy-conditional.yaml"
-	specs, _, _ := spec.ParseSpec(sequencesFile)
+	specs, _ := spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	return NewGrapher(req, tf, specs, id.NewGenerator(4, 100))
 }
 
 func testLimitParallelGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm-limit-parallel.yaml"
-	specs, _, _ := spec.ParseSpec(sequencesFile)
+	specs, _ := spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	return NewGrapher(req, tf, specs, id.NewGenerator(4, 100))
 }
 
 func testSetsGrapher() *Grapher {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/decomm-sets.yaml"
-	specs, _, _ := spec.ParseSpec(sequencesFile)
+	specs, _ := spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	return NewGrapher(req, tf, specs, id.NewGenerator(4, 100))
 }
 
@@ -428,7 +428,7 @@ func TestCreateDecomSetsGraph(t *testing.T) {
 func TestCreateDecomGraphNoNodes(t *testing.T) {
 	tf := &testFactory{}
 	sequencesFile := "../test/specs/empty-cluster.yaml"
-	spec, _, _ := spec.ParseSpec(sequencesFile)
+	spec, _ := spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	omg := NewGrapher(req, tf, spec, id.NewGenerator(4, 100))
 
 	args := map[string]interface{}{
@@ -1443,10 +1443,11 @@ func TestInsertComponentBetween3(t *testing.T) {
 }
 
 func TestOptArgs001(t *testing.T) {
+	sequencesFile := "../test/specs/opt-args-001.yaml"
 	tf := &mock.JobFactory{
 		Created: map[string]*mock.Job{},
 	}
-	s, err, _ := spec.ParseSpec("../test/specs/opt-args-001.yaml")
+	s, err := spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1490,7 +1491,8 @@ func TestOptArgs001(t *testing.T) {
 	tf = &mock.JobFactory{
 		Created: map[string]*mock.Job{},
 	}
-	s, err, _ = spec.ParseSpec("../test/specs/opt-args-001.yaml")
+	sequencesFile = "../test/specs/opt-args-001.yaml"
+	s, err = spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1528,6 +1530,7 @@ func TestOptArgs001(t *testing.T) {
 }
 
 func TestBadEach001(t *testing.T) {
+	sequencesFile := "../test/specs/bad-each-001.yaml"
 	job := &mock.Job{
 		SetJobArgs: map[string]interface{}{
 			// This causes an error because the spec has each: instances:instannce,
@@ -1540,7 +1543,7 @@ func TestBadEach001(t *testing.T) {
 			"get-instances": job,
 		},
 	}
-	s, err, _ := spec.ParseSpec("../test/specs/bad-each-001.yaml")
+	s, err := spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1605,7 +1608,8 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 	// This spec has "if: foo" where "foo" is an optional arg with no value,
 	// so grapher should use "default: defaultSeq", which we can see below in
 	// "sequence_defaultSeq_start/end" nodes.
-	specs, err, _ := spec.ParseSpec("../test/specs/cond-args-001.yaml")
+	sequencesFile := "../test/specs/cond-args-001.yaml"
+	specs, err := spec.ParseSpec(sequencesFile, func(s string, a ...interface{}) {})
 	if err != nil {
 		t.Fatal(err)
 	}

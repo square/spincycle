@@ -1,11 +1,9 @@
-// Copyright 2017-2020, Square, Inc.
+// Copyright 2020, Square, Inc.
 
 // Package app provides app-wide data structs and functions.
 package app
 
 import (
-	"io"
-
 	"github.com/square/spincycle/v2/request-manager/spec"
 )
 

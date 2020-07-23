@@ -1,4 +1,4 @@
-// Copyright 2017-2020, Square, Inc.
+// Copyright 2020, Square, Inc.
 
 package spec
 
@@ -13,12 +13,13 @@ const (
 	specsDir = "../test/specs/"
 )
 
-/* ========================================================================= */
-// Helper functions
+var (
+	printf = func(s string, args ...interface{}) { fmt.Printf(s, args...) }
+)
 
 func runSequenceCheckOn(check SequenceCheck, filename string) error {
 	filepath := specsDir + filename
-	allSpecs, err, _ := ParseSpec(filepath)
+	allSpecs, err := ParseSpec(filepath, printf)
 	if err != nil {
 		return err
 	}
@@ -32,7 +33,7 @@ func runSequenceCheckOn(check SequenceCheck, filename string) error {
 
 func runNodeCheckOn(check NodeCheck, filename string) error {
 	filepath := specsDir + filename
-	allSpecs, err, _ := ParseSpec(filepath)
+	allSpecs, err := ParseSpec(filepath, printf)
 	if err != nil {
 		return err
 	}

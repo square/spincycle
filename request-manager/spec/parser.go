@@ -1,4 +1,4 @@
-// Copyright 2017-2020, Square, Inc.
+// Copyright 2020, Square, Inc.
 
 package spec
 
@@ -11,21 +11,27 @@ import (
 	"strings"
 )
 
-/* Parse a single request (YAML) file. */
-func ParseSpec(specFile string) (spec Specs, err, warning error) {
+var checkFailed = fmt.Errorf("Static check(s) failed")
+
+// Parse a single request (YAML) file.
+// `logFunc` is a Printf-like function used to log warning(s) should they occur.
+// Errors are returned, not logged.
+func ParseSpec(specFile string, logFunc func(string, ...interface{})) (Specs, error) {
+	var spec Specs
+
 	sequenceData, err := ioutil.ReadFile(specFile)
 	if err != nil {
-		return
+		return spec, err
 	}
 
 	/* Emit warning if unexpected or duplicate fields are present. */
 	/* Error if specs are incorrectly formatted or fields are of incorrect type. */
 	err = yaml.UnmarshalStrict(sequenceData, &spec)
 	if err != nil {
-		warning = err
+		logFunc("Warning: %s\n", err)
 		err = yaml.Unmarshal(sequenceData, &spec)
 		if err != nil {
-			return
+			return spec, err
 		}
 	}
 
@@ -53,41 +59,13 @@ func ParseSpec(specFile string) (spec Specs, err, warning error) {
 
 	}
 
-	return
+	return spec, nil
 }
 
-/* Runs checks on allSpecs. */
-func RunChecks(allSpecs Specs) (errors, warnings []error) {
-	sequenceErrors := makeSequenceErrorChecks()
-	nodeErrors := makeNodeErrorChecks(allSpecs)
-	nodeWarnings := makeNodeWarningChecks()
-
-	for _, sequence := range allSpecs.Sequences {
-		for _, sequenceCheck := range sequenceErrors {
-			if err := sequenceCheck.CheckSequence(*sequence); err != nil {
-				errors = append(errors, err)
-			}
-		}
-
-		for _, node := range sequence.Nodes {
-			for _, nodeCheck := range nodeErrors {
-				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
-					errors = append(errors, err)
-				}
-			}
-			for _, nodeCheck := range nodeWarnings {
-				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
-					warnings = append(warnings, err)
-				}
-			}
-		}
-	}
-
-	return
-}
-
-/* Read and check all specs file in indicated specs directory. */
-func Parse(specsDir string, printf func(string, ...interface{})) (Specs, error) {
+// Read all specs file in indicated specs directory.
+// `logFunc` is a Printf-like function used to log warning(s) should they occur.
+// Errors are returned, not logged.
+func Parse(specsDir string, logFunc func(string, ...interface{})) (Specs, error) {
 	specs := Specs{
 		Sequences: map[string]*SequenceSpec{},
 	}
@@ -99,14 +77,16 @@ func Parse(specsDir string, printf func(string, ...interface{})) (Specs, error) 
 		if info.IsDir() || !strings.HasSuffix(info.Name(), ".yaml") {
 			return nil
 		}
-
-		spec, err, warning := ParseSpec(path)
+		relPath, err := filepath.Rel(specsDir, path)
 		if err != nil {
-			return fmt.Errorf("error reading spec file %s: %s", info.Name(), err)
+			logFunc("Warning: failed to get relative directory path for file %s: %s", path, err)
 		}
-		if warning != nil {
-			printf("Warning: %s: %s\n", info.Name(), warning.Error())
+
+		spec, err := ParseSpec(path, logFunc) // logs warnings but not errors
+		if err != nil {
+			return fmt.Errorf("error reading spec file %s: %s", relPath, err)
 		}
+
 		for name, spec := range spec.Sequences {
 			specs.Sequences[name] = spec
 		}
@@ -114,19 +94,44 @@ func Parse(specsDir string, printf func(string, ...interface{})) (Specs, error) 
 		return nil
 	})
 	if err != nil {
-		return specs, err
-	}
-
-	errors, warnings := RunChecks(specs)
-	if len(errors) > 0 {
-		for _, err = range errors {
-			printf("Error: %s\n", err.Error())
-		}
-		return specs, fmt.Errorf("specs file(s) failed static check(s), run spinc-linter on specs or see log for more details")
-	}
-	for _, warning := range warnings {
-		printf("Warning: %s\n", warning.Error())
+		return specs, fmt.Errorf("error reading spec files: %s", err)
 	}
 
 	return specs, nil
+}
+
+// Runs checks on allSpecs.
+// `logFunc` is a Printf-like function used to log warnings and errors should they occur.
+// If any error is logged, this function returns an error.
+func RunChecks(allSpecs Specs, logFunc func(string, ...interface{})) error {
+	sequenceErrors := makeSequenceErrorChecks()
+	nodeErrors := makeNodeErrorChecks(allSpecs)
+	nodeWarnings := makeNodeWarningChecks()
+
+	var ret error
+
+	for _, sequence := range allSpecs.Sequences {
+		for _, sequenceCheck := range sequenceErrors {
+			if err := sequenceCheck.CheckSequence(*sequence); err != nil {
+				logFunc("Error: %s\n", err)
+				ret = checkFailed
+			}
+		}
+
+		for _, node := range sequence.Nodes {
+			for _, nodeCheck := range nodeErrors {
+				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
+					logFunc("Error: %s\n", err)
+					ret = checkFailed
+				}
+			}
+			for _, nodeCheck := range nodeWarnings {
+				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
+					logFunc("Warning: %s\n", err)
+				}
+			}
+		}
+	}
+
+	return ret
 }

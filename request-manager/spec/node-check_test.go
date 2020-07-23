@@ -1,13 +1,10 @@
-// Copyright 2017-2020, Square, Inc.
+// Copyright 2020, Square, Inc.
 
 package spec
 
 import (
 	"testing"
 )
-
-/* ========================================================================== */
-// NodeCheck tests
 
 func TestFailHasCategoryNodeCheck(t *testing.T) {
 	filename := "fail-has-category-node-check.yaml"
@@ -210,7 +207,7 @@ func TestFailValidRetryWaitNodeCheck(t *testing.T) {
 func TestFailRequiredArgsProvidedNodeCheck1(t *testing.T) {
 	filename := "fail-required-args-provided-node-check-1.yaml" // tests normal sequence node
 	filepath := specsDir + filename
-	allSpecs, _, _ := ParseSpec(filepath)
+	allSpecs, _ := ParseSpec(filepath, printf)
 
 	check := RequiredArgsProvidedNodeCheck{allSpecs}
 	err := runNodeCheckOn(check, filename)
@@ -220,7 +217,7 @@ func TestFailRequiredArgsProvidedNodeCheck1(t *testing.T) {
 func TestFailRequiredArgsProvidedNodeCheck2(t *testing.T) {
 	filename := "fail-required-args-provided-node-check-2.yaml" // tests conditional node
 	filepath := specsDir + filename
-	allSpecs, _, _ := ParseSpec(filepath)
+	allSpecs, _ := ParseSpec(filepath, printf)
 
 	check := RequiredArgsProvidedNodeCheck{allSpecs}
 	err := runNodeCheckOn(check, filename)
@@ -230,7 +227,7 @@ func TestFailRequiredArgsProvidedNodeCheck2(t *testing.T) {
 func TestFailRequiredArgsProvidedNodeCheck3(t *testing.T) {
 	filename := "fail-required-args-provided-node-check-3.yaml" // tests expanded sequence node
 	filepath := specsDir + filename
-	allSpecs, _, _ := ParseSpec(filepath)
+	allSpecs, _ := ParseSpec(filepath, printf)
 
 	check := RequiredArgsProvidedNodeCheck{allSpecs}
 	err := runNodeCheckOn(check, filename)

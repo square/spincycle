@@ -183,10 +183,14 @@ func (s *Server) Boot() error {
 	cfgstr, _ := json.MarshalIndent(cfg, "", "  ")
 	log.Printf("Config: %s", cfgstr)
 
-	// Load requests specification files (specs)
+	// Load and check requests specification files (specs)
 	specs, err := s.appCtx.Hooks.LoadSpecs(s.appCtx)
 	if err != nil {
-		return fmt.Errorf("error loading specs: %s", err)
+		return fmt.Errorf("LoadSpecs: %s", err)
+	}
+	err = spec.RunChecks(specs, log.Printf)
+	if err != nil {
+		return fmt.Errorf("Static check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 	s.appCtx.Specs = specs
 
