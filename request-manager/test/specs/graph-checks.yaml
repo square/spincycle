@@ -1,0 +1,195 @@
+---
+sequences:
+  missing-sets: # subsequence fails to set args declared in `sets`
+    request: true
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: sequence
+        type: missing-sets-subsequence-1
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-a
+          - arg: arg-b
+          - arg: arg-c
+        deps: []
+  missing-sets-conditional: # some subsequences in conditional node fail to set args declared in `sets`
+    request: true
+    args:
+      required:
+        - name: required-a
+        - name: if
+    nodes:
+      node-a:
+        category: conditional
+        if: if
+        eq:
+          1: missing-sets-subsequence-1
+          2: missing-sets-subsequence-2
+          default: missing-sets-subsequence-3
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-a
+          - arg: arg-b
+          - arg: arg-c
+        deps: []
+  missing-sets-subsequence-1: # only sets arg-a, arg-b
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-a
+        deps: []
+      node-b:
+        category: job
+        type: job-type-b
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-b
+        deps: []
+  missing-sets-subsequence-2: # only sets arg-a, arg-c
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-a
+        deps: []
+      node-b:
+        category: job
+        type: job-type-b
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-c
+        deps: []
+  missing-sets-subsequence-3: # sets arg-a, arg-b, arg-c
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-a
+        deps: []
+      node-b:
+        category: job
+        type: job-type-b
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-b
+          - arg: arg-c
+        deps: []
+  missing-job-args: # node requires an arg that hasn't been set
+    request: true
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: sequence
+        type: missing-job-args-subsequence
+        args:
+          - expected: required-a
+        sets:
+          - arg: arg-a
+        deps: []
+      node-b:
+        category: job
+        type: job-type-a
+        args:
+          - expected: arg-b # wasn't declared in node-a's `sets`, so this should cause an error
+        deps: [node-a]
+  missing-job-args-subsequence:
+    args:
+      required:
+        - name: required-a
+      static:
+        - name: static-b
+          default: default
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        args:
+          - expected: required-a
+          - expected: static-b
+        sets:
+          - arg: arg-a
+          - arg: arg-b
+        deps: []
+  circular-dependencies: # impossible dependencies among nodes
+    args:
+      required:
+        - name: required-a
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        deps: []
+      node-b:
+        category: job
+        type: job-type-b
+        deps: [node-a, node-c]
+      node-c:
+        category: job
+        type: job-type-c
+        deps: [node-b] # node-b depends on this node, so this dependency is impossible
+  propagate: # subsequence failure should cause this sequence to fail
+    nodes:
+      node-a:
+        category: sequence
+        type: failure-propagation-subsequence-1
+        deps: []
+  propagate-conditional: # subsequence failure(s) should cause this sequence to fail
+    args:
+      required:
+        - name: if
+    nodes:
+      node-a:
+        category: conditional
+        if: if
+        eq:
+          1: propagate-subsequence-1
+          2: propagate-subsequence-2
+          default: propagate-subsequence-3
+        deps: []
+  propagate-subsequence-1: # failed subsequence
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        deps: [node-a]
+  propagate-subsequence-2: # failed subsequence
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        deps: [node-a]
+  propagate-subsequence-3: # successful subsequence
+    nodes:
+      node-a:
+        category: job
+        type: job-type-a
+        deps: []

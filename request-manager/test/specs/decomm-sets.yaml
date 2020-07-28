@@ -1,6 +1,7 @@
 ---
 sequences:
   decommission-cluster:
+    request: true
     args:
       required:
         - name: cluster
@@ -41,11 +42,8 @@ sequences:
         type: check-instance-is-ok
         each:
           - instances0:instance   # repeat for each instance in instances
-                                 # i.e. each iteration of the sequence check-instance-is-ok will
-                                 #      expect a variable "instance" to be set in job args
-        args:
-          - expected: instances
-            given: instances0
+                                  # i.e. each iteration of the sequence check-instance-is-ok will
+                                  #      expect a variable "instance" to be set in job args
         deps: [get-instances]
         retry: 3
         retryWait: 10s # this should be ignored
@@ -54,9 +52,6 @@ sequences:
         type: decommission-instance
         each:
           - instances0:instance # repeat for each instance in instances
-        args:
-          - expected: instances
-            given: instances0
         deps: [prep-1]
       first-cleanup-job:
         category: job
@@ -117,7 +112,6 @@ sequences:
         sets: []
         deps: [check-ok]
   decommission-instance:
-    retry: 2 # this should do nothing
     args:
       required:
         - name: instance

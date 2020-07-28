@@ -1,6 +1,7 @@
 ---
 sequences:
   decommission-cluster:
+    request: true
     args:
       required:
         - name: cluster

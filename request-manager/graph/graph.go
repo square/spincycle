@@ -1,11 +1,9 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2020, Square, Inc.
 
-package grapher
+package graph
 
 import (
 	"fmt"
-
-	"github.com/square/spincycle/v2/job"
 )
 
 // Graph represents a graph. It represents a graph via
@@ -14,34 +12,28 @@ import (
 // Last Nodes in the graph.
 type Graph struct {
 	Name     string              // Name of the Graph
-	First    *Node               // The source node of the graph
-	Last     *Node               // The sink node of the graph
-	Vertices map[string]*Node    // All vertices in the graph (node id -> node)
+	First    Node               // The source node of the graph
+	Last     Node               // The sink node of the graph
+	Vertices map[string]Node    // All vertices in the graph (node id -> node)
 	Edges    map[string][]string // All edges (source node id -> sink node id)
 }
 
 // Node represents a single vertex within a Graph.
-// Each node consists of a Payload (i.e. the data that the
-// user cares about), a list of next and prev Nodes, and other
-// information about the node such as the number of times it
-// should be retried on error. Next defines all the out edges
-// from Node, and Prev defines all the in edges to Node.
-type Node struct {
-	Datum             job.Job                // Data stored at this Node
-	Next              map[string]*Node       // out edges ( node id -> Node )
-	Prev              map[string]*Node       // in edges ( node id -> Node )
-	Name              string                 // the name of the node
-	Args              map[string]interface{} // the args the node was created with
-	Retry             uint                   // the number of times to retry a node
-	RetryWait         string                 // the time to sleep between retries
-	SequenceId        string                 // ID for first node in sequence
-	SequenceRetry     uint                   // Number of times to retry a sequence. Only set for first node in sequence.
-	SequenceRetryWait string                 // the time to sleep between sequence retries
+// Node types must have an ID, and maps of its in/out edges.
+type Node interface {
+	// functions involving graph functionality
+	GetId() string                     // get node's unique id within graph
+	GetNext() *map[string]Node               // TODO 
+	GetPrev() *map[string]Node               // get in edges (node id -> Node)
+
+	// pretty printer functions (for use with PrintDot)
+	GetName() string                   // get node's name
+	String() string                    // get implementation-specific attributes
 }
 
 // returns true iff the graph has at least one cycle in it
 func (g *Graph) HasCycles() bool {
-	seen := map[string]*Node{g.First.Datum.Id().Id: g.First}
+	seen := map[string]Node{g.First.GetId(): g.First}
 	return hasCyclesDFS(seen, g.First)
 }
 
@@ -60,12 +52,12 @@ func (g *Graph) AdjacencyListMatchesLL() bool {
 
 	// check that all the vertex lists match
 	for vertexName, node := range vertices {
-		if n, ok := g.Vertices[vertexName]; !ok || n != node {
+		if n, ok := g.Vertices[vertexName]; !ok || n.GetId() != node.GetId() {
 			return false
 		}
 	}
 	for vertexName, node := range g.Vertices {
-		if n, ok := vertices[vertexName]; !ok || n != node {
+		if n, ok := vertices[vertexName]; !ok || n.GetId() != node.GetId() {
 			return false
 		}
 	}
@@ -101,13 +93,8 @@ func (g *Graph) PrintDot() {
 	fmt.Printf("\tfontsize=22\n")
 	for vertexName, vertex := range g.Vertices {
 		fmt.Printf("\tnode [style=filled,color=\"%s\",shape=box]\n", "#86cedf")
-		fmt.Printf("\t\"%s\" [label=\"%s\\n ", vertexName, vertex.Name)
-		fmt.Printf("Vertex ID: %s\\n ", vertex.Datum.Id().Id)
-		fmt.Printf("Sequence ID: %s\\n ", vertex.SequenceId)
-		fmt.Printf("Sequence Retry: %v\\n ", vertex.SequenceRetry)
-		for k, v := range vertex.Args {
-			fmt.Printf(" %s : %s \\n ", k, v)
-		}
+		fmt.Printf("\t\"%s\" [label=\"%s\\n ", vertexName, vertex.GetName())
+		fmt.Printf("%v", vertex)
 		fmt.Printf("\"]\n")
 	}
 	for out, ins := range g.Edges {
@@ -121,17 +108,17 @@ func (g *Graph) PrintDot() {
 // --------------------------------------------------------------------------
 
 // Returns true if the last node in g is reachable from n
-func (g *Graph) connectedToLastNodeDFS(n *Node) bool {
+func (g *Graph) connectedToLastNodeDFS(n Node) bool {
 	if n == nil {
 		return false
 	}
-	if g.Last == n {
+	if g.Last.GetId() == n.GetId() {
 		return true
 	}
-	if g.Last != n && (n.Next == nil || len(n.Next) == 0) {
+	if g.Last.GetId() != n.GetId() && (n.GetNext() == nil || len(*n.GetNext()) == 0) {
 		return false
 	}
-	for _, next := range n.Next {
+	for _, next := range *n.GetNext() {
 
 		// Every node after n must also be connected to the last node
 		connected := g.connectedToLastNodeDFS(next)
@@ -143,17 +130,17 @@ func (g *Graph) connectedToLastNodeDFS(n *Node) bool {
 }
 
 // Returns true if n is reachable from the first node in g
-func (g *Graph) connectedToFirstNodeDFS(n *Node) bool {
+func (g *Graph) connectedToFirstNodeDFS(n Node) bool {
 	if n == nil {
 		return false
 	}
-	if g.First == n {
+	if g.First.GetId() == n.GetId() {
 		return true
 	}
-	if g.First != n && (n.Prev == nil || len(n.Prev) == 0) {
+	if g.First.GetId() != n.GetId() && (n.GetPrev() == nil || len(*n.GetPrev()) == 0) {
 		return false
 	}
-	for _, prev := range n.Prev {
+	for _, prev := range *n.GetPrev() {
 
 		// Every node before n must also be connected to the first node
 		connected := g.connectedToFirstNodeDFS(prev)
@@ -169,7 +156,7 @@ func (g *Graph) connectedToFirstNodeDFS(n *Node) bool {
 //      component and g are connected and acyclic
 //      prev and next both are present in g
 //      next "comes after" prev in the graph, when traversing from the source node
-func (g *Graph) insertComponentBetween(component *Graph, prev *Node, next *Node) error {
+func (g *Graph) InsertComponentBetween(component *Graph, prev Node, next Node) error {
 	// Cannot check for the adjacency list match here because of the way we insert components.
 	if g.HasCycles() || component.HasCycles() ||
 		!g.IsConnected() || !component.IsConnected() {
@@ -177,16 +164,16 @@ func (g *Graph) insertComponentBetween(component *Graph, prev *Node, next *Node)
 	}
 
 	// have component point to prev and next nodes
-	component.First.Prev[prev.Datum.Id().Id] = prev
-	component.Last.Next[next.Datum.Id().Id] = next
+	(*component.First.GetPrev())[prev.GetId()] = prev
+	(*component.Last.GetNext())[next.GetId()] = next
 
 	// have prev and next nodes point to component
-	prev.Next[component.First.Datum.Id().Id] = component.First
-	next.Prev[component.Last.Datum.Id().Id] = component.Last
+	(*prev.GetNext())[component.First.GetId()] = component.First
+	(*next.GetPrev())[component.Last.GetId()] = component.Last
 
 	// Remove edges between prev and next if it exists
-	delete(prev.Next, next.Datum.Id().Id)
-	delete(next.Prev, prev.Datum.Id().Id)
+	delete(*prev.GetNext(), next.GetId())
+	delete(*next.GetPrev(), prev.GetId())
 
 	// update vertices list
 
@@ -201,19 +188,19 @@ func (g *Graph) insertComponentBetween(component *Graph, prev *Node, next *Node)
 	}
 
 	// for the edges of the previous node, add the start node of this component
-	g.Edges[prev.Datum.Id().Id] = append(g.Edges[prev.Datum.Id().Id], component.First.Datum.Id().Id)
+	g.Edges[prev.GetId()] = append(g.Edges[prev.GetId()], component.First.GetId())
 
 	// for the edges of the last node of this component, add the next node
-	if find(g.Edges[component.Last.Datum.Id().Id], next.Datum.Id().Id) < 0 {
-		g.Edges[component.Last.Datum.Id().Id] = append(g.Edges[component.Last.Datum.Id().Id], next.Datum.Id().Id)
+	if find(g.Edges[component.Last.GetId()], next.GetId()) < 0 {
+		g.Edges[component.Last.GetId()] = append(g.Edges[component.Last.GetId()], next.GetId())
 	}
 
 	// Remove all occurences next from the adjacency list of prev
-	i := find(g.Edges[prev.Datum.Id().Id], next.Datum.Id().Id)
+	i := find(g.Edges[prev.GetId()], next.GetId())
 	for i >= 0 {
-		g.Edges[prev.Datum.Id().Id][i] = g.Edges[prev.Datum.Id().Id][len(g.Edges[prev.Datum.Id().Id])-1]
-		g.Edges[prev.Datum.Id().Id] = g.Edges[prev.Datum.Id().Id][:len(g.Edges[prev.Datum.Id().Id])-1]
-		i = find(g.Edges[prev.Datum.Id().Id], next.Datum.Id().Id)
+		g.Edges[prev.GetId()][i] = g.Edges[prev.GetId()][len(g.Edges[prev.GetId()])-1]
+		g.Edges[prev.GetId()] = g.Edges[prev.GetId()][:len(g.Edges[prev.GetId()])-1]
+		i = find(g.Edges[prev.GetId()], next.GetId())
 	}
 
 	// verify resulting graph is ok
@@ -235,7 +222,7 @@ func find(ss []string, s string) int {
 
 // Returns a list of edges and vertices based on the linked list structure
 // of the graph. Useful for asserting that the structures match and for error checking.
-func (g *Graph) createAdjacencyList() (map[string][]string, map[string]*Node) {
+func (g *Graph) createAdjacencyList() (map[string][]string, map[string]Node) {
 	edges := map[string][]string{}
 	vertices := []string{}
 	s := edges
@@ -243,13 +230,13 @@ func (g *Graph) createAdjacencyList() (map[string][]string, map[string]*Node) {
 	n := g.First
 
 	// Classic BFS
-	seen := map[string]*Node{}
-	frontier := map[string]*Node{}
+	seen := map[string]Node{}
+	frontier := map[string]Node{}
 
-	for name, node := range n.Next {
+	for name, node := range *n.GetNext() {
 		frontier[name] = node
 	}
-	seen[n.Datum.Id().Id] = n
+	seen[n.GetId()] = n
 
 	// Search while the frontier set is non-empty
 	for len(frontier) > 0 {
@@ -258,7 +245,7 @@ func (g *Graph) createAdjacencyList() (map[string][]string, map[string]*Node) {
 		for name, next := range frontier {
 
 			// Look at the edges connecting that node to a node in the seen set.
-			for n, _ := range next.Prev {
+			for n, _ := range *next.GetPrev() {
 
 				// If this edge has not been seen yet, add it to the edge list
 				if _, ok := s[n]; !ok {
@@ -268,7 +255,7 @@ func (g *Graph) createAdjacencyList() (map[string][]string, map[string]*Node) {
 			}
 
 			// add each "next" node to the frontier set
-			for k, v := range next.Next {
+			for k, v := range *next.GetNext() {
 				if _, ok := seen[k]; !ok {
 					frontier[k] = v
 				}
@@ -289,16 +276,16 @@ func (g *Graph) createAdjacencyList() (map[string][]string, map[string]*Node) {
 
 // Determines if a graph has cycles, using dfs
 // precondition: start node is already in seen list
-func hasCyclesDFS(seen map[string]*Node, start *Node) bool {
-	for _, next := range start.Next {
+func hasCyclesDFS(seen map[string]Node, start Node) bool {
+	for _, next := range *start.GetNext() {
 
 		// If the next node has already been seen, return true
-		if _, ok := seen[next.Datum.Id().Id]; ok {
+		if _, ok := seen[next.GetId()]; ok {
 			return true
 		}
 
 		// Add next node to seen list
-		seen[next.Datum.Id().Id] = next
+		seen[next.GetId()] = next
 
 		// Continue searching after next node
 		if hasCyclesDFS(seen, next) {
@@ -306,7 +293,7 @@ func hasCyclesDFS(seen map[string]*Node, start *Node) bool {
 		}
 
 		// Remove next node from seen list
-		delete(seen, next.Datum.Id().Id)
+		delete(seen, next.GetId())
 	}
 	return false
 }
