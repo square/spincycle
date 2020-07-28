@@ -169,7 +169,7 @@ func TestCreateDestroyConditionalGraph(t *testing.T) {
 
 func TestFailMissingSetsGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, func(s string, args ...interface{}) { fmt.Println(fmt.Sprintf(s, args...)) })
+	grapher := MakeGrapher(t, sequenceFile, t.Logf)
 	err := grapher.CreateTemplates()
 	if err == nil {
 		t.Fatal("no error creating template with incorrectly specified `sets`, expected error")
@@ -190,7 +190,7 @@ func TestFailMissingSetsGraphCheck(t *testing.T) {
 
 func TestFailMissingSetsConditionalGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, func(s string, args ...interface{}) { fmt.Println(fmt.Sprintf(s, args...)) })
+	grapher := MakeGrapher(t, sequenceFile, t.Logf)
 	err := grapher.CreateTemplates()
 	if err == nil {
 		t.Fatal("no error creating template with incorrectly specified `sets`, expected error")
@@ -219,7 +219,7 @@ func TestFailMissingSetsConditionalGraphCheck(t *testing.T) {
 
 func TestFailMissingJobArgsGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, func(s string, args ...interface{}) { fmt.Println(fmt.Sprintf(s, args...)) })
+	grapher := MakeGrapher(t, sequenceFile, t.Logf)
 	err := grapher.CreateTemplates()
 	if err == nil {
 		t.Fatal("no error creating template with missing job args, expected error")
@@ -240,7 +240,7 @@ func TestFailMissingJobArgsGraphCheck(t *testing.T) {
 
 func TestFailCircularDependenciesGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, func(s string, args ...interface{}) { fmt.Println(fmt.Sprintf(s, args...)) })
+	grapher := MakeGrapher(t, sequenceFile, t.Logf)
 	err := grapher.CreateTemplates()
 	if err == nil {
 		t.Fatal("no error creating template with circular dependencies, expected error")
@@ -257,7 +257,7 @@ func TestFailCircularDependenciesGraphCheck(t *testing.T) {
 
 func TestFailPropagate(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, func(s string, args ...interface{}) { fmt.Println(fmt.Sprintf(s, args...)) })
+	grapher := MakeGrapher(t, sequenceFile, t.Logf)
 	err := grapher.CreateTemplates()
 	if err == nil {
 		t.Fatal("no error creating template with circular dependencies, expected error")
@@ -278,7 +278,7 @@ func TestFailPropagate(t *testing.T) {
 
 func TestFailPropagateConditional(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, func(s string, args ...interface{}) { fmt.Println(fmt.Sprintf(s, args...)) })
+	grapher := MakeGrapher(t, sequenceFile, t.Logf)
 	err := grapher.CreateTemplates()
 	if err == nil {
 		t.Fatal("no error creating template with circular dependencies, expected error")

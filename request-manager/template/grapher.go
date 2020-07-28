@@ -134,15 +134,20 @@ func (o *Grapher) getSubsequences(seq *spec.SequenceSpec) map[string][]string {
 
 // Build all subsequences in `subsequences`, a map of node name --> list of subsequences
 // Returns error if any subsequence fails to build
-// Error is not descriptive; buildSequence itself logs error messages already
 func (o *Grapher) buildAllSubsequences(subsequences map[string][]string) error {
-	var err error
+	errOccurred := false
 	for _, subseqs := range subsequences {
 		for _, seq := range subseqs {
-			err = o.buildSequence(seq)
+			err := o.buildSequence(seq)
+			if err != nil {
+				errOccurred = true
+			}
 		}
 	}
-	return err
+	if errOccurred {
+		return fmt.Errorf("error building subsequence")
+	}
+	return nil
 }
 
 // Get the job args that were actually set by subsequences as a map of node name --> (intersection) of set of output job args
