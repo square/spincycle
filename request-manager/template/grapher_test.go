@@ -33,7 +33,7 @@ func MakeGrapher(t *testing.T, sequencesFile string, logFunc func(string, ...int
 
 func verifyDecomGraph(t *testing.T, grapher *Grapher) {
 	var g *graph.Graph
-	var template *TemplateGraph
+	var template *Graph
 	var ok bool
 	var sequence, startNode string
 	var currentStep []string
@@ -142,7 +142,7 @@ func TestCreateDestroyConditionalGraph(t *testing.T) {
 	}
 
 	var g *graph.Graph
-	var template *TemplateGraph
+	var template *Graph
 	var ok bool
 	var sequence, startNode string
 	var currentStep []string

@@ -8,7 +8,7 @@ import (
 	"github.com/square/spincycle/v2/request-manager/spec"
 )
 
-type TemplateNode struct {
+type Node struct {
 	// payload
 	NodeSpec *spec.NodeSpec // sequence node that this graph node represents
 
@@ -18,36 +18,36 @@ type TemplateNode struct {
 	Prev map[string]graph.Node
 }
 
-func (g TemplateNode) GetId() string {
+func (g Node) GetId() string {
 	return g.Id
 }
 
-func (g TemplateNode) GetNext() *map[string]graph.Node {
+func (g Node) GetNext() *map[string]graph.Node {
 	return &g.Next
 }
 
-func (g TemplateNode) GetPrev() *map[string]graph.Node {
+func (g Node) GetPrev() *map[string]graph.Node {
 	return &g.Prev
 }
 
-func (g TemplateNode) GetName() string {
+func (g Node) GetName() string {
 	return g.NodeSpec.Name
 }
 
 // graph prety printer function already prints relevant info; there's nothing to add here
-func (g TemplateNode) String() string {
+func (g Node) String() string {
 	return ""
 }
 
-type TemplateGraph struct {
-	Graph graph.Graph     // graph of TemplateNodes
+type Graph struct {
+	Graph graph.Graph     // graph of Nodes
 	Sets  map[string]bool // set of arguments set by sequence described by graph
 
 	idgen id.Generator // generates UIDs for this graph
 }
 
-func NewTemplateGraph(name string, idgen id.Generator) (*TemplateGraph, error) {
-	t := &TemplateGraph{
+func NewGraph(name string, idgen id.Generator) (*Graph, error) {
+	t := &Graph{
 		Sets:  map[string]bool{},
 		idgen: idgen,
 	}
@@ -58,12 +58,12 @@ func NewTemplateGraph(name string, idgen id.Generator) (*TemplateGraph, error) {
 	return t, nil
 }
 
-func (t *TemplateGraph) NewSubgraph(node *spec.NodeSpec) (*graph.Graph, error) {
+func (t *Graph) NewSubgraph(node *spec.NodeSpec) (*graph.Graph, error) {
 	id, err := t.idgen.UID()
 	if err != nil {
 		return nil, err
 	}
-	n := TemplateNode{
+	n := Node{
 		NodeSpec: node,
 		Id:       id,
 		Next:     map[string]graph.Node{},
@@ -78,7 +78,7 @@ func (t *TemplateGraph) NewSubgraph(node *spec.NodeSpec) (*graph.Graph, error) {
 	}, nil
 }
 
-func (t *TemplateGraph) initGraph(name string) error {
+func (t *Graph) initGraph(name string) error {
 	var err error
 	t.Graph = graph.Graph{
 		Name: name,
@@ -105,14 +105,14 @@ func (t *TemplateGraph) initGraph(name string) error {
 	return nil
 }
 
-func (t *TemplateGraph) newNoopNode(name string) (graph.Node, error) {
+func (t *Graph) newNoopNode(name string) (graph.Node, error) {
 	id, err := t.idgen.UID()
 	if err != nil {
 		return nil, err
 	}
 	noopCategory := "job"
 	noopType := "noop"
-	return &TemplateNode{
+	return &Node{
 		NodeSpec: &spec.NodeSpec{
 			Name:     name,
 			Category: &noopCategory,
