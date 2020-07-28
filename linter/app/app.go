@@ -4,17 +4,35 @@
 package app
 
 import (
+	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
 )
 
 // Context represents how to run linter. A context is passed to linter.Run().
 // A default context is created in main.go. Wrapper code can integrate with
 // linter by passing a custom context to linter.Run(). Integration is done
-// primarily with hooks.
+// primarily with hooks and factories.
 type Context struct {
-	Hooks Hooks // for integration with other code
+	// for integration with other code
+	Factories Factories
+	Hooks     Hooks
+}
+
+type Factories struct {
+	GeneratorFactory id.GeneratorFactory
 }
 
 type Hooks struct {
 	LoadSpecs func(string, func(string, ...interface{})) (spec.Specs, error)
+}
+
+func Defaults() Context {
+	return Context{
+		Factories: Factories{
+			GeneratorFactory: id.NewGeneratorFactory(4, 100),
+		},
+		Hooks: Hooks{
+			LoadSpecs: spec.Parse,
+		},
+	}
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/square/spincycle/v2/linter/app"
 	"github.com/square/spincycle/v2/request-manager/spec"
+	"github.com/square/spincycle/v2/request-manager/template"
 )
 
 var cmd struct {
@@ -16,22 +17,24 @@ var cmd struct {
 }
 
 func Run(ctx app.Context) error {
+	/* Setup. */
 	arg.MustParse(&cmd)
-
 	printf := func(s string, args ...interface{}) { fmt.Printf(s, args...) }
 
-	var specs spec.Specs
-	var err error
-	if ctx.Hooks.LoadSpecs == nil {
-		specs, err = spec.Parse(cmd.SpecsDir, printf)
-	} else {
-		specs, err = ctx.Hooks.LoadSpecs(cmd.SpecsDir, printf)
-	}
+	/* Static checks. */
+	specs, err := ctx.Hooks.LoadSpecs(cmd.SpecsDir, printf)
 	if err != nil {
 		return err
 	}
 
 	err = spec.RunChecks(specs, printf)
+	if err != nil {
+		return err
+	}
+
+	/* Graph checks. */
+	templateG := template.NewGrapher(specs, ctx.Factories.GeneratorFactory, printf)
+	err = templateG.CreateTemplates()
 	if err != nil {
 		return err
 	}
