@@ -79,7 +79,7 @@ func Parse(specsDir string, logFunc func(string, ...interface{})) (Specs, error)
 		}
 		relPath, err := filepath.Rel(specsDir, path)
 		if err != nil {
-			logFunc("Warning: failed to get relative directory path for file %s: %s", path, err)
+			logFunc("Warning: failed to get relative directory path for file %s: %s\n", path, err)
 		}
 
 		spec, err := ParseSpec(path, logFunc) // logs warnings but not errors

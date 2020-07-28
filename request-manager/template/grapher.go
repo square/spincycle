@@ -61,7 +61,7 @@ func (o *Grapher) buildSequence(sequenceName string) error {
 	seq, ok := o.AllSequences[sequenceName]
 	if !ok { // this shouldn't happen, because there should be a static check ensuring that all sequences actually exist
 		err := fmt.Errorf("cannot find definition; this is a bug in the code")
-		o.LogFunc("error: sequence %s: %s", sequenceName, err)
+		o.LogFunc("error: sequence %s: %s\n", sequenceName, err)
 		o.SequenceErrors[sequenceName] = err
 		return err
 	}
@@ -90,7 +90,7 @@ func (o *Grapher) buildSequence(sequenceName string) error {
 	if len(missingSets) > 0 {
 		err := fmt.Errorf("one or more nodes did not actually set job args declared in `sets`")
 		for nodeName, missing := range missingSets {
-			o.LogFunc("error: sequence %s, node %s: job arg(s) %s listed in `sets` were not actually set", sequenceName, nodeName, strings.Join(missing, ", "))
+			o.LogFunc("error: sequence %s, node %s: job arg(s) %s listed in `sets` were not actually set\n", sequenceName, nodeName, strings.Join(missing, ", "))
 		}
 		o.SequenceErrors[sequenceName] = err
 		return err
@@ -100,7 +100,7 @@ func (o *Grapher) buildSequence(sequenceName string) error {
 	jobArgs := getAllSequenceArgs(seq) // map of sequence arg (including optional+defualt) --> true
 	template, err := o.getTemplate(seq, jobArgs)
 	if err != nil {
-		o.LogFunc("error: sequence %s: %s", sequenceName, err)
+		o.LogFunc("error: sequence %s: %s\n", sequenceName, err)
 		o.SequenceErrors[sequenceName] = err
 		return err
 	}
