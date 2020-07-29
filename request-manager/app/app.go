@@ -13,9 +13,7 @@ import (
 
 	"github.com/square/spincycle/v2/config"
 	jr "github.com/square/spincycle/v2/job-runner"
-	"github.com/square/spincycle/v2/jobs"
 	"github.com/square/spincycle/v2/request-manager/auth"
-	"github.com/square/spincycle/v2/request-manager/grapher"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/joblog"
 	"github.com/square/spincycle/v2/request-manager/request"
@@ -51,9 +49,9 @@ type Context struct {
 // are sufficient to run the Request Manager. Users can provide custom factories
 // to modify behavior. For example, make Job Runner clients with custom TLS certs.
 type Factories struct {
-	MakeGrapher         func(Context) (grapher.GrapherFactory, error) // @fixme
-	MakeJobRunnerClient func(Context) (jr.Client, error)
-	MakeDbConnPool      func(Context) (*sql.DB, error)
+	MakeGeneratorFactory func(Context) (id.GeneratorFactory, error)
+	MakeJobRunnerClient  func(Context) (jr.Client, error)
+	MakeDbConnPool       func(Context) (*sql.DB, error)
 }
 
 // Hooks allow users to modify system behavior at certain points. All hooks are
@@ -108,9 +106,9 @@ func Defaults() Context {
 	return Context{
 		ShutdownChan: make(chan struct{}),
 		Factories: Factories{
-			MakeGrapher:         MakeGrapher,
-			MakeJobRunnerClient: MakeJobRunnerClient,
-			MakeDbConnPool:      MakeDbConnPool,
+			MakeGeneratorFactory: MakeGeneratorFactory,
+			MakeJobRunnerClient:  MakeJobRunnerClient,
+			MakeDbConnPool:       MakeDbConnPool,
 		},
 		Hooks: Hooks{
 			LoadConfig: LoadConfig,
@@ -139,11 +137,9 @@ func LoadSpecs(ctx Context) (spec.Specs, error) {
 	return spec.Parse(ctx.Config.Specs.Dir, log.Printf)
 }
 
-// MakeGrapher is the default MakeGrapher factory.
-func MakeGrapher(ctx Context) (grapher.GrapherFactory, error) {
-	idf := id.NewGeneratorFactory(4, 100) // generate 4-character ids for jobs
-	grf := grapher.NewGrapherFactory(jobs.Factory, ctx.Specs, idf)
-	return grf, nil
+// MakeGeneratorFactory is the default MakeGeneratorFactory factory.
+func MakeGeneratorFactory(ctx Context) (id.GeneratorFactory, error) {
+	return id.NewGeneratorFactory(4, 100), nil // generates 4-character ids for jobs
 }
 
 // MakeJobRunnerClient is the default MakeJobRunnerClient factory.

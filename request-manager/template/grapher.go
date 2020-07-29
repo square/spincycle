@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
 )
@@ -215,7 +214,7 @@ func (o *Grapher) getTemplate(seq *spec.SequenceSpec, jobArgs map[string]bool) (
 	// Generates IDs unique within the template
 	idgen := o.IdGenFactory.Make()
 
-	template, err := NewGraph(seq.Name, idgen)
+	template, err := newGraph(seq.Name, idgen)
 	if err != nil {
 		return nil, err
 	}
@@ -223,15 +222,15 @@ func (o *Grapher) getTemplate(seq *spec.SequenceSpec, jobArgs map[string]bool) (
 
 	nodes := seq.Nodes
 
-	components := map[*spec.NodeSpec]*graph.Graph{}
+	components := map[*spec.NodeSpec]*Node{}
 	for _, node := range nodes {
-		components[node], err = template.NewSubgraph(node)
+		components[node], err = template.NewNode(node)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	componentsToAdd := map[*spec.NodeSpec]*graph.Graph{}
+	componentsToAdd := map[*spec.NodeSpec]*Node{}
 	for k, v := range components {
 		componentsToAdd[k] = v
 	}
@@ -255,7 +254,7 @@ func (o *Grapher) getTemplate(seq *spec.SequenceSpec, jobArgs map[string]bool) (
 				if len(node.Dependencies) == 0 {
 					// If there are no dependencies, then this job will come "first". Insert it
 					// directly after the Start node.
-					err := g.InsertComponentBetween(component, g.First, g.Last)
+					err := template.AddNodeAfter(component, g.First)
 					if err != nil {
 						return nil, err
 					}
@@ -267,7 +266,7 @@ func (o *Grapher) getTemplate(seq *spec.SequenceSpec, jobArgs map[string]bool) (
 					for _, dependencyName := range node.Dependencies {
 						dependency := nodes[dependencyName]
 						prevComponent := components[dependency]
-						err := g.InsertComponentBetween(component, prevComponent.Last, g.Last)
+						err := template.AddNodeAfter(component, prevComponent)
 						if err != nil {
 							return nil, err
 						}

@@ -21,7 +21,7 @@ import (
 	serr "github.com/square/spincycle/v2/errors"
 	jr "github.com/square/spincycle/v2/job-runner"
 	"github.com/square/spincycle/v2/proto"
-	"github.com/square/spincycle/v2/request-manager/grapher"
+	"github.com/square/spincycle/v2/request-manager/chain"
 	"github.com/square/spincycle/v2/retry"
 )
 
@@ -74,7 +74,7 @@ type Manager interface {
 
 // manager implements the Manager interface.
 type manager struct {
-	grf          grapher.GrapherFactory
+	jccf         chain.CreatorFactory
 	dbc          *sql.DB
 	jrc          jr.Client
 	defaultJRURL string
@@ -83,7 +83,7 @@ type manager struct {
 }
 
 type ManagerConfig struct {
-	GrapherFactory grapher.GrapherFactory
+	CreatorFactory chain.CreatorFactory
 	DBConnector    *sql.DB
 	JRClient       jr.Client
 	DefaultJRURL   string
@@ -92,7 +92,7 @@ type ManagerConfig struct {
 
 func NewManager(config ManagerConfig) Manager {
 	return &manager{
-		grf:          config.GrapherFactory,
+		jccf:         config.CreatorFactory,
 		dbc:          config.DBConnector,
 		jrc:          config.JRClient,
 		defaultJRURL: config.DefaultJRURL,
@@ -120,8 +120,8 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	// ----------------------------------------------------------------------
 	// Verify and finalize request args. The final request args are given
 	// (from caller) + optional + static.
-	gr := m.grf.Make(req)
-	reqArgs, err := gr.RequestArgs(req.Type, newReq.Args)
+	jcc := m.jccf.Make(req)
+	reqArgs, err := jcc.RequestArgs(newReq.Args)
 	if err != nil {
 		return req, err
 	}
@@ -129,7 +129,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 
 	// Copy requests args -> initial job args. We save the former as a record
 	// (request_archives.args) of every request arg that the request was started
-	// with. CreateGraph modifies and greatly expands the latter (job args).
+	// with. BuildJobChain modifies and greatly expands the latter (job args).
 	// Final job args are saved with each job because the same job arg can have
 	// different values for different jobs (especially true for each: expansions).
 	jobArgs := map[string]interface{}{}
@@ -140,35 +140,9 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	// ----------------------------------------------------------------------
 	// Create graph from request specs and jobs args. Then translate the
 	// generic graph into a job chain and save it with the request.
-	newGraph, err := gr.CreateGraph(req.Type, jobArgs)
+	jc, err := jcc.BuildJobChain(jobArgs)
 	if err != nil {
 		return req, err
-	}
-	jc := &proto.JobChain{
-		AdjacencyList: newGraph.Edges,
-		RequestId:     reqId,
-		State:         proto.STATE_PENDING,
-		Jobs:          map[string]proto.Job{},
-	}
-	for jobId, node := range newGraph.Vertices {
-		bytes, err := node.Datum.Serialize()
-		if err != nil {
-			return req, err
-		}
-		job := proto.Job{
-			Type:              node.Datum.Id().Type,
-			Id:                node.Datum.Id().Id,
-			Name:              node.Datum.Id().Name,
-			Bytes:             bytes,
-			Args:              node.Args,
-			Retry:             node.Retry,
-			RetryWait:         node.RetryWait,
-			SequenceId:        node.SequenceId,
-			SequenceRetry:     node.SequenceRetry,
-			SequenceRetryWait: node.SequenceRetryWait,
-			State:             proto.STATE_PENDING,
-		}
-		jc.Jobs[jobId] = job
 	}
 	req.JobChain = jc
 	req.TotalJobs = uint(len(jc.Jobs))
@@ -434,8 +408,7 @@ func (m *manager) Specs() []proto.RequestSpec {
 		return requestList
 	}
 
-	gr := m.grf.Make(proto.Request{})
-	req := gr.Sequences()
+	req := m.jccf.Sequences()
 	sortedReqNames := make([]string, 0, len(req))
 	for name := range req {
 		if req[name].Request {

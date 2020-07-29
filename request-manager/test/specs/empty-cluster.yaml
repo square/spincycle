@@ -1,5 +1,5 @@
 # This sequence tests running an "each" on an empty slice, which used to cause
-# a panic in grapher.
+# a panic in grapher (now chain.Creator).
 ---
 sequences:
   empty-cluster-test:
@@ -30,3 +30,28 @@ sequences:
           - expected: cluster
             given: cluster
         deps: [pre-flight-checks]
+  check-instance-is-ok:
+    args:
+      required:
+        - name: instance
+      optional:
+    nodes:
+      check-ok:
+        category: job
+        type: check-ok-1
+        args:
+          - expected: container
+            given: instance
+        sets:
+          - arg: physicalhost
+        deps: []
+      check-ok-again:
+        category: job
+        type: check-ok-2
+        args:
+          - expected: hostAddr
+            given: physicalhost
+          - expected: nodeAddr
+            given: instance
+        sets: []
+        deps: [check-ok]

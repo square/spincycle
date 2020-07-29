@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	SpecPath   string // Where test grapher spec files are stored.
+	SpecPath   string // Where test spec files are stored.
 	DataPath   string // Where test data is stored.
 	SchemaFile string // The path to the default db schema.
 	MySQLDSN   string // MySQL DSN

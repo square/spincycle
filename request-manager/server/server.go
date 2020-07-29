@@ -15,13 +15,16 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/square/spincycle/v2/config"
+	"github.com/square/spincycle/v2/jobs"
 	"github.com/square/spincycle/v2/request-manager/api"
 	"github.com/square/spincycle/v2/request-manager/app"
 	"github.com/square/spincycle/v2/request-manager/auth"
+	"github.com/square/spincycle/v2/request-manager/chain"
 	"github.com/square/spincycle/v2/request-manager/joblog"
 	"github.com/square/spincycle/v2/request-manager/request"
 	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/request-manager/status"
+	"github.com/square/spincycle/v2/request-manager/template"
 )
 
 var (
@@ -188,17 +191,27 @@ func (s *Server) Boot() error {
 	if err != nil {
 		return fmt.Errorf("LoadSpecs: %s", err)
 	}
-	err = spec.RunChecks(specs, log.Printf)
+	err = spec.RunChecks(specs, log.Errorf)
 	if err != nil {
 		return fmt.Errorf("Static check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 	s.appCtx.Specs = specs
 
-	// Grapher: load, parse, and validate specs. Done only once on startup.
-	grf, err := s.appCtx.Factories.MakeGrapher(s.appCtx)
+	// Generator factory used to generate IDs for jobs in template.Grapher and chain.Creator.
+	gf, err := s.appCtx.Factories.MakeGeneratorFactory(s.appCtx)
 	if err != nil {
-		return fmt.Errorf("MakeGrapher: %s", err)
+		return fmt.Errorf("MakeGeneratorFactory: %s", err)
 	}
+
+	// Build and check validity of sequence templates.
+	tg := template.NewGrapher(specs, gf, log.Errorf)
+	err = tg.CreateTemplates()
+	if err != nil {
+		return fmt.Errorf("Graph check(s) on request specification files failed; see log or run spinc-linter for details")
+	}
+
+	// Chain Creator: creates job chains to be sent to Job Runners
+	jccf := chain.NewCreatorFactory(jobs.Factory, specs.Sequences, tg.SequenceTemplates, gf)
 
 	// Job Runner Client: how the Request Manager talks to Job Runners
 	jrc, err := s.appCtx.Factories.MakeJobRunnerClient(s.appCtx)
@@ -214,7 +227,7 @@ func (s *Server) Boot() error {
 
 	// Request Manager: core logic and coordination
 	managerConfig := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       jrc,
 		DefaultJRURL:   s.appCtx.Config.JRClient.ServerURL,

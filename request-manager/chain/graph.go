@@ -2,7 +2,14 @@
 
 package chain
 
-type JobNode struct {
+import (
+	"fmt"
+
+	"github.com/square/spincycle/v2/job"
+	"github.com/square/spincycle/v2/request-manager/graph"
+)
+
+type Node struct {
 	// payload
 	Job               job.Job                // runnable job that this graph node represents
 	Name              string                 // name of node
@@ -14,36 +21,52 @@ type JobNode struct {
 	SequenceRetryWait string                 // the time to sleep between sequence retries
 
 	// fields required by graph.Node interface
-	Next map[string]*Node
-	Prev map[string]*Node
+	Next map[string]graph.Node
+	Prev map[string]graph.Node
 }
 
-func (g JobNode) GetId() string {
+func (g *Node) GetId() string {
 	return g.Job.Id().Id
 }
 
-func (g JobNode) GetNext() map[string]*Node {
-	return g.Next
+func (g *Node) GetNext() *map[string]graph.Node {
+	return &g.Next
 }
 
-func (g JobNode) GetPrev() map[string]*Node {
-	return g.Prev
+func (g *Node) GetPrev() *map[string]graph.Node {
+	return &g.Prev
 }
 
-func (g JobNode) GetName() string {
+func (g *Node) GetName() string {
 	return g.Name
 }
 
-func (g JobNode) String() string {
-	var string s
-	s += fmt.Sprintf("Sequence ID: %s\\n ", vertex.SequenceId)
-	s += fmt.Sprintf("Sequence Retry: %v\\n ", vertex.SequenceRetry)
-	for k, v := range vertex.Args {
-		s += fmt.Printf(" %s : %s \\n ", k, v)
+func (g *Node) String() string {
+	var s string
+	s += fmt.Sprintf("Sequence ID: %s\\n ", g.SequenceId)
+	s += fmt.Sprintf("Sequence Retry: %v\\n ", g.SequenceRetry)
+	for k, v := range g.Args {
+		s += fmt.Sprintf(" %s : %s \\n ", k, v)
 	}
 	return s
 }
 
-type JobGraph struct {
-	graph.Graph // graph of JobNodes
+type Graph struct {
+	Graph graph.Graph // graph of Nodes
+}
+
+func (g *Graph) setSequenceRetryInfo(retry uint, wait string) {
+	n, _ := g.Graph.First.(*Node)
+	n.SequenceRetry = retry
+	n.SequenceRetryWait = wait
+}
+
+// Cast Graph.Vertices to map of chain.Nodes
+func (g *Graph) getVertices() map[string]*Node {
+	m := map[string]*Node{}
+	for jobId, graphNode := range g.Graph.Vertices {
+		node, _ := graphNode.(*Node)
+		m[jobId] = node
+	}
+	return m
 }

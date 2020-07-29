@@ -14,10 +14,11 @@ import (
 	serr "github.com/square/spincycle/v2/errors"
 	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/proto"
-	"github.com/square/spincycle/v2/request-manager/grapher"
+	"github.com/square/spincycle/v2/request-manager/chain"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/request"
 	"github.com/square/spincycle/v2/request-manager/spec"
+	"github.com/square/spincycle/v2/request-manager/template"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
 	testdb "github.com/square/spincycle/v2/request-manager/test/db"
 	"github.com/square/spincycle/v2/test"
@@ -26,7 +27,7 @@ import (
 
 var dbm testdb.Manager
 var dbc *sql.DB
-var grf *grapher.MockGrapherFactory
+var jccf *chain.MockCreatorFactory
 var dbSuffix string
 var shutdownChan chan struct{}
 var req proto.Request
@@ -53,9 +54,14 @@ func setupManager(t *testing.T, dataFile string) string {
 	}
 	dbc = db
 
-	// Create a mock grapher factory.
-	if grf == nil {
-		spec, err := spec.ParseSpec(rmtest.SpecPath+"/a-b-c.yaml", func(s string, a ...interface{}) {})
+	// Create a mock creator factory.
+	if jccf == nil {
+		specs, err := spec.ParseSpec(rmtest.SpecPath+"/a-b-c.yaml", t.Logf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
+		err = tg.CreateTemplates()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,8 +69,7 @@ func setupManager(t *testing.T, dataFile string) string {
 			MockJobs: map[string]*mock.Job{},
 		}
 		req := proto.Request{
-			Id:   "reqId1",
-			Type: "reqType",
+			Id: "reqId1",
 		}
 		for i, c := range []string{"a", "b", "c"} {
 			jobType := c + "JobType"
@@ -75,10 +80,9 @@ func setupManager(t *testing.T, dataFile string) string {
 		testJobFactory.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
 			"aArg": "aValue",
 		}
-		gr := grapher.NewGrapher(req, testJobFactory, spec, id.NewGenerator(4, 100))
-		grf = &grapher.MockGrapherFactory{
-			MakeFunc: func(req proto.Request) *grapher.Grapher {
-				return gr
+		jccf = &chain.MockCreatorFactory{
+			MakeFunc: func(req proto.Request) *chain.Creator {
+				return chain.NewCreator(req, testJobFactory, specs.Sequences, tg.SequenceTemplates, id.NewGenerator(4, 100))
 			},
 		}
 	}
@@ -105,7 +109,7 @@ func teardownManager(t *testing.T, dbName string) {
 func TestCreateMissingType(t *testing.T) {
 	shutdownChan := make(chan struct{})
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -127,7 +131,7 @@ func TestCreate(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -169,45 +173,59 @@ func TestCreate(t *testing.T) {
 			RequestId: actualReq.Id, // no other way of getting this from outside the package
 			State:     proto.STATE_PENDING,
 			Jobs: map[string]proto.Job{
-				"sequence_three-nodes_start@1": proto.Job{
-					Id:   "sequence_three-nodes_start@1",
+				"request_three-nodes_start@1": proto.Job{
+					Id:   "request_three-nodes_start@1",
 					Type: "no-op",
-					SequenceId: "sequence_three-nodes_start@1",
+					SequenceId: "request_three-nodes_start@1",
 					SequenceRetry: 2,
 				},
-				"a@3": proto.Job{
-					Id:        "a@3",
+				"three-nodes_start@2": proto.Job{
+					Id:   "three-nodes_start@2",
+					Type: "no-op",
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 2,
+				},
+				"a@5": proto.Job{
+					Id:        "a@5",
 					Type:      "aJobType",
 					Retry:     1,
 					RetryWait: 500ms,
-					SequenceId: "sequence_three-nodes_start@1",
+					SequenceId: "request_three-nodes_start@1",
 					SequenceRetry: 0,
 				},
-				"b@4": proto.Job{
-					Id:    "b@4",
+				"b@6": proto.Job{
+					Id:    "b@6",
 					Type:  "bJobType",
 					Retry: 3,
-					SequenceId: "sequence_three-nodes_start@1",
+					SequenceId: "request_three-nodes_start@1",
 					SequenceRetry: 0,
 				},
-				"c@5": proto.Job{
-					Id:   "c@5",
+				"c@7": proto.Job{
+					Id:   "c@7",
 					Type: "cJobType",
-					SequenceId: "sequence_three-nodes_start@1",
+					SequenceId: "request_three-nodes_start@1",
 					SequenceRetry: 0,
 				},
-				"sequence_three-nodes_end@2": proto.Job{
+				"three-nodes_end@3": proto.Job{
+					Id:   "three-nodes_end@23,
+					Type: "no-op",
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 0,
+				},
+				"request_three-nodes_end@4": proto.Job{
 					Id:   "sequence_three-nodes_end@2",
 					Type: "no-op",
-					SequenceId: "sequence_three-nodes_start@1",
+					SequenceId: "request_three-nodes_start@1",
 					SequenceRetry: 0,
 				},
 			},
 			AdjacencyList: map[string][]string{
-				"sequence_three-nodes_start@1": []string{"a@3"},
-				"a@3": []string{"b@4"},
-				"b@4": []string{"c@5"},
-				"c@5": []string{"sequence_three-nodes_end@2"},
+				"request_three-nodes_start@1": []string{"three-nodes_start@2"},
+				"three-nodes_start@2": []string{"a@5"},
+				"a@5": []string{"b@6"},
+				"b@6": []string{"c@7"},
+				"c@7": []string{"three-nodes_end@3"},
+				"three-nodes_end@3": []string{"request_three-nodes-end@4"},
 			},
 		}
 	*/
@@ -228,7 +246,7 @@ func TestCreate(t *testing.T) {
 		State:     proto.STATE_PENDING,
 		User:      reqParams.User,
 		JobChain:  nil,
-		TotalJobs: 5,
+		TotalJobs: 7,
 		Args: []proto.RequestArg{
 			{
 				Name:  "foo",
@@ -258,13 +276,13 @@ func TestCreate(t *testing.T) {
 	if actualJobChain.State != proto.STATE_PENDING {
 		t.Errorf("job chain state = %s, expected PENDING", proto.StateName[actualJobChain.State])
 	}
-	if len(actualJobChain.Jobs) != 5 {
+	if len(actualJobChain.Jobs) != 7 {
 		test.Dump(actualJobChain.Jobs)
-		t.Errorf("job chain has %d jobs, expected 5", len(actualJobChain.Jobs))
+		t.Errorf("job chain has %d jobs, expected 7", len(actualJobChain.Jobs))
 	}
-	if len(actualJobChain.AdjacencyList) != 4 {
+	if len(actualJobChain.AdjacencyList) != 6 {
 		test.Dump(actualJobChain.Jobs)
-		t.Errorf("job chain AdjacencyList len = %d, expected 4", len(actualJobChain.AdjacencyList))
+		t.Errorf("job chain AdjacencyList len = %d, expected 6", len(actualJobChain.AdjacencyList))
 	}
 }
 
@@ -273,7 +291,7 @@ func TestCreateNestedSequence(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -317,7 +335,7 @@ func TestGetNotFound(t *testing.T) {
 
 	reqId := "invalid"
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -343,7 +361,7 @@ func TestGet(t *testing.T) {
 
 	reqId := "0874a524aa1edn3ysp00"
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -368,7 +386,7 @@ func TestGetWithJC(t *testing.T) {
 
 	reqId := "0874a524aa1edn3ysp00"
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -392,7 +410,7 @@ func TestStartNotPending(t *testing.T) {
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -422,7 +440,7 @@ func TestStart(t *testing.T) {
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       mockJRc,
 		ShutdownChan:   shutdownChan,
@@ -455,7 +473,7 @@ func TestStopNotRunning(t *testing.T) {
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -491,7 +509,7 @@ func TestStopComplete(t *testing.T) {
 
 	reqId := "93ec156e204ety45sgf0" // request is complete
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       mockJRc,
 		ShutdownChan:   shutdownChan,
@@ -526,7 +544,7 @@ func TestStop(t *testing.T) {
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       mockJRc,
 		ShutdownChan:   shutdownChan,
@@ -556,7 +574,7 @@ func TestFinishNotRunning(t *testing.T) {
 		State: proto.STATE_COMPLETE,
 	}
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -577,7 +595,7 @@ func TestFinish(t *testing.T) {
 	reqId := "454ae2f98a05cv16sdwt"
 
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -634,7 +652,7 @@ func TestFailNotPending(t *testing.T) {
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -655,7 +673,7 @@ func TestFailPending(t *testing.T) {
 	reqId := "0874a524aa1edn3ysp00"
 
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -706,7 +724,7 @@ func TestJobChainNotFound(t *testing.T) {
 
 	reqId := "invalid"
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -732,7 +750,7 @@ func TestJobChainInvalid(t *testing.T) {
 
 	reqId := "cd724fd12092"
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -751,7 +769,7 @@ func TestJobChain(t *testing.T) {
 
 	reqId := "8bff5def4f3fvh78skjy"
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -780,7 +798,7 @@ func TestFind(t *testing.T) {
 		},
 	}
 	cfg := request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -812,7 +830,7 @@ func TestFind(t *testing.T) {
 		User: "finch",
 	}
 	cfg = request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -842,7 +860,7 @@ func TestFind(t *testing.T) {
 		Type: "do-another-thing",
 	}
 	cfg = request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -879,7 +897,7 @@ func TestFind(t *testing.T) {
 		Until: time.Date(2017, 9, 13, 2, 45, 00, 00, time.UTC),
 	}
 	cfg = request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -914,7 +932,7 @@ func TestFind(t *testing.T) {
 		Offset: 2,
 	}
 	cfg = request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,
@@ -948,7 +966,7 @@ func TestFind(t *testing.T) {
 	// 6. Empty filter
 	filter = proto.RequestFilter{}
 	cfg = request.ManagerConfig{
-		GrapherFactory: grf,
+		CreatorFactory: jccf,
 		DBConnector:    dbc,
 		JRClient:       &mock.JRClient{},
 		ShutdownChan:   shutdownChan,

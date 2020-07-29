@@ -12,9 +12,9 @@ import (
 // Last Nodes in the graph.
 type Graph struct {
 	Name     string              // Name of the Graph
-	First    Node               // The source node of the graph
-	Last     Node               // The sink node of the graph
-	Vertices map[string]Node    // All vertices in the graph (node id -> node)
+	First    Node                // The source node of the graph
+	Last     Node                // The sink node of the graph
+	Vertices map[string]Node     // All vertices in the graph (node id -> node)
 	Edges    map[string][]string // All edges (source node id -> sink node id)
 }
 
@@ -22,13 +22,13 @@ type Graph struct {
 // Node types must have an ID, and maps of its in/out edges.
 type Node interface {
 	// functions involving graph functionality
-	GetId() string                     // get node's unique id within graph
-	GetNext() *map[string]Node               // TODO 
-	GetPrev() *map[string]Node               // get in edges (node id -> Node)
+	GetId() string             // get node's unique id within graph
+	GetNext() *map[string]Node // TODO
+	GetPrev() *map[string]Node // get in edges (node id -> Node)
 
 	// pretty printer functions (for use with PrintDot)
-	GetName() string                   // get node's name
-	String() string                    // get implementation-specific attributes
+	GetName() string // get node's name
+	String() string  // get implementation-specific attributes
 }
 
 // returns true iff the graph has at least one cycle in it
@@ -64,12 +64,12 @@ func (g *Graph) AdjacencyListMatchesLL() bool {
 
 	// Check that the edges all match as well
 	for source, sinks := range edges {
-		if e := g.Edges[source]; !slicesMatch(e, sinks) {
+		if e := g.Edges[source]; !SlicesMatch(e, sinks) {
 			return false
 		}
 	}
 	for source, sinks := range g.Edges {
-		if e := edges[source]; !slicesMatch(e, sinks) {
+		if e := edges[source]; !SlicesMatch(e, sinks) {
 			return false
 		}
 	}
@@ -299,7 +299,7 @@ func hasCyclesDFS(seen map[string]Node, start Node) bool {
 }
 
 // Returns true if a matches b, regardless of ordering
-func slicesMatch(a, b []string) bool {
+func SlicesMatch(a, b []string) bool {
 	if a == nil && b == nil {
 		return true
 	}
