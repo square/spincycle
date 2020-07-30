@@ -18,13 +18,14 @@ import (
 
 const DEFAULT = "default"
 
+// Creates a job chain for a single request.
 type Creator struct {
-	JobFactory        job.Factory                   // factory to create nodes' jobs.
+	JobFactory        job.Factory                   // factory to create nodes' jobs
 	AllSequences      map[string]*spec.SequenceSpec // sequence name --> sequence spec
 	SequenceTemplates map[string]*template.Graph    // sequence name --> template graph
 
-	idgen id.Generator // generates UIDs for the nodes created by the Creator
-	req   proto.Request
+	idgen id.Generator  // generates UIDs for jobs
+	req   proto.Request // the request spec this creator can create job chain for
 }
 
 func NewCreator(req proto.Request, nf job.Factory, specs map[string]*spec.SequenceSpec, templates map[string]*template.Graph, idgen id.Generator) *Creator {
@@ -38,13 +39,15 @@ func NewCreator(req proto.Request, nf job.Factory, specs map[string]*spec.Sequen
 	return o
 }
 
+// Returns Creator structs, tailored to create job chains for the input request.
 type CreatorFactory interface {
 	// Make makes a Creator. A new creator should be made for every request.
 	Make(proto.Request) *Creator
-	// Retrieve all sequence (specs) the factory knows about.
+	// Retrieve all sequences the factory knows about.
 	Sequences() map[string]*spec.SequenceSpec
 }
 
+// Implements CreatorFactory interface.
 type creatorFactory struct {
 	jf        job.Factory
 	seqs      map[string]*spec.SequenceSpec
@@ -69,6 +72,7 @@ func (f *creatorFactory) Sequences() map[string]*spec.SequenceSpec {
 	return f.seqs
 }
 
+// Convert job args map to a list of proto.RequestArgs.
 func (o *Creator) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
 	reqArgs := []proto.RequestArg{}
 
@@ -121,6 +125,7 @@ func (o *Creator) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestAr
 	return reqArgs, nil
 }
 
+// Build the actual job chain. Returns an error if any error occurs.
 func (o *Creator) BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain, error) {
 	/* Build graph of actual jobs based on template. */
 	chainGraph, err := o.buildSequence("request_"+o.req.Type, o.req.Type, jobArgs, 0, "0s")
@@ -159,6 +164,11 @@ func (o *Creator) BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain
 	return jc, nil
 }
 
+// (Recursively) build a sequence.
+// `wrapperName` names the graph and its source/sink nodes.
+// `sequenceName` is the name of the sequence to build.
+// `jobArgs` is the set of job args the sequence is given.
+// `sequenceRetry(Wait)` is the retry info for this sequence, as given by the calling sequence.
 func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[string]interface{}, sequenceRetry uint, sequenceRetryWait string) (*Graph, error) {
 	/* Add optional and static sequence arguments to map. */
 	seq, ok := o.AllSequences[sequenceName]
@@ -181,12 +191,16 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 	if !ok {
 		return nil, fmt.Errorf("cannot find template for sequence: %s", sequenceName)
 	}
-	idMap := map[string]*graph.Graph{} // template node id --> actual subgraph
+
 	g, err := o.newEmptyGraph(wrapperName, jobArgs)
 	if err != nil {
 		return nil, err
 	}
 
+	// Traverse template graph in topological order. Each template node corresponds to either a single
+	// job node, or an entire subgraph of nodes. Build the subgraph and insert it into the larger sequence
+	// graph.
+	idMap := map[string]*graph.Graph{} // template node id --> corresponding subgraph
 	for _, templateNode := range templateGraph.Iterator() {
 		n := templateNode.NodeSpec
 
@@ -196,7 +210,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 			return nil, fmt.Errorf("in seq %s, node %s: invalid 'each:' %s", sequenceName, n.Name, err)
 		}
 
-		// All the graphs that make up this component
+		// All the graphs that make up this template node's subgraph
 		components := []*graph.Graph{}
 
 		// If no repetition is needed, this loop will only execute once
@@ -224,7 +238,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 				}
 			}
 
-			// Build next graph component and assert that it's valid
+			// Build graph component and assert that it's valid
 			var subgraph *graph.Graph
 			if n.IsConditional() {
 				// Node is a conditional
@@ -328,10 +342,15 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 			return nil, fmt.Errorf("malformed graph created")
 		}
 
+		// `wrappedSubgraph` is the graph of jobs corresponding directly to this
+		// template node. Insert it between its dependencies and the last node.
 		idMap[templateNode.GetId()] = wrappedSubgraph
 		if len(templateNode.Prev) == 0 {
+			// case: template graph's source node
 			g.InsertComponentBetween(wrappedSubgraph, g.First, g.Last)
 		} else {
+			// case: every other node; insert between sink node of previous node's
+			// subgraph, and the last node of the sequence graph
 			for id, _ := range templateNode.Prev {
 				prev, ok := idMap[id]
 				if !ok {
@@ -340,7 +359,6 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 				g.InsertComponentBetween(wrappedSubgraph, prev.Last, g.Last)
 			}
 		}
-
 		if !g.IsValidGraph() {
 			return nil, fmt.Errorf("malformed graph created")
 		}
@@ -375,10 +393,11 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 	}
 	// store configured retry from sequence spec on the first node in the sequence
 	chainGraph.setSequenceRetryInfo(sequenceRetry, sequenceRetryWait)
-
 	return chainGraph, nil
 }
 
+// Based on values of job args, determine which path of a conditional to take.
+// Assumes `n` is a conditional node.
 func chooseConditional(n *spec.NodeSpec, jobArgs map[string]interface{}) (string, error) {
 	// Node is a conditional, check the value of the "if" jobArg
 	val, ok := jobArgs[*n.If]
@@ -619,18 +638,6 @@ func (o *Creator) newNode(j *spec.NodeSpec, jobArgs map[string]interface{}) (*No
 		Retry:     j.Retry,
 		RetryWait: j.RetryWait,
 	}, nil
-}
-
-// containsAll is a convenience function for checking membership in a map.
-// Returns true if m contains every elements in ss
-func containsAll(m map[*spec.NodeSpec]bool, ss []string, nodes map[string]*spec.NodeSpec) bool {
-	for _, s := range ss {
-		name := nodes[s]
-		if _, ok := m[name]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 // ------------------------------------------------------------------------- //

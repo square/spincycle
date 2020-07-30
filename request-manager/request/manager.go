@@ -138,8 +138,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	}
 
 	// ----------------------------------------------------------------------
-	// Create graph from request specs and jobs args. Then translate the
-	// generic graph into a job chain and save it with the request.
+	// Build job chain with the given jobs args and save it with the request.
 	jc, err := jcc.BuildJobChain(jobArgs)
 	if err != nil {
 		return req, err

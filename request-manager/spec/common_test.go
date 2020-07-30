@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	"github.com/go-test/deep"
+
+	rmtest "github.com/square/spincycle/v2/request-manager/test"
 )
 
-const (
-	specsDir = "../test/specs/"
+var (
+	specsDir = rmtest.SpecPath + "/"
 )
 
 var (

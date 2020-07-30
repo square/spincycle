@@ -49,9 +49,13 @@ type Context struct {
 // are sufficient to run the Request Manager. Users can provide custom factories
 // to modify behavior. For example, make Job Runner clients with custom TLS certs.
 type Factories struct {
+	// MakeGeneratorFactory makes a factory of (U)ID generators for jobs within a
+	// request. Generators should be able to generate at least as many IDs as jobs
+	// in the largest possible request.
 	MakeGeneratorFactory func(Context) (id.GeneratorFactory, error)
-	MakeJobRunnerClient  func(Context) (jr.Client, error)
-	MakeDbConnPool       func(Context) (*sql.DB, error)
+
+	MakeJobRunnerClient func(Context) (jr.Client, error)
+	MakeDbConnPool      func(Context) (*sql.DB, error)
 }
 
 // Hooks allow users to modify system behavior at certain points. All hooks are

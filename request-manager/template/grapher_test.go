@@ -9,10 +9,7 @@ import (
 	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
-)
-
-const (
-	specsDir = "../test/specs/"
+	rmtest "github.com/square/spincycle/v2/request-manager/test"
 )
 
 var (
@@ -20,7 +17,7 @@ var (
 )
 
 func MakeGrapher(t *testing.T, sequencesFile string, logFunc func(string, ...interface{})) *Grapher {
-	specs, err := spec.ParseSpec(specsDir+sequencesFile, logFunc)
+	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, logFunc)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,10 +6,8 @@ import (
 	"fmt"
 )
 
-// Graph represents a graph. It represents a graph via
-// Vertices, a map of vertex name -> Node, and Edges, an
-// adjacency list. Also contained in Graph are the First and
-// Last Nodes in the graph.
+// Represents a graph via Vertices, a map of vertex name -> Node, and Edges, an
+// adjacency list. Also contains the First and Last Nodes in the graph.
 type Graph struct {
 	Name     string              // Name of the Graph
 	First    Node                // The source node of the graph
@@ -19,11 +17,12 @@ type Graph struct {
 }
 
 // Node represents a single vertex within a Graph.
-// Node types must have an ID, and maps of its in/out edges.
+// Implementations should be pointers in order for graph modification functions to
+// work properly, i.e. GetNext() should be a map of strings -> pointers.
 type Node interface {
 	// functions involving graph functionality
 	GetId() string             // get node's unique id within graph
-	GetNext() *map[string]Node // TODO
+	GetNext() *map[string]Node // get out edges (node id -> Node)
 	GetPrev() *map[string]Node // get in edges (node id -> Node)
 
 	// pretty printer functions (for use with PrintDot)
@@ -83,74 +82,6 @@ func (g *Graph) IsValidGraph() bool {
 	return !g.HasCycles() && g.IsConnected() && g.AdjacencyListMatchesLL()
 }
 
-// Prints out g in DOT graph format.
-// Copy and paste output into http://www.webgraphviz.com/
-func (g *Graph) PrintDot() {
-	fmt.Printf("digraph {\n")
-	fmt.Printf("\trankdir=UD;\n")
-	fmt.Printf("\tlabelloc=\"t\";\n")
-	fmt.Printf("\tlabel=\"%s\"\n", g.Name)
-	fmt.Printf("\tfontsize=22\n")
-	for vertexName, vertex := range g.Vertices {
-		fmt.Printf("\tnode [style=filled,color=\"%s\",shape=box]\n", "#86cedf")
-		fmt.Printf("\t\"%s\" [label=\"%s\\n ", vertexName, vertex.GetName())
-		fmt.Printf("%v", vertex)
-		fmt.Printf("\"]\n")
-	}
-	for out, ins := range g.Edges {
-		for _, in := range ins {
-			fmt.Printf("\t\"%s\" -> \"%s\";\n", out, in)
-		}
-	}
-	fmt.Println("}")
-}
-
-// --------------------------------------------------------------------------
-
-// Returns true if the last node in g is reachable from n
-func (g *Graph) connectedToLastNodeDFS(n Node) bool {
-	if n == nil {
-		return false
-	}
-	if g.Last.GetId() == n.GetId() {
-		return true
-	}
-	if g.Last.GetId() != n.GetId() && (n.GetNext() == nil || len(*n.GetNext()) == 0) {
-		return false
-	}
-	for _, next := range *n.GetNext() {
-
-		// Every node after n must also be connected to the last node
-		connected := g.connectedToLastNodeDFS(next)
-		if !connected {
-			return false
-		}
-	}
-	return true
-}
-
-// Returns true if n is reachable from the first node in g
-func (g *Graph) connectedToFirstNodeDFS(n Node) bool {
-	if n == nil {
-		return false
-	}
-	if g.First.GetId() == n.GetId() {
-		return true
-	}
-	if g.First.GetId() != n.GetId() && (n.GetPrev() == nil || len(*n.GetPrev()) == 0) {
-		return false
-	}
-	for _, prev := range *n.GetPrev() {
-
-		// Every node before n must also be connected to the first node
-		connected := g.connectedToFirstNodeDFS(prev)
-		if !connected {
-			return false
-		}
-	}
-	return true
-}
-
 // InsertComponentBetween will take a Graph as input, and insert it between the given prev and next nodes.
 // Preconditions:
 //      component and g are connected and acyclic
@@ -208,6 +139,104 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev Node, next Node) e
 		return fmt.Errorf("graph not valid after insert")
 	}
 	return nil
+}
+
+// Returns true if a matches b, regardless of ordering
+func SlicesMatch(a, b []string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+
+	if a == nil || b == nil {
+		return false
+	}
+
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, _ := range a {
+		ok := false
+		for j, _ := range b {
+			if a[i] == b[j] {
+				ok = true
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Prints out g in DOT graph format.
+// Copy and paste output into http://www.webgraphviz.com/
+func (g *Graph) PrintDot() {
+	fmt.Printf("digraph {\n")
+	fmt.Printf("\trankdir=UD;\n")
+	fmt.Printf("\tlabelloc=\"t\";\n")
+	fmt.Printf("\tlabel=\"%s\"\n", g.Name)
+	fmt.Printf("\tfontsize=22\n")
+	for vertexName, vertex := range g.Vertices {
+		fmt.Printf("\tnode [style=filled,color=\"%s\",shape=box]\n", "#86cedf")
+		fmt.Printf("\t\"%s\" [label=\"%s\\n ", vertexName, vertex.GetName())
+		fmt.Printf("Vertex ID: %s\\n ", vertex.GetId())
+		fmt.Printf("%v\n", vertex)
+		fmt.Printf("\"]\n")
+	}
+	for out, ins := range g.Edges {
+		for _, in := range ins {
+			fmt.Printf("\t\"%s\" -> \"%s\";\n", out, in)
+		}
+	}
+	fmt.Println("}")
+}
+
+// --------------------------------------------------------------------------
+
+// Returns true if the last node in g is reachable from n
+func (g *Graph) connectedToLastNodeDFS(n Node) bool {
+	if n == nil {
+		return false
+	}
+	if g.Last.GetId() == n.GetId() {
+		return true
+	}
+	if g.Last.GetId() != n.GetId() && (n.GetNext() == nil || len(*n.GetNext()) == 0) {
+		return false
+	}
+	for _, next := range *n.GetNext() {
+
+		// Every node after n must also be connected to the last node
+		connected := g.connectedToLastNodeDFS(next)
+		if !connected {
+			return false
+		}
+	}
+	return true
+}
+
+// Returns true if n is reachable from the first node in g
+func (g *Graph) connectedToFirstNodeDFS(n Node) bool {
+	if n == nil {
+		return false
+	}
+	if g.First.GetId() == n.GetId() {
+		return true
+	}
+	if g.First.GetId() != n.GetId() && (n.GetPrev() == nil || len(*n.GetPrev()) == 0) {
+		return false
+	}
+	for _, prev := range *n.GetPrev() {
+
+		// Every node before n must also be connected to the first node
+		connected := g.connectedToFirstNodeDFS(prev)
+		if !connected {
+			return false
+		}
+	}
+	return true
 }
 
 // returns the index of s in ss, returns -1 if s is not found in ss
@@ -296,33 +325,4 @@ func hasCyclesDFS(seen map[string]Node, start Node) bool {
 		delete(seen, next.GetId())
 	}
 	return false
-}
-
-// Returns true if a matches b, regardless of ordering
-func SlicesMatch(a, b []string) bool {
-	if a == nil && b == nil {
-		return true
-	}
-
-	if a == nil || b == nil {
-		return false
-	}
-
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i, _ := range a {
-		ok := false
-		for j, _ := range b {
-			if a[i] == b[j] {
-				ok = true
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-
-	return true
 }

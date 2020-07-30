@@ -9,6 +9,7 @@ import (
 	"github.com/square/spincycle/v2/request-manager/graph"
 )
 
+// Node in job graph. Implements graph.Node.
 type Node struct {
 	// payload
 	Job               job.Job                // runnable job that this graph node represents
@@ -20,7 +21,7 @@ type Node struct {
 	SequenceRetry     uint                   // Number of times to retry a sequence. Only set for first node in sequence.
 	SequenceRetryWait string                 // the time to sleep between sequence retries
 
-	// fields required by graph.Node interface
+	// node metainfo fields
 	Next map[string]graph.Node
 	Prev map[string]graph.Node
 }
@@ -44,13 +45,16 @@ func (g *Node) GetName() string {
 func (g *Node) String() string {
 	var s string
 	s += fmt.Sprintf("Sequence ID: %s\\n ", g.SequenceId)
-	s += fmt.Sprintf("Sequence Retry: %v\\n ", g.SequenceRetry)
+	s += fmt.Sprintf("Sequence Retry: %v ", g.SequenceRetry)
 	for k, v := range g.Args {
-		s += fmt.Sprintf(" %s : %s \\n ", k, v)
+		s += fmt.Sprintf("\\n %s : %s ", k, v)
 	}
 	return s
 }
 
+// Graph of actual jobs. Most useful functions are implemented in creator.go. These are just some
+// convenience functions so that callers don't have to do typecasts.
+// Functions assume that all vertices are in fact chain.Nodes. There is no error checking--it just panics.
 type Graph struct {
 	Graph graph.Graph // graph of Nodes
 }

@@ -8,14 +8,15 @@ import (
 	"github.com/square/spincycle/v2/request-manager/spec"
 )
 
+// Node in template graph. Implments graph.Node.
 type Node struct {
 	// payload
 	NodeSpec *spec.NodeSpec // sequence node that this graph node represents
 
-	// fields required by graph.Node interface
-	Id   string
-	Next map[string]graph.Node
-	Prev map[string]graph.Node
+	// node metainfo fields
+	Id   string                // unique ID of node within template
+	Next map[string]graph.Node // out edges (node id --> *Node)
+	Prev map[string]graph.Node // in edges (node id --> *Node)
 }
 
 func (g *Node) GetId() string {
@@ -39,14 +40,28 @@ func (g *Node) String() string {
 	return ""
 }
 
+// Template graph (containing template nodes). Includes graph itself, some other metainfo,
+// and useful functions.
+// Graph will have a single source and a single sink node. Graph modification functions enforce this.
 type Graph struct {
-	Graph graph.Graph     // Graph of Nodes. All modifications handled by methods below.
-	Sets  map[string]bool // Set of arguments set by sequence described by graph. Should be directly managed by caller.
+	// Graph of Nodes. Write operations must be performed using methods below. Can be read directly.
+	Graph graph.Graph
+	// Set of arguments set by sequence described by graph. Can be read/written directly.
+	Sets map[string]bool
 
-	iterator []*Node      // List of nodes in graph in topological order. All interactions handled by methods below.
-	idgen    id.Generator // Generates UIDs for this graph. Should not be called or modified.
+	// List of nodes in graph in topological order. All operations, read and write, must be performed using methods below.
+	iterator []*Node
+	// Generates UIDs for this graph. Should not be accessed externally.
+	idgen id.Generator
 }
 
+// Iterate through graph in topological order. Order is not deterministic, but order for
+// a single instance of a template graph will be the same eveyr time.
+func (t *Graph) Iterator() []*Node {
+	return append(t.iterator, t.Graph.Last.(*Node))
+}
+
+// Get new (empty) graph with single source and single sink node.
 func newGraph(name string, idgen id.Generator) (*Graph, error) {
 	t := &Graph{
 		Sets:  map[string]bool{},
@@ -58,39 +73,6 @@ func newGraph(name string, idgen id.Generator) (*Graph, error) {
 	}
 	t.iterator = []*Node{t.Graph.First.(*Node)}
 	return t, nil
-}
-
-func (t *Graph) Iterator() []*Node {
-	return append(t.iterator, t.Graph.Last.(*Node))
-}
-
-func (t *Graph) NewNode(node *spec.NodeSpec) (*Node, error) {
-	id, err := t.idgen.UID()
-	if err != nil {
-		return nil, err
-	}
-	return &Node{
-		NodeSpec: node,
-		Id:       id,
-		Next:     map[string]graph.Node{},
-		Prev:     map[string]graph.Node{},
-	}, nil
-}
-
-func (t *Graph) AddNodeAfter(node *Node, prev graph.Node) error {
-	subgraph := &graph.Graph{
-		Name:     node.GetName(),
-		First:    node,
-		Last:     node,
-		Vertices: map[string]graph.Node{node.GetId(): node},
-		Edges:    map[string][]string{},
-	}
-	err := t.Graph.InsertComponentBetween(subgraph, prev, t.Graph.Last)
-	if err != nil {
-		return err
-	}
-	t.iterator = append(t.iterator, node)
-	return nil
 }
 
 func (t *Graph) initGraph(name string) error {
@@ -118,6 +100,38 @@ func (t *Graph) initGraph(name string) error {
 	return nil
 }
 
+// Insert node `node` between `prev` and sink node.
+func (t *Graph) addNodeAfter(node *Node, prev graph.Node) error {
+	subgraph := &graph.Graph{
+		Name:     node.GetName(),
+		First:    node,
+		Last:     node,
+		Vertices: map[string]graph.Node{node.GetId(): node},
+		Edges:    map[string][]string{},
+	}
+	err := t.Graph.InsertComponentBetween(subgraph, prev, t.Graph.Last)
+	if err != nil {
+		return err
+	}
+	t.iterator = append(t.iterator, node)
+	return nil
+}
+
+// Generate a new node for this template graph with payload `node`.
+func (t *Graph) newNode(node *spec.NodeSpec) (*Node, error) {
+	id, err := t.idgen.UID()
+	if err != nil {
+		return nil, err
+	}
+	return &Node{
+		NodeSpec: node,
+		Id:       id,
+		Next:     map[string]graph.Node{},
+		Prev:     map[string]graph.Node{},
+	}, nil
+}
+
+// Generate a new noop node for this template graph with name `name`.
 func (t *Graph) newNoopNode(name string) (*Node, error) {
 	id, err := t.idgen.UID()
 	if err != nil {

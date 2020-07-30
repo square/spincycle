@@ -42,9 +42,6 @@ type SequenceSpec struct {
 	Nodes   map[string]*NodeSpec `yaml:"nodes"`   // list of nodes that are a part of the sequence
 	Request bool                 `yaml:"request"` // whether or not the sequence spec is a user request
 	ACL     []ACL                `yaml:"acl"`     // allowed caller roles (optional)
-	/* Information-passing fields. */
-	Retry     uint   `yaml:"-"` // the number of times to retry the sequence if it fails
-	RetryWait string `yaml:"-"` // the time to sleep between sequence retries
 }
 
 // SequenceArgs defines the structure expected from the config file to define

@@ -14,10 +14,9 @@ import (
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/request-manager/template"
-)
-
-const (
-	specsDir = "../test/specs/"
+	rmtest "github.com/square/spincycle/v2/request-manager/test"
+	test "github.com/square/spincycle/v2/test"
+	"github.com/square/spincycle/v2/test/mock"
 )
 
 type testFactory struct{}
@@ -83,13 +82,24 @@ func (tj testJob) Run(map[string]interface{}) (job.Return, error) {
 }
 
 func createGraph(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}) (*Graph, error) {
+	return createGraph0(t, sequencesFile, requestName, jobArgs, &testFactory{}, id.NewGenerator(4, 100))
+}
+
+func createGraph1(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory) (*Graph, error) {
+	return createGraph0(t, sequencesFile, requestName, jobArgs, tf, id.NewGenerator(4, 100))
+}
+
+func createGraph2(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, idgen id.Generator) (*Graph, error) {
+	return createGraph0(t, sequencesFile, requestName, jobArgs, &testFactory{}, idgen)
+}
+
+func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory, idgen id.Generator) (*Graph, error) {
 	req := proto.Request{
 		Id:   "reqABC",
 		Type: requestName,
 	}
-	tf := &testFactory{}
 
-	specs, err := spec.ParseSpec(specsDir+sequencesFile, t.Logf)
+	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, t.Logf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,55 +114,148 @@ func createGraph(t *testing.T, sequencesFile, requestName string, jobArgs map[st
 		t.Fatalf("failed to create templates")
 	}
 
-	creator := NewCreator(req, tf, specs.Sequences, tg.SequenceTemplates, id.NewGenerator(4, 100))
+	creator := NewCreator(req, tf, specs.Sequences, tg.SequenceTemplates, idgen)
 	return creator.buildSequence("request_"+creator.req.Type, creator.req.Type, jobArgs, 0, "0s")
 }
 
-func TestBuildDecommJobChain(t *testing.T) {
-	sequencesFile := "decomm.yaml"
-	requestName := "decommission-cluster"
-	args := map[string]interface{}{
-		"cluster": "test-cluster-001",
-		"env":     "testing",
+func TestBuildJobChain(t *testing.T) {
+	/* Load templates + do checks. */
+	sequencesFile := "a-b-c.yaml"
+	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, t.Logf)
+	if err != nil {
+		t.Fatal(err)
 	}
-	requestId := "reqABC"
+	err = spec.RunChecks(specs, t.Logf)
+	if err != nil {
+		t.Fatalf("fix static check errors; chain.Creator assumes specs have passed static checks")
+	}
+	tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
+	err = tg.CreateTemplates()
+	if err != nil {
+		t.Fatalf("failed to create templates")
+	}
 
+	/* Create test job factory. */
+	requestId := "reqABC"
+	tf := &mock.JobFactory{
+		MockJobs: map[string]*mock.Job{},
+	}
+	for i, c := range []string{"a", "b", "c"} {
+		jobType := c + "JobType"
+		tf.MockJobs[jobType] = &mock.Job{
+			IdResp: job.NewIdWithRequestId(jobType, c, fmt.Sprintf("id%d", i), requestId),
+		}
+	}
+	tf.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
+		"aArg": "aValue",
+	}
+
+	/* Create job chain. */
+	requestName := "three-nodes"
 	req := proto.Request{
 		Id:   requestId,
 		Type: requestName,
 	}
-	tf := &testFactory{}
-
-	specs, err := spec.ParseSpec(specsDir+sequencesFile, t.Logf)
-	if err != nil {
-		t.Fatal(err)
+	args := map[string]interface{}{
+		"foo": "foo-value",
 	}
-	err = spec.RunChecks(specs, t.Logf)
-	if err != nil {
-		t.Fatalf("fix static check errors; chain.Creator assumes specs have passed static checks")
-	}
-
-	tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
-	err = tg.CreateTemplates()
-	if err != nil {
-		t.Fatalf("failed to create templates")
-	}
-
-	// check that job chain builds without error, and verify some easy-to-check values
 	creator := NewCreator(req, tf, specs.Sequences, tg.SequenceTemplates, id.NewGenerator(4, 100))
-	chain, err := creator.BuildJobChain(args)
+	actualJobChain, err := creator.BuildJobChain(args)
 	if err != nil {
 		t.Fatalf("failed to build job chain: %s", err)
 	}
 
-	if chain.RequestId != requestId {
-		t.Fatalf("expected job chain to have request ID %s, got %s", requestId, chain.RequestId)
+	/* Check resulting job chain. */
+	if actualJobChain.RequestId != requestId {
+		t.Fatalf("expected job chain to have request ID %s, got %s", requestId, actualJobChain.RequestId)
 	}
-	if chain.State != proto.STATE_PENDING {
-		t.Fatalf("expected job chain to be in state %v, got %v", proto.STATE_PENDING, chain.State)
+	if actualJobChain.State != proto.STATE_PENDING {
+		t.Fatalf("expected job chain to be in state %v, got %v", proto.STATE_PENDING, actualJobChain.State)
 	}
-	if chain.FinishedJobs != 0 {
-		t.Fatalf("expected job chain to have no finished jobs, got %d", chain.FinishedJobs)
+	if actualJobChain.FinishedJobs != 0 {
+		t.Fatalf("expected job chain to have no finished jobs, got %d", actualJobChain.FinishedJobs)
+	}
+	// Job names in requests are non-deterministic because the nodes in a sequence
+	// are built from a map (i.e. hash order randomness). So sometimes we get a@3
+	// and other times a@4, etc. So we'll check some specific, deterministic stuff.
+	// But an example of a job chain is shown in the comment block below.
+	/*
+		expectedJc := proto.JobChain{
+			RequestId: actualReq.Id, // no other way of getting this from outside the package
+			State:     proto.STATE_PENDING,
+			Jobs: map[string]proto.Job{
+				"request_three-nodes_start@1": proto.Job{
+					Id:   "request_three-nodes_start@1",
+					Type: "no-op",
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 2,
+				},
+				"three-nodes_start@2": proto.Job{
+					Id:   "three-nodes_start@2",
+					Type: "no-op",
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 2,
+				},
+				"a@5": proto.Job{
+					Id:        "a@5",
+					Type:      "aJobType",
+					Retry:     1,
+					RetryWait: 500ms,
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 0,
+				},
+				"b@6": proto.Job{
+					Id:    "b@6",
+					Type:  "bJobType",
+					Retry: 3,
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 0,
+				},
+				"c@7": proto.Job{
+					Id:   "c@7",
+					Type: "cJobType",
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 0,
+				},
+				"three-nodes_end@3": proto.Job{
+					Id:   "three-nodes_end@23,
+					Type: "no-op",
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 0,
+				},
+				"request_three-nodes_end@4": proto.Job{
+					Id:   "sequence_three-nodes_end@2",
+					Type: "no-op",
+					SequenceId: "request_three-nodes_start@1",
+					SequenceRetry: 0,
+				},
+			},
+			AdjacencyList: map[string][]string{
+				"request_three-nodes_start@1": []string{"three-nodes_start@2"},
+				"three-nodes_start@2": []string{"a@5"},
+				"a@5": []string{"b@6"},
+				"b@6": []string{"c@7"},
+				"c@7": []string{"three-nodes_end@3"},
+				"three-nodes_end@3": []string{"request_three-nodes-end@4"},
+			},
+		}
+	*/
+
+	for _, job := range actualJobChain.Jobs {
+		if job.State != proto.STATE_PENDING {
+			t.Errorf("job %s has state %s, expected all jobs to be STATE_PENDING", job.Id, proto.StateName[job.State])
+		}
+		if job.Type == "aJobType" && job.RetryWait != "500ms" {
+			t.Errorf("job of type aJobType has RetryWait: %s, expected 500ms", job.RetryWait)
+		}
+	}
+	if len(actualJobChain.Jobs) != 7 {
+		test.Dump(actualJobChain.Jobs)
+		t.Errorf("job chain has %d jobs, expected 7", len(actualJobChain.Jobs))
+	}
+	if len(actualJobChain.AdjacencyList) != 6 {
+		test.Dump(actualJobChain.Jobs)
+		t.Errorf("job chain AdjacencyList len = %d, expected 6", len(actualJobChain.AdjacencyList))
 	}
 }
 
@@ -850,6 +953,218 @@ func TestCreateLimitParallel(t *testing.T) {
 
 	currentStep = getNextStep(g.Edges, currentStep)
 	verifyStep(g, currentStep, 1, "request_decommission-cluster_end", t)
+}
+
+func TestOptArgs(t *testing.T) {
+	sequencesFile := "opt-args.yaml"
+	requestName := "req"
+	args := map[string]interface{}{
+		"cmd":  "sleep",
+		"args": "3",
+	}
+	tf := &mock.JobFactory{
+		Created: map[string]*mock.Job{},
+	}
+
+	chainGraph, err := createGraph1(t, sequencesFile, requestName, args, tf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find the node we want
+	var j *Node
+	for _, node := range chainGraph.getVertices() {
+		if node.Name == "job1name" {
+			j = node
+		}
+	}
+	if j == nil {
+		t.Logf("%#v", chainGraph.getVertices())
+		t.Fatal("graph.Vertices[job1name] not set")
+	}
+	if diff := deep.Equal(j.Args, args); diff != nil {
+		t.Logf("%#v\n", j.Args)
+		t.Error(diff)
+	}
+	job := tf.Created[j.GetName()]
+	if job == nil {
+		t.Fatal("job job1name not created")
+	}
+	if diff := deep.Equal(job.CreatedWithArgs, args); diff != nil {
+		t.Logf("%#v\n", job)
+		t.Errorf("test job not created with args arg")
+	}
+
+	// Try again without "args", i.e. the optional arg is not given
+	delete(args, "args")
+
+	tf = &mock.JobFactory{
+		Created: map[string]*mock.Job{},
+	}
+
+	chainGraph, err = createGraph1(t, sequencesFile, requestName, args, tf)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Find the node we want
+	for _, node := range chainGraph.getVertices() {
+		if node.Name == "job1name" {
+			j = node
+		}
+	}
+	if j == nil {
+		t.Logf("%#v", chainGraph.getVertices())
+		t.Fatal("graph.Vertices[job1name] not set")
+	}
+	if diff := deep.Equal(j.Args, args); diff != nil {
+		t.Logf("%#v\n", j.Args)
+		t.Error(diff)
+	}
+	job = tf.Created[j.GetName()]
+	if job == nil {
+		t.Fatal("job job1name not created")
+	}
+	if _, ok := job.CreatedWithArgs["args"]; !ok {
+		t.Error("jobArgs[args] does not exist, expected it to be set")
+	}
+	if diff := deep.Equal(job.CreatedWithArgs, args); diff != nil {
+		t.Logf("%#v\n", job)
+		t.Errorf("test job not created with args arg")
+	}
+}
+
+func TestBadEach001(t *testing.T) {
+	sequencesFile := "bad-each.yaml"
+	requestName := "bad-each"
+	args := map[string]interface{}{
+		"host": "foo",
+	}
+
+	job := &mock.Job{
+		SetJobArgs: map[string]interface{}{
+			// This causes an error because the spec has each: instances:instannce,
+			// so instances should be a slice, but it's a string.
+			"instances": "foo",
+		},
+	}
+	tf := &mock.JobFactory{
+		MockJobs: map[string]*mock.Job{
+			"get-instances": job,
+		},
+	}
+
+	_, err := createGraph1(t, sequencesFile, requestName, args, tf)
+	// Should get "each:instances:instance: arg instances is a string, expected a slice"
+	if err == nil {
+		t.Error("err is nil, expected an error")
+	}
+}
+
+func TestConditionalIfOptionalArg(t *testing.T) {
+	// This spec has "if: foo" where "foo" is an optional arg with no value,
+	// so creator should use "default: defaultSeq", which we can see below in
+	// "sequence_defaultSeq_start/end" nodes.
+	sequencesFile := "cond-args.yaml"
+	requestName := "request-name"
+	args := map[string]interface{}{
+		"cmd": "cmd-val",
+	}
+
+	// Mock ID gen so we get known numbering
+	idNo := 0
+	idgen := mock.IDGenerator{
+		UIDFunc: func() (string, error) {
+			idNo++
+			return fmt.Sprintf("id%d", idNo), nil
+		},
+	}
+	chainGraph, err := createGraph2(t, sequencesFile, requestName, args, idgen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := &chainGraph.Graph
+
+	// Partial nodes from the spec. Just want to verify the name and sequence IDs
+	// are what we expect, and the order expressed by Edges. This lets us see/verify
+	// that defaultSeq is created.
+	id1 := &Node{
+		Name:       "request_request-name_start",
+		SequenceId: "id1",
+	}
+	id3 := &Node{
+		Name:       "request-name_start",
+		SequenceId: "id1",
+	}
+	id4 := &Node{
+		Name:       "conditional_job1name_start",
+		SequenceId: "id4",
+	}
+	id6 := &Node{
+		Name:       "defaultSeq_start",
+		SequenceId: "id4",
+	}
+	id7 := &Node{ // category: job, type: job1
+		Name:       "job1name",
+		SequenceId: "id4",
+	}
+	id8 := &Node{
+		Name:       "defaultSeq_end",
+		SequenceId: "id4",
+	}
+	id5 := &Node{
+		Name:       "conditional_job1name_end",
+		SequenceId: "id4",
+	}
+	id9 := &Node{
+		Name:       "request-name_end",
+		SequenceId: "id1",
+	}
+	id2 := &Node{
+		Name:       "request_request-name_end",
+		SequenceId: "id1",
+	}
+	vertices := map[string]*Node{
+		"id1": id1,
+		"id2": id2,
+		"id3": id3,
+		"id4": id4,
+		"id5": id5,
+		"id6": id6,
+		"id7": id7,
+		"id8": id8,
+		"id9": id9,
+	}
+	expect := &graph.Graph{
+		//Name:     "sequence_request-name",
+		//First:    vertices["id1"],
+		//Last:     vertices["id7"],
+		//Vertices: vertices,
+		Edges: map[string][]string{
+			"id1": []string{"id3"},
+			"id3": []string{"id4"},
+			"id4": []string{"id6"},
+			"id6": []string{"id7"},
+			"id7": []string{"id8"},
+			"id8": []string{"id5"},
+			"id5": []string{"id9"},
+			"id9": []string{"id2"},
+		},
+	}
+	if diff := deep.Equal(got.Edges, expect.Edges); diff != nil {
+		t.Logf("   got: %#v", got.Edges)
+		t.Logf("expect: %#v", expect.Edges)
+		t.Error(diff)
+	}
+	for k, v := range chainGraph.getVertices() {
+		t.Logf("vertex: %+v", v)
+		if v.Name != vertices[k].Name {
+			t.Errorf("node '%s'.Name = %s, expected %s", k, v.Name, vertices[k].Name)
+		}
+		if v.SequenceId != vertices[k].SequenceId {
+			t.Errorf("node '%s'.SequenceId = %s, expected %s", k, v.SequenceId, vertices[k].SequenceId)
+		}
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////

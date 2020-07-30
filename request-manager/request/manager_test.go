@@ -165,79 +165,7 @@ func TestCreate(t *testing.T) {
 	// are built from a map (i.e. hash order randomness). So sometimes we get a@3
 	// and other times a@4, etc. So we'll check some specific, deterministic stuff.
 	// But an example of a job chain is shown in the comment block below.
-	actualJobChain := actualReq.JobChain
 	actualReq.JobChain = nil
-
-	/*
-		expectedJc := proto.JobChain{
-			RequestId: actualReq.Id, // no other way of getting this from outside the package
-			State:     proto.STATE_PENDING,
-			Jobs: map[string]proto.Job{
-				"request_three-nodes_start@1": proto.Job{
-					Id:   "request_three-nodes_start@1",
-					Type: "no-op",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 2,
-				},
-				"three-nodes_start@2": proto.Job{
-					Id:   "three-nodes_start@2",
-					Type: "no-op",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 2,
-				},
-				"a@5": proto.Job{
-					Id:        "a@5",
-					Type:      "aJobType",
-					Retry:     1,
-					RetryWait: 500ms,
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-				"b@6": proto.Job{
-					Id:    "b@6",
-					Type:  "bJobType",
-					Retry: 3,
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-				"c@7": proto.Job{
-					Id:   "c@7",
-					Type: "cJobType",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-				"three-nodes_end@3": proto.Job{
-					Id:   "three-nodes_end@23,
-					Type: "no-op",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-				"request_three-nodes_end@4": proto.Job{
-					Id:   "sequence_three-nodes_end@2",
-					Type: "no-op",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-			},
-			AdjacencyList: map[string][]string{
-				"request_three-nodes_start@1": []string{"three-nodes_start@2"},
-				"three-nodes_start@2": []string{"a@5"},
-				"a@5": []string{"b@6"},
-				"b@6": []string{"c@7"},
-				"c@7": []string{"three-nodes_end@3"},
-				"three-nodes_end@3": []string{"request_three-nodes-end@4"},
-			},
-		}
-	*/
-
-	for _, job := range actualJobChain.Jobs {
-		if job.State != proto.STATE_PENDING {
-			t.Errorf("job %s has state %s, expected all jobs to be STATE_PENDING", job.Id, proto.StateName[job.State])
-		}
-		if job.Type == "aJobType" && job.RetryWait != "500ms" {
-			t.Errorf("job of type aJobType has RetryWait: %s, expected 500ms", job.RetryWait)
-		}
-	}
 
 	expectedReq := proto.Request{
 		Id:        actualReq.Id, // no other way of getting this from outside the package
@@ -267,22 +195,6 @@ func TestCreate(t *testing.T) {
 	if diff := deep.Equal(actualReq, expectedReq); diff != nil {
 		test.Dump(actualReq)
 		t.Error(diff)
-	}
-
-	// Check the job chain
-	if actualJobChain.RequestId == "" {
-		t.Error("job chain RequestId not set, expected it to be set")
-	}
-	if actualJobChain.State != proto.STATE_PENDING {
-		t.Errorf("job chain state = %s, expected PENDING", proto.StateName[actualJobChain.State])
-	}
-	if len(actualJobChain.Jobs) != 7 {
-		test.Dump(actualJobChain.Jobs)
-		t.Errorf("job chain has %d jobs, expected 7", len(actualJobChain.Jobs))
-	}
-	if len(actualJobChain.AdjacencyList) != 6 {
-		test.Dump(actualJobChain.Jobs)
-		t.Errorf("job chain AdjacencyList len = %d, expected 6", len(actualJobChain.AdjacencyList))
 	}
 }
 
