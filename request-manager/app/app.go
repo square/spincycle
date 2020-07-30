@@ -138,7 +138,7 @@ func LoadConfig(ctx Context) (config.RequestManager, error) {
 
 // LoadSpecs is the default LoadSpecs hook.
 func LoadSpecs(ctx Context) (spec.Specs, error) {
-	return spec.Parse(ctx.Config.Specs.Dir, log.Printf)
+	return spec.ParseSpecsDir(ctx.Config.Specs.Dir, log.Printf)
 }
 
 // MakeGeneratorFactory is the default MakeGeneratorFactory factory.

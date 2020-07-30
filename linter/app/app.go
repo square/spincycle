@@ -32,7 +32,7 @@ func Defaults() Context {
 			GeneratorFactory: id.NewGeneratorFactory(4, 100),
 		},
 		Hooks: Hooks{
-			LoadSpecs: spec.Parse,
+			LoadSpecs: spec.ParseSpecsDir,
 		},
 	}
 }

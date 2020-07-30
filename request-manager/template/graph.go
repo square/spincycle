@@ -11,7 +11,7 @@ import (
 // Node in template graph. Implments graph.Node.
 type Node struct {
 	// payload
-	NodeSpec *spec.NodeSpec // sequence node that this graph node represents
+	Node *spec.Node // sequence node that this graph node represents
 
 	// node metainfo fields
 	Id   string                // unique ID of node within template
@@ -32,7 +32,7 @@ func (g *Node) GetPrev() *map[string]graph.Node {
 }
 
 func (g *Node) GetName() string {
-	return g.NodeSpec.Name
+	return g.Node.Name
 }
 
 // graph prety printer function already prints relevant info; there's nothing to add here
@@ -118,16 +118,16 @@ func (t *Graph) addNodeAfter(node *Node, prev graph.Node) error {
 }
 
 // Generate a new node for this template graph with payload `node`.
-func (t *Graph) newNode(node *spec.NodeSpec) (*Node, error) {
+func (t *Graph) newNode(node *spec.Node) (*Node, error) {
 	id, err := t.idgen.UID()
 	if err != nil {
 		return nil, err
 	}
 	return &Node{
-		NodeSpec: node,
-		Id:       id,
-		Next:     map[string]graph.Node{},
-		Prev:     map[string]graph.Node{},
+		Node: node,
+		Id:   id,
+		Next: map[string]graph.Node{},
+		Prev: map[string]graph.Node{},
 	}, nil
 }
 
@@ -140,7 +140,7 @@ func (t *Graph) newNoopNode(name string) (*Node, error) {
 	noopCategory := "job"
 	noopType := "noop"
 	return &Node{
-		NodeSpec: &spec.NodeSpec{
+		Node: &spec.Node{
 			Name:     name,
 			Category: &noopCategory,
 			NodeType: &noopType,

@@ -20,15 +20,15 @@ const DEFAULT = "default"
 
 // Creates a job chain for a single request.
 type Creator struct {
-	JobFactory        job.Factory                   // factory to create nodes' jobs
-	AllSequences      map[string]*spec.SequenceSpec // sequence name --> sequence spec
-	SequenceTemplates map[string]*template.Graph    // sequence name --> template graph
+	JobFactory        job.Factory                // factory to create nodes' jobs
+	AllSequences      map[string]*spec.Sequence  // sequence name --> sequence spec
+	SequenceTemplates map[string]*template.Graph // sequence name --> template graph
 
 	idgen id.Generator  // generates UIDs for jobs
 	req   proto.Request // the request spec this creator can create job chain for
 }
 
-func NewCreator(req proto.Request, nf job.Factory, specs map[string]*spec.SequenceSpec, templates map[string]*template.Graph, idgen id.Generator) *Creator {
+func NewCreator(req proto.Request, nf job.Factory, specs map[string]*spec.Sequence, templates map[string]*template.Graph, idgen id.Generator) *Creator {
 	o := &Creator{
 		JobFactory:        nf,
 		AllSequences:      specs,
@@ -44,18 +44,18 @@ type CreatorFactory interface {
 	// Make makes a Creator. A new creator should be made for every request.
 	Make(proto.Request) *Creator
 	// Retrieve all sequences the factory knows about.
-	Sequences() map[string]*spec.SequenceSpec
+	Sequences() map[string]*spec.Sequence
 }
 
 // Implements CreatorFactory interface.
 type creatorFactory struct {
 	jf        job.Factory
-	seqs      map[string]*spec.SequenceSpec
+	seqs      map[string]*spec.Sequence
 	templates map[string]*template.Graph
 	idf       id.GeneratorFactory
 }
 
-func NewCreatorFactory(jf job.Factory, specs map[string]*spec.SequenceSpec, templates map[string]*template.Graph, idf id.GeneratorFactory) CreatorFactory {
+func NewCreatorFactory(jf job.Factory, specs map[string]*spec.Sequence, templates map[string]*template.Graph, idf id.GeneratorFactory) CreatorFactory {
 	return &creatorFactory{
 		jf:        jf,
 		seqs:      specs,
@@ -68,7 +68,7 @@ func (f *creatorFactory) Make(req proto.Request) *Creator {
 	return NewCreator(req, f.jf, f.seqs, f.templates, f.idf.Make()) // create a Creator with a new id Generator
 }
 
-func (f *creatorFactory) Sequences() map[string]*spec.SequenceSpec {
+func (f *creatorFactory) Sequences() map[string]*spec.Sequence {
 	return f.seqs
 }
 
@@ -202,7 +202,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 	// graph.
 	idMap := map[string]*graph.Graph{} // template node id --> corresponding subgraph
 	for _, templateNode := range templateGraph.Iterator() {
-		n := templateNode.NodeSpec
+		n := templateNode.Node
 
 		// Find out how many times this node has to be repeated
 		iterators, iterateOvers, err := o.getIterators(n, jobArgs)
@@ -398,7 +398,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 
 // Based on values of job args, determine which path of a conditional to take.
 // Assumes `n` is a conditional node.
-func chooseConditional(n *spec.NodeSpec, jobArgs map[string]interface{}) (string, error) {
+func chooseConditional(n *spec.Node, jobArgs map[string]interface{}) (string, error) {
 	// Node is a conditional, check the value of the "if" jobArg
 	val, ok := jobArgs[*n.If]
 	valstring, ok := val.(string)
@@ -429,7 +429,7 @@ func chooseConditional(n *spec.NodeSpec, jobArgs map[string]interface{}) (string
 // and the singleton [""], to indicate that only one iteration is needed.
 //
 // Precondition: the iteratable must already be present in args
-func (o *Creator) getIterators(n *spec.NodeSpec, args map[string]interface{}) ([]string, [][]interface{}, error) {
+func (o *Creator) getIterators(n *spec.Node, args map[string]interface{}) ([]string, [][]interface{}, error) {
 	empty := []string{""}
 	empties := [][]interface{}{[]interface{}{""}}
 	if len(n.Each) == 0 {
@@ -484,7 +484,7 @@ func (o *Creator) getIterators(n *spec.NodeSpec, args map[string]interface{}) ([
 // but also rename the arguments as defined in the "args" clause.
 // A shallow copy is sufficient because args values should never
 // change.
-func remapNodeArgs(n *spec.NodeSpec, args map[string]interface{}) (map[string]interface{}, error) {
+func remapNodeArgs(n *spec.Node, args map[string]interface{}) (map[string]interface{}, error) {
 	jobArgs2 := map[string]interface{}{}
 	for _, arg := range n.Args {
 		var ok bool
@@ -499,7 +499,7 @@ func remapNodeArgs(n *spec.NodeSpec, args map[string]interface{}) (map[string]in
 // Given a node definition and two args sets. Copy the arguments that
 // are defined in the "sets/arg" clause into the main args map under
 // the name defined by the "sets/as" field.
-func setNodeArgs(n *spec.NodeSpec, argsTo, argsFrom map[string]interface{}) error {
+func setNodeArgs(n *spec.Node, argsTo, argsFrom map[string]interface{}) error {
 	if len(n.Sets) == 0 {
 		return nil
 	}
@@ -517,7 +517,7 @@ func setNodeArgs(n *spec.NodeSpec, argsTo, argsFrom map[string]interface{}) erro
 }
 
 // Builds a graph containing a single node
-func (o *Creator) buildSingleVertexGraph(nodeDef *spec.NodeSpec, jobArgs map[string]interface{}) (*graph.Graph, error) {
+func (o *Creator) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]interface{}) (*graph.Graph, error) {
 	n, err := o.newNode(nodeDef, jobArgs)
 	if err != nil {
 		return nil, err
@@ -603,7 +603,7 @@ func (o *Creator) newNoopNode(name string, jobArgs map[string]interface{}) (*Nod
 }
 
 // newNode creates a node for the given job j
-func (o *Creator) newNode(j *spec.NodeSpec, jobArgs map[string]interface{}) (*Node, error) {
+func (o *Creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, error) {
 	// Make a copy of the jobArgs before this node gets created and potentially
 	// adds additional keys to the jobArgs. A shallow copy is sufficient because
 	// args values should never change.
@@ -654,6 +654,6 @@ func (cf *MockCreatorFactory) Make(req proto.Request) *Creator {
 	return nil
 }
 
-func (cf *MockCreatorFactory) Sequences() map[string]*spec.SequenceSpec {
-	return map[string]*spec.SequenceSpec{}
+func (cf *MockCreatorFactory) Sequences() map[string]*spec.Sequence {
+	return map[string]*spec.Sequence{}
 }

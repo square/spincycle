@@ -1,0 +1,53 @@
+---
+sequences:
+  retry-three-nodes:
+    request: true
+    args:
+      required:
+        - name: foo
+      optional:
+        - name: bar
+          default: 175
+    nodes:
+      node:
+        category: sequence
+        type: three-nodes
+        args:
+          - expected: foo
+            given: foo
+        deps: []
+        retry: 10
+        retryWait: 500ms
+  three-nodes:
+    request: true
+    args:
+      required:
+        - name: foo
+      optional:
+        - name: bar
+          default: 175
+    nodes:
+      a:
+        category: job
+        type: aJobType
+        args:
+          - expected: foo
+            given: foo
+        sets:
+          - arg: aArg
+        deps: []
+        retry: 1
+        retryWait: 500ms
+      b:
+        category: job
+        type: bJobType
+        args:
+          - expected: aArg
+            given: aArg
+        sets: []
+        deps: [a]
+        retry: 3
+      c:
+        category: job
+        type: cJobType
+        deps: [b]

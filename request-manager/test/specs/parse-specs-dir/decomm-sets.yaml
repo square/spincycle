@@ -1,0 +1,145 @@
+---
+sequences:
+  decommission-cluster:
+    request: true
+    args:
+      required:
+        - name: cluster
+        - name: env
+      optional:
+        - name: something
+          default: 100
+      static:
+        - name: somethingelse
+          default: "test-cluster-001"
+    nodes:
+      get-instances:
+        category: job
+        type: get-cluster-instances
+        args:
+          - expected: cluster
+            given: cluster
+        sets:
+          - arg: instances
+            as: instances0
+        deps: []
+        retry: 3
+        retryWait: 10s
+      prep-1:
+        category: job
+        type: prep-job-1
+        args:
+          - expected: cluster
+            given: cluster
+          - expected: env
+            given: env
+          - expected: instances
+            given: instances0
+        sets: []
+        deps: [pre-flight-checks]
+      pre-flight-checks:
+        category: sequence
+        type: check-instance-is-ok
+        each:
+          - instances0:instance   # repeat for each instance in instances
+                                  # i.e. each iteration of the sequence check-instance-is-ok will
+                                  #      expect a variable "instance" to be set in job args
+        deps: [get-instances]
+        retry: 3
+        retryWait: 10s # this should be ignored
+      decommission-instances:
+        category: sequence
+        type: decommission-instance
+        each:
+          - instances0:instance # repeat for each instance in instances
+        deps: [prep-1]
+      first-cleanup-job:
+        category: job
+        type: cleanup-job
+        args:
+          - expected: cluster
+            given: cluster
+        sets: []
+        deps: [decommission-instances]
+      second-cleanup-job:
+        category: job
+        type: cleanup-job
+        args:
+          - expected: cluster
+            given: cluster
+        sets: []
+        deps: [first-cleanup-job]
+      third-cleanup-job:
+        category: job
+        type: cleanup-job
+        args:
+          - expected: cluster
+            given: somethingelse
+        sets: []
+        deps: [second-cleanup-job]
+      fourth-cleanup-job:
+        category: job
+        type: cleanup-job
+        args:
+          - expected: cluster
+            given: cluster
+        sets: []
+        deps: [second-cleanup-job]
+  check-instance-is-ok:
+    args:
+      required:
+        - name: instance
+      optional:
+    nodes:
+      check-ok:
+        category: job
+        type: check-ok-1
+        args:
+          - expected: container
+            given: instance
+        sets:
+          - arg: physicalhost
+            as: physicalhost0
+        deps: []
+      check-ok-again:
+        category: job
+        type: check-ok-2
+        args:
+          - expected: hostAddr
+            given: physicalhost0
+          - expected: nodeAddr
+            given: instance
+        sets: []
+        deps: [check-ok]
+  decommission-instance:
+    args:
+      required:
+        - name: instance
+      optional:
+    nodes:
+      decom-1:
+        category: job
+        type: decom-step-1
+        args:
+          - expected: container
+            given: instance
+        sets:
+          - arg: physicalhost
+            as: physicalhost
+        deps: []
+      decom-2:
+        category: job
+        type: decom-step-2
+        args:
+          - expected: dstAddr
+            given: instance
+        sets: []
+        deps: [decom-1]
+      decom-3:
+        category: job
+        type: decom-step-3
+        args:
+          - expected: container
+            given: instance
+        sets: []
+        deps: [decom-2]

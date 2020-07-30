@@ -7,8 +7,8 @@ sequences:
     nodes:
       node-a:
         category: job
+        category: job # duplicated field--should generate warning
         type: job-type-a
-        each:
-          - arg-a:alias-a # can't alias arg-a twice
-          - arg-a:alias-b
+        args:
+          - expected: required-a
         deps: []

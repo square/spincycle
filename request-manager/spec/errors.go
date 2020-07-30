@@ -38,9 +38,13 @@ func (e InvalidValueError) Error() string {
 
 	var values string
 	values = fmt.Sprintf("\"%s\"", strings.Join(e.Values, "\", \""))
+	var multipleValues string
+	if len(e.Values) > 1 {
+		multipleValues = "s"
+	}
 
-	return fmt.Sprintf("%s: invalid value(s) %s in field `%s`, expected %s",
-		loc, values, e.Field, e.Expected)
+	return fmt.Sprintf("%s: invalid value%s %s in field `%s`, expected %s",
+		loc, multipleValues, values, e.Field, e.Expected)
 }
 
 /* =========================================================================== */
@@ -71,7 +75,7 @@ func (e MissingValueError) Error() string {
 		explanation = fmt.Sprintf(": %s", e.Explanation)
 	}
 
-	return fmt.Sprintf("%s: field(s) `%s` missing%s", loc, e.Field, explanation)
+	return fmt.Sprintf("%s: field `%s` missing%s", loc, e.Field, explanation)
 }
 
 /* =========================================================================== */
@@ -97,6 +101,10 @@ func (e DuplicateValueError) Error() string {
 
 	var values string
 	values = fmt.Sprintf("\"%s\"", strings.Join(e.Values, "\", \""))
+	var multipleValues string
+	if len(e.Values) > 1 {
+		multipleValues = "s"
+	}
 
 	var explanation string
 	switch e.Explanation {
@@ -106,6 +114,6 @@ func (e DuplicateValueError) Error() string {
 		explanation = fmt.Sprintf(": %s", e.Explanation)
 	}
 
-	return fmt.Sprintf("%s: value(s) %s duplicated in field `%s`%s",
-		loc, values, e.Field, explanation)
+	return fmt.Sprintf("%s: value%s %s duplicated in field `%s`%s",
+		loc, multipleValues, values, e.Field, explanation)
 }

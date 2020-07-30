@@ -18,9 +18,9 @@ const DEFAULT = "default"
 // exclusive.
 type Grapher struct {
 	// user-provided
-	AllSequences map[string]*spec.SequenceSpec // All sequences read in from request specs
-	IdGenFactory id.GeneratorFactory           // Generate per-template unique IDs for nodes
-	LogFunc      func(string, ...interface{})  // Printf-like function to log errors and warnings
+	AllSequences map[string]*spec.Sequence    // All sequences read in from request specs
+	IdGenFactory id.GeneratorFactory          // Generate per-template unique IDs for nodes
+	LogFunc      func(string, ...interface{}) // Printf-like function to log errors and warnings
 
 	// filled in while creating templates
 	SequenceTemplates map[string]*Graph // Template graphs for (valid) sequences in AllSequences (sequence name -> tempalte)
@@ -72,7 +72,7 @@ func (o *Grapher) buildSequence(sequenceName string) error {
 	seq, ok := o.AllSequences[sequenceName]
 	if !ok { // this shouldn't happen, because there should be a static check ensuring that all sequences actually exist
 		err := fmt.Errorf("cannot find definition")
-		o.LogFunc("error: sequence %s: %s\n", sequenceName, err)
+		o.LogFunc("error: sequence %s: %s", sequenceName, err)
 		o.SequenceErrors[sequenceName] = err
 		return err
 	}
@@ -89,7 +89,7 @@ func (o *Grapher) buildSequence(sequenceName string) error {
 	if len(missingSets) > 0 {
 		err := fmt.Errorf("one or more nodes did not actually set job args declared in `sets`")
 		for nodeName, missing := range missingSets {
-			o.LogFunc("error: sequence %s, node %s: job arg(s) %s listed in `sets` were not actually set\n", sequenceName, nodeName, strings.Join(missing, ", "))
+			o.LogFunc("error: sequence %s, node %s: job arg(s) %s listed in `sets` were not actually set", sequenceName, nodeName, strings.Join(missing, ", "))
 		}
 		o.SequenceErrors[sequenceName] = err
 		return err
@@ -98,7 +98,7 @@ func (o *Grapher) buildSequence(sequenceName string) error {
 	/* Build template. */
 	template, err := o.getTemplate(seq)
 	if err != nil {
-		o.LogFunc("error: sequence %s: %s\n", sequenceName, err)
+		o.LogFunc("error: sequence %s: %s", sequenceName, err)
 		o.SequenceErrors[sequenceName] = err
 		return err
 	}
@@ -108,7 +108,7 @@ func (o *Grapher) buildSequence(sequenceName string) error {
 }
 
 // Get subsequences as a map of node name --> list of subsequences.
-func (o *Grapher) getSubsequences(seq *spec.SequenceSpec) map[string][]string {
+func (o *Grapher) getSubsequences(seq *spec.Sequence) map[string][]string {
 	subsequences := map[string][]string{}
 	for nodeName, node := range seq.Nodes {
 		subseq := []string{}
@@ -172,7 +172,7 @@ func (o *Grapher) getActualSets(subsequences map[string][]string) map[string]map
 
 // Get job args declared in `sets` that weren't actually set as map of node name --> list of missing job args.
 // Assumes all node names in `actualSets` appears in `nodes`.
-func getMissingSets(nodes map[string]*spec.NodeSpec, actualSets map[string]map[string]bool) map[string][]string {
+func getMissingSets(nodes map[string]*spec.Node, actualSets map[string]map[string]bool) map[string][]string {
 	missingSets := map[string][]string{}
 	for nodeName, sets := range actualSets {
 		nodeSpec, _ := nodes[nodeName]
@@ -192,7 +192,7 @@ func getMissingSets(nodes map[string]*spec.NodeSpec, actualSets map[string]map[s
 // Get the minimal set of job args that the sequence starts with.
 // In the context of a wider request of which this sequence is a part, there may be more job
 // args available, but this sequence should not access them, so they are irrelevant for our purposes.
-func getAllSequenceArgs(seq *spec.SequenceSpec) map[string]bool {
+func getAllSequenceArgs(seq *spec.Sequence) map[string]bool {
 	jobArgs := map[string]bool{}
 	for _, arg := range seq.Args.Required {
 		jobArgs[*arg.Name] = true
@@ -207,7 +207,7 @@ func getAllSequenceArgs(seq *spec.SequenceSpec) map[string]bool {
 }
 
 // Creates the actual template.
-func (o *Grapher) getTemplate(seq *spec.SequenceSpec) (*Graph, error) {
+func (o *Grapher) getTemplate(seq *spec.Sequence) (*Graph, error) {
 	// Generates IDs unique within the template
 	idgen := o.IdGenFactory.Make()
 
@@ -220,7 +220,7 @@ func (o *Grapher) getTemplate(seq *spec.SequenceSpec) (*Graph, error) {
 	nodes := seq.Nodes
 	jobArgs := getAllSequenceArgs(seq) // map of sequence arg (including optional+defualt) --> true
 
-	components := map[*spec.NodeSpec]*Node{}
+	components := map[*spec.Node]*Node{}
 	for _, node := range nodes {
 		components[node], err = template.newNode(node)
 		if err != nil {
@@ -228,11 +228,11 @@ func (o *Grapher) getTemplate(seq *spec.SequenceSpec) (*Graph, error) {
 		}
 	}
 
-	componentsToAdd := map[*spec.NodeSpec]*Node{}
+	componentsToAdd := map[*spec.Node]*Node{}
 	for k, v := range components {
 		componentsToAdd[k] = v
 	}
-	componentsAdded := map[*spec.NodeSpec]bool{}
+	componentsAdded := map[*spec.Node]bool{}
 
 	for len(componentsToAdd) > 0 {
 		// Build graph by adding components, starting from the source node, and then
@@ -302,7 +302,7 @@ func (o *Grapher) getTemplate(seq *spec.SequenceSpec) (*Graph, error) {
 }
 
 // Check whether the set of nodes in graph (`inGraph`) satisfies all `dependencies`.
-func dependenciesSatisfied(inGraph map[*spec.NodeSpec]bool, dependencies []string, nodes map[string]*spec.NodeSpec) bool {
+func dependenciesSatisfied(inGraph map[*spec.Node]bool, dependencies []string, nodes map[string]*spec.Node) bool {
 	for _, dep := range dependencies {
 		node := nodes[dep]
 		if _, ok := inGraph[node]; !ok {
@@ -313,7 +313,7 @@ func dependenciesSatisfied(inGraph map[*spec.NodeSpec]bool, dependencies []strin
 }
 
 // Returns a list of node args that aren't present in the job args map.
-func getMissingArgs(n *spec.NodeSpec, jobArgs map[string]bool) ([]string, error) {
+func getMissingArgs(n *spec.Node, jobArgs map[string]bool) ([]string, error) {
 	missing := []string{}
 
 	// Assert that the iterable variable is present.

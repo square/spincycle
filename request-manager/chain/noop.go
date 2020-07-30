@@ -12,7 +12,7 @@ var category = "job"
 var nodeType = "noop"
 
 // noop is the default node spec for sequence fan-out (source) and fan-in (sink) nodes.
-var noopSpec = &spec.NodeSpec{
+var noopSpec = &spec.Node{
 	Name:     "noop",
 	Category: &category,
 	NodeType: &nodeType,
