@@ -19,17 +19,23 @@ var cmd struct {
 func Run(ctx app.Context) error {
 	/* Setup. */
 	arg.MustParse(&cmd)
-	printf := func(s string, args ...interface{}) { fmt.Printf(s, args...) }
+	printf := func(s string, args ...interface{}) { fmt.Printf(s+"\n", args...) }
 
 	/* Static checks. */
 	specs, err := ctx.Hooks.LoadSpecs(cmd.SpecsDir, printf)
 	if err != nil {
 		return err
 	}
+	spec.ProcessSpecs(specs)
 
-	err = spec.RunChecks(specs, printf)
+	checkFactories := append(ctx.Factories.CheckFactories, spec.BaseCheckFactory{specs})
+	checker, err := spec.NewChecker(checkFactories, printf)
 	if err != nil {
 		return err
+	}
+	ok := checker.RunChecks(specs)
+	if !ok {
+		return fmt.Errorf("spec.checker: error occurred") // checker prints details for us already
 	}
 
 	/* Graph checks. */

@@ -20,6 +20,7 @@ type Context struct {
 
 type Factories struct {
 	GeneratorFactory id.GeneratorFactory
+	CheckFactories   []spec.CheckFactory // All additional check factories to run
 }
 
 type Hooks struct {
@@ -30,6 +31,7 @@ func Defaults() Context {
 	return Context{
 		Factories: Factories{
 			GeneratorFactory: id.NewGeneratorFactory(4, 100),
+			CheckFactories:   []spec.CheckFactory{spec.DefaultCheckFactory{}},
 		},
 		Hooks: Hooks{
 			LoadSpecs: spec.ParseSpecsDir,
