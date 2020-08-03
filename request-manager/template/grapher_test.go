@@ -21,10 +21,18 @@ func MakeGrapher(t *testing.T, sequencesFile string, logFunc func(string, ...int
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = spec.RunChecks(specs, logFunc)
+	spec.ProcessSpecs(specs)
+
+	checkFactories := []spec.CheckFactory{spec.BaseCheckFactory{specs}, spec.DefaultCheckFactory{}}
+	checker, err := spec.NewChecker(checkFactories, t.Logf)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Could not create checker: %s", err)
 	}
+	ok := checker.RunChecks(specs)
+	if !ok {
+		t.Fatalf("fix static check errors; template.Grapher assumes specs have passed static checks")
+	}
+
 	return NewGrapher(specs, id.NewGeneratorFactory(4, 100), logFunc)
 }
 

@@ -54,6 +54,10 @@ type Factories struct {
 	// in the largest possible request.
 	MakeGeneratorFactory func(Context) (id.GeneratorFactory, error)
 
+	// Makes list of check factories. Checks may overlap. spec.BaseCheckFactory is
+	// automatically included by caller (does not need to be included here).
+	MakeCheckFactories func(Context) ([]spec.CheckFactory, error)
+
 	MakeJobRunnerClient func(Context) (jr.Client, error)
 	MakeDbConnPool      func(Context) (*sql.DB, error)
 }
@@ -111,6 +115,7 @@ func Defaults() Context {
 		ShutdownChan: make(chan struct{}),
 		Factories: Factories{
 			MakeGeneratorFactory: MakeGeneratorFactory,
+			MakeCheckFactories:   MakeCheckFactories,
 			MakeJobRunnerClient:  MakeJobRunnerClient,
 			MakeDbConnPool:       MakeDbConnPool,
 		},
@@ -144,6 +149,11 @@ func LoadSpecs(ctx Context) (spec.Specs, error) {
 // MakeGeneratorFactory is the default MakeGeneratorFactory factory.
 func MakeGeneratorFactory(ctx Context) (id.GeneratorFactory, error) {
 	return id.NewGeneratorFactory(4, 100), nil // generates 4-character ids for jobs
+}
+
+// MakeCheckFactories is the default MakeCheckFactories factory.
+func MakeCheckFactories(ctx Context) ([]spec.CheckFactory, error) {
+	return []spec.CheckFactory{spec.DefaultCheckFactory{}}, nil
 }
 
 // MakeJobRunnerClient is the default MakeJobRunnerClient factory.

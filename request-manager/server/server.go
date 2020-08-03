@@ -191,11 +191,19 @@ func (s *Server) Boot() error {
 	if err != nil {
 		return fmt.Errorf("LoadSpecs: %s", err)
 	}
-	err = spec.RunChecks(specs, log.Errorf)
+	spec.ProcessSpecs(specs)
+	s.appCtx.Specs = specs
+
+	checkFactories, err := s.appCtx.Factories.MakeCheckFactories(s.appCtx)
 	if err != nil {
+		return fmt.Errorf("MakeCheckFactories: %s", err)
+	}
+	checkFactories = append(checkFactories, spec.BaseCheckFactory{specs})
+	checker, err := spec.NewChecker(checkFactories, log.Errorf)
+	ok := checker.RunChecks(specs)
+	if !ok {
 		return fmt.Errorf("Static check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
-	s.appCtx.Specs = specs
 
 	// Generator factory used to generate IDs for jobs in template.Grapher and chain.Creator.
 	gf, err := s.appCtx.Factories.MakeGeneratorFactory(s.appCtx)
