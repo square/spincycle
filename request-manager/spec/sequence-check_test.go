@@ -26,6 +26,26 @@ func TestFailRequiredArgsNamedSequenceCheck(t *testing.T) {
 	compareError(t, err, expectedErr, "accepted sequence arg with no name, expected error")
 }
 
+func TestFailRequiredArgsHaveNoDefaultsSequenceCheck(t *testing.T) {
+	check := RequiredArgsHaveNoDefaultsSequenceCheck{}
+	sequence := Sequence{
+		Name: seqA,
+		Args: SequenceArgs{
+			Required: []*Arg{
+				&Arg{Name: &value, Default: &value},
+			},
+		},
+	}
+	expectedErr := InvalidValueError{
+		Sequence: seqA,
+		Field:    "args.required.default",
+		Values:   []string{fmt.Sprintf("%s (%s)", value, value)},
+	}
+
+	err := check.CheckSequence(sequence)
+	compareError(t, err, expectedErr, "accepted optional arg with no default, expected error")
+}
+
 func TestFailOptionalArgsHaveDefaultsSequenceCheck(t *testing.T) {
 	check := OptionalArgsHaveDefaultsSequenceCheck{}
 	sequence := Sequence{
@@ -99,6 +119,31 @@ func TestFailHasNodesSequenceCheck(t *testing.T) {
 
 	err := check.CheckSequence(sequence)
 	compareError(t, err, expectedErr, "accepted sequence with no nodes, expected error")
+}
+
+func TestFailNodesSetsUniqueSequenceCheck(t *testing.T) {
+	check := NodesSetsUniqueSequenceCheck{}
+	nodeB := "node-b"
+	sequence := Sequence{
+		Name: seqA,
+		Nodes: map[string]*Node{
+			nodeA: &Node{
+				Name: nodeA,
+				Sets: []*NodeSet{&NodeSet{Arg: &value, As: &value}},
+			},
+			nodeB: &Node{
+				Name: nodeA, // Cheat to make the `Values` field of the returned err predictable
+				Sets: []*NodeSet{&NodeSet{Arg: &value, As: &value}},
+			},
+		},
+	}
+	expectedErr := DuplicateValueError{
+		Sequence: seqA,
+		Field:    "nodes.sets.as",
+		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", value, nodeA, nodeA)},
+	}
+	err := check.CheckSequence(sequence)
+	compareError(t, err, expectedErr, "accepted sequence with multiple nodes setting the same arg, expected error")
 }
 
 func TestFailACLAdminXorOpsSequenceCheck(t *testing.T) {

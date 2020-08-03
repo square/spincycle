@@ -50,6 +50,8 @@ func (c BaseCheckFactory) MakeNodeErrorChecks() ([]NodeCheck, error) {
 		HasCategoryNodeCheck{},
 		ValidCategoryNodeCheck{},
 
+		SubsequencesExistNodeCheck{},
+
 		ValidEachNodeCheck{},
 		ArgsAreNamedNodeCheck{},
 		SetsAreNamedNodeCheck{},
@@ -76,7 +78,9 @@ type DefaultCheckFactory struct{}
 func (c DefaultCheckFactory) MakeSequenceErrorChecks() ([]SequenceCheck, error) {
 	return []SequenceCheck{
 		NoDuplicateArgsSequenceCheck{},
+		RequiredArgsHaveNoDefaultsSequenceCheck{},
 		HasNodesSequenceCheck{},
+		NodesSetsUniqueSequenceCheck{},
 	}, nil
 }
 
@@ -97,6 +101,8 @@ func (c DefaultCheckFactory) MakeNodeErrorChecks() ([]NodeCheck, error) {
 		NonconditionalNoEqNodeCheck{},
 
 		RetryIfRetryWaitNodeCheck{},
+
+		NoExtraSequenceArgsProvidedNodeCheck{},
 	}, nil
 }
 

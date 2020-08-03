@@ -644,3 +644,121 @@ func (check RequiredArgsProvidedNodeCheck) CheckNode(sequenceName string, node N
 
 	return nil
 }
+
+/* ========================================================================== */
+type NoExtraSequenceArgsProvidedNodeCheck struct {
+	specs Specs
+}
+
+/* Sequence and conditional nodes shouldn't provide more than the specified sequence args. */
+func (check NoExtraSequenceArgsProvidedNodeCheck) CheckNode(sequenceName string, node Node) error {
+	// List of sequences to check
+	// (This will also include jobs, but we'll ignore them later)
+	var sequences []string
+	if node.NodeType != nil {
+		sequences = []string{*node.NodeType}
+	}
+	for _, seq := range node.Eq {
+		sequences = append(sequences, seq)
+	}
+
+	// Set of all (excess) inputs to a node
+	// Starts out as all the input args
+	var excessArgs = map[string]bool{}
+	for _, nodeArg := range node.Args {
+		if nodeArg.Expected != nil {
+			excessArgs[*nodeArg.Expected] = true
+		}
+	}
+	for _, each := range node.Each {
+		split := strings.Split(each, ":")
+		if len(split) != 2 {
+			continue
+		}
+		excessArgs[split[1]] = true
+	}
+
+	// Delete from `excessArgs` the ones that actually show up as sequence args to some subsequence
+	for _, sequence := range sequences {
+		seq, ok := check.specs.Sequences[sequence]
+		if !ok {
+			continue
+		}
+		for _, argList := range [][]*Arg{seq.Args.Required, seq.Args.Optional} {
+			for _, arg := range argList {
+				if arg.Name != nil && excessArgs[*arg.Name] {
+					delete(excessArgs, *arg.Name)
+				}
+			}
+		}
+	}
+
+	if len(excessArgs) > 0 {
+		multiple1 := ""
+		multiple2 := "s"
+		if len(excessArgs) > 1 {
+			multiple1 = "s"
+			multiple2 = ""
+		}
+		return InvalidValueError{
+			Sequence: sequenceName,
+			Node:     &node.Name,
+			Field:    "args`, `each.alias",
+			Values:   stringSetToArray(excessArgs),
+			Expected: fmt.Sprintf("only args that the subsequence%s require%s", multiple1, multiple2),
+		}
+	}
+
+	return nil
+}
+
+/* ========================================================================== */
+type SubsequencesExistNodeCheck struct {
+	specs Specs
+}
+
+/* All sequences called by the node exist in the specs. */
+func (check SubsequencesExistNodeCheck) CheckNode(sequenceName string, node Node) error {
+	// List of sequences to check
+	var sequences []string
+	if node.IsSequence() {
+		sequences = []string{*node.NodeType}
+	} else if node.IsConditional() {
+		for _, seq := range node.Eq {
+			sequences = append(sequences, seq)
+		}
+	}
+
+	// Check that subsequences exist
+	values := map[string]bool{}
+	for _, sequence := range sequences {
+		_, ok := check.specs.Sequences[sequence]
+		if !ok {
+			values[sequence] = true
+		}
+	}
+
+	if len(values) > 0 {
+		multiple1 := ""
+		multiple2 := "s"
+		if len(values) > 1 {
+			multiple1 = "s"
+			multiple2 = ""
+		}
+		var field string
+		if node.IsSequence() {
+			field = "type"
+		} else if node.IsConditional() {
+			field = "eq"
+		}
+		return InvalidValueError{
+			Sequence: sequenceName,
+			Node:     &node.Name,
+			Field:    field,
+			Values:   stringSetToArray(values),
+			Expected: fmt.Sprintf("subsequence%s that exist%s in specs", multiple1, multiple2),
+		}
+	}
+
+	return nil
+}

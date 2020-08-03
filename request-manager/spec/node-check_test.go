@@ -720,3 +720,196 @@ func TestFailRequiredArgsProvidedNodeCheck3(t *testing.T) {
 	err := check.CheckNode(seqA, node)
 	compareError(t, err, expectedErr, "not all required args to expanded sequence node listed in `args`, expected error")
 }
+
+func TestFailNoExtraSequenceArgsProvidedNodeCheck1(t *testing.T) {
+	argA := "arg-a"
+	argB := "arg-b"
+	argC := "arg-c"
+	specs := Specs{
+		Sequences: map[string]*Sequence{
+			seqA: &Sequence{
+				Name: seqA,
+				Args: SequenceArgs{
+					Required: []*Arg{
+						&Arg{Name: &argA},
+					},
+					Optional: []*Arg{
+						&Arg{Name: &argB},
+					},
+				},
+			},
+		},
+	}
+	check := NoExtraSequenceArgsProvidedNodeCheck{specs}
+	sequence := "sequence" // Test sequence node
+	node := Node{
+		Name:     nodeA,
+		Category: &sequence,
+		NodeType: &seqA,
+		Each: []string{
+			fmt.Sprintf("%ss:%s", argA, argA),
+		},
+		Args: []*NodeArg{
+			&NodeArg{Expected: &argB, Given: &argB},
+			&NodeArg{Expected: &argC, Given: &argC}, // Unnecessary arg
+		},
+	}
+	expectedErr := InvalidValueError{
+		Sequence: seqA,
+		Node:     &nodeA,
+		Field:    "args`, `each.alias",
+		Values:   []string{argC},
+	}
+
+	err := check.CheckNode(seqA, node)
+	compareError(t, err, expectedErr, "sequence node provides subsequence with unnecessary, expected error")
+}
+
+func TestFailNoExtraSequenceArgsProvidedNodeCheck2(t *testing.T) {
+	seqB := "seq-b"
+	argA := "arg-a"
+	argB := "arg-b"
+	argC := "arg-c"
+	specs := Specs{
+		Sequences: map[string]*Sequence{
+			seqA: &Sequence{
+				Name: seqA,
+				Args: SequenceArgs{
+					Optional: []*Arg{
+						&Arg{Name: &argB},
+					},
+				},
+			},
+			seqB: &Sequence{
+				Name: seqB,
+				Args: SequenceArgs{
+					Required: []*Arg{
+						&Arg{Name: &argA},
+					},
+				},
+			},
+		},
+	}
+	check := NoExtraSequenceArgsProvidedNodeCheck{specs}
+	conditional := "conditional" // Test conditional node
+	node := Node{
+		Name:     nodeA,
+		Category: &conditional,
+		Eq: map[string]string{
+			seqA: seqA,
+			seqB: seqB,
+		},
+		Each: []string{
+			fmt.Sprintf("%ss:%s", argA, argA),
+		},
+		Args: []*NodeArg{
+			&NodeArg{Expected: &argB, Given: &argB},
+			&NodeArg{Expected: &argC, Given: &argC}, // Unnecessary arg
+		},
+	}
+	expectedErr := InvalidValueError{
+		Sequence: seqA,
+		Node:     &nodeA,
+		Field:    "args`, `each.alias",
+		Values:   []string{argC},
+	}
+
+	err := check.CheckNode(seqA, node)
+	compareError(t, err, expectedErr, "sequence node provides subsequence with unnecessary, expected error")
+}
+
+func TestFailNoExtraSequenceArgsProvidedNodeCheck3(t *testing.T) {
+	argA := "arg-a"
+	argB := "arg-b"
+	argC := "arg-c"
+	specs := Specs{
+		Sequences: map[string]*Sequence{
+			seqA: &Sequence{
+				Name: seqA,
+				Args: SequenceArgs{
+					Required: []*Arg{
+						&Arg{Name: &argA},
+					},
+					Optional: []*Arg{
+						&Arg{Name: &argB},
+					},
+				},
+			},
+		},
+	}
+	check := NoExtraSequenceArgsProvidedNodeCheck{specs}
+	sequence := "sequence" // Test expanded sequence node
+	node := Node{
+		Name:     nodeA,
+		Category: &sequence,
+		NodeType: &seqA,
+		Each: []string{
+			fmt.Sprintf("%ss:%s", argA, argA),
+			fmt.Sprintf("%ss:%s", argC, argC), // Unnecessary arg
+		},
+		Args: []*NodeArg{
+			&NodeArg{Expected: &argB, Given: &argB},
+		},
+	}
+	expectedErr := InvalidValueError{
+		Sequence: seqA,
+		Node:     &nodeA,
+		Field:    "args`, `each.alias",
+		Values:   []string{argC},
+	}
+
+	err := check.CheckNode(seqA, node)
+	compareError(t, err, expectedErr, "sequence node provides subsequence with unnecessary, expected error")
+}
+
+func TestFailSubsequencesExistNodeCheck1(t *testing.T) {
+	seqB := "seq-b"
+	specs := Specs{
+		Sequences: map[string]*Sequence{
+			seqA: &Sequence{
+				Name: seqA,
+			},
+		},
+	}
+	check := SubsequencesExistNodeCheck{specs}
+	conditional := "conditional" // Test conditional node
+	node := Node{
+		Name:     nodeA,
+		Category: &conditional,
+		Eq: map[string]string{
+			seqA:      seqA,
+			"default": seqB,
+		},
+	}
+	expectedErr := InvalidValueError{
+		Sequence: seqA,
+		Node:     &nodeA,
+		Field:    "eq",
+		Values:   []string{seqB},
+	}
+
+	err := check.CheckNode(seqA, node)
+	compareError(t, err, expectedErr, "node calls seq that does not exist in specs, expected error")
+}
+
+func TestFailSubsequencesExistNodeCheck2(t *testing.T) {
+	specs := Specs{
+		Sequences: map[string]*Sequence{},
+	}
+	check := SubsequencesExistNodeCheck{specs}
+	sequence := "sequence" // Test sequence node
+	node := Node{
+		Name:     nodeA,
+		Category: &sequence,
+		NodeType: &seqA,
+	}
+	expectedErr := InvalidValueError{
+		Sequence: seqA,
+		Node:     &nodeA,
+		Field:    "type",
+		Values:   []string{seqA},
+	}
+
+	err := check.CheckNode(seqA, node)
+	compareError(t, err, expectedErr, "node calls seq that does not exist in specs, expected error")
+}
