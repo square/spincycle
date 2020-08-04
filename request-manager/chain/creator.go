@@ -205,7 +205,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 		n := templateNode.Node
 
 		// Find out how many times this node has to be repeated
-		iterators, iterateOvers, err := o.getIterators(n, jobArgs)
+		elements, lists, err := o.getIterators(n, jobArgs)
 		if err != nil {
 			return nil, fmt.Errorf("in seq %s, node %s: invalid 'each:' %s", sequenceName, n.Name, err)
 		}
@@ -214,7 +214,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 		components := []*graph.Graph{}
 
 		// If no repetition is needed, this loop will only execute once
-		for i, _ := range iterateOvers[0] {
+		for i, _ := range lists[0] {
 			// Copy the required args into a separate args map here.
 			// Do the necessary remapping here.
 			jobArgsCopy, err := remapNodeArgs(n, jobArgs)
@@ -222,12 +222,12 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 				return nil, err
 			}
 
-			// Add the iterator to the node args unless there is no iterator for this node
-			for j, iterator := range iterators {
-				if iterator != "" {
+			// Add the element to the node args unless there is none for this node
+			for j, elt := range elements {
+				if elt != "" {
 					// This won't panic because we have earlier asserted that
-					// len(iterators) == len(iterateOvers)
-					jobArgsCopy[iterator] = iterateOvers[j][i]
+					// len(elements) == len(lists)
+					jobArgsCopy[elt] = lists[j][i]
 				}
 			}
 
@@ -330,7 +330,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 		} else if len(components) == 1 {
 			wrappedSubgraph = components[0]
 		} else if len(components) == 0 {
-			// Even if there are no iterateOvers, we still need to add
+			// Even if there are no lists, we still need to add
 			// the node to the graph in order to fulfill dependencies
 			// for later nodes.
 			wrappedSubgraph, err = o.newEmptyGraph("noop_"+n.Name, jobArgs)
@@ -423,12 +423,12 @@ func chooseConditional(n *spec.Node, jobArgs map[string]interface{}) (string, er
 	return seqName, nil
 }
 
-// Gets the iterables and iterators ( the "each" clause in the yaml )
-// returns the iterator name, and the slice to iterate over when repeating nodes.
+// Split `each: list:element` values into the list (as a slice) and the element.
+// Returns the element name, and the slice to iterate over when repeating nodes.
 // If there is no repetition required, then it will return an empty string, "",
 // and the singleton [""], to indicate that only one iteration is needed.
 //
-// Precondition: the iteratable must already be present in args
+// Precondition: the list must already be present in args
 func (o *Creator) getIterators(n *spec.Node, args map[string]interface{}) ([]string, [][]interface{}, error) {
 	empty := []string{""}
 	empties := [][]interface{}{[]interface{}{""}}
@@ -436,48 +436,48 @@ func (o *Creator) getIterators(n *spec.Node, args map[string]interface{}) ([]str
 		return empty, empties, nil
 	}
 
-	iterators := []string{}
-	iterateOvers := [][]interface{}{}
+	elements := []string{}
+	lists := [][]interface{}{}
 
 	for _, each := range n.Each {
-		p := strings.Split(each, ":")
-		if len(p) != 2 {
-			err := fmt.Errorf("invalid each value: %s: split on ':' yielded %d values, expected 2", n.Each, len(p))
+		split := strings.Split(each, ":")
+		if len(split) != 2 {
+			err := fmt.Errorf("invalid each value: %s: split on ':' yielded %d values, expected 2", n.Each, len(split))
 			return empty, empties, err
 		}
-		iterateSet := p[0]
-		iterator := p[1]
-		iterateOver := []interface{}{}
+		listName := split[0]
+		element := split[1]
+		list := []interface{}{}
 
 		// Grab the iterable set out of args
-		iterables, ok := args[iterateSet]
+		iterables, ok := args[listName]
 		if !ok {
-			return empty, empties, fmt.Errorf("each:%s: arg %s not set", n.Each, iterateSet)
+			return empty, empties, fmt.Errorf("each:%s: arg %s not set", n.Each, listName)
 		}
 
 		// Assert that this is a slice
 		if reflect.TypeOf(iterables).Kind() != reflect.Slice {
-			return empty, empties, fmt.Errorf("each:%s: arg %s is a %s, expected a slice", n.Each, iterateSet, reflect.TypeOf(iterables).Kind())
+			return empty, empties, fmt.Errorf("each:%s: arg %s is a %s, expected a slice", n.Each, listName, reflect.TypeOf(iterables).Kind())
 		}
 
 		a := reflect.ValueOf(iterables)
 		for i := 0; i < a.Len(); i++ {
-			iterateOver = append(iterateOver, a.Index(i).Interface())
+			list = append(list, a.Index(i).Interface())
 		}
 
-		iterators = append(iterators, iterator)
-		iterateOvers = append(iterateOvers, iterateOver)
+		elements = append(elements, element)
+		lists = append(lists, list)
 	}
 
-	// Validate that the iterators all have variable names
+	// Validate that the elements all have variable names
 	// @todo: I presume this means each: x\n y  len(x)==len(y) so we have an
 	//        "even" number of iterable values?
 	// @todo: fix, it doesn't catch uneven list len
-	if len(iterateOvers) != len(iterators) || len(iterators) < 1 {
+	if len(lists) != len(elements) || len(elements) < 1 {
 		return nil, nil, fmt.Errorf("args have different len")
 	}
 
-	return iterators, iterateOvers, nil
+	return elements, lists, nil
 }
 
 // Given a node definition and an args, copy args into a new map,

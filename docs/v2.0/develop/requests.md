@@ -206,7 +206,7 @@ nodeHostname := []string{"node1", "node2"}
 hsots := []string{"host1", "host2"}
 ```
 
-The syntax is `arg:alias` ("arg as alias") where each `jobArg[alias]` is initialized from the next value in `arg`. The target sequence should require `alias`.
+The syntax is `list:element` where each `jobArg[element]` is initialized from the next value in `list`. The target sequence should require `element`.
 
 The `args:` are passed to each expanded sequence as-is, i.e. each "decomm-node" sequence receives `jobArgs[archiveData]`.
 

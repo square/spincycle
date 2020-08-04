@@ -62,16 +62,6 @@ func setupManager(t *testing.T, dataFile string) string {
 		}
 		spec.ProcessSpecs(specs)
 
-		checkFactories := []spec.CheckFactory{spec.BaseCheckFactory{specs}, spec.DefaultCheckFactory{}}
-		checker, err := spec.NewChecker(checkFactories, t.Logf)
-		if err != nil {
-			t.Fatalf("Could not create checker: %s", err)
-		}
-		ok := checker.RunChecks(specs)
-		if !ok {
-			t.Fatalf("fix static check errors; chain.Creator assumes specs have passed static checks")
-		}
-
 		tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
 		err = tg.CreateTemplates()
 		if err != nil {

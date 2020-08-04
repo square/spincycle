@@ -50,7 +50,7 @@ func (check ValidCategoryNodeCheck) CheckNode(sequenceName string, node Node) er
 /* ========================================================================== */
 type ValidEachNodeCheck struct{}
 
-/* 'each' values must be in the format 'arg:alias'. */
+/* 'each' values must be in the format 'list:element'. */
 func (check ValidEachNodeCheck) CheckNode(sequenceName string, node Node) error {
 	var values []string
 	for _, each := range node.Each {
@@ -66,7 +66,7 @@ func (check ValidEachNodeCheck) CheckNode(sequenceName string, node Node) error 
 			Node:     &node.Name,
 			Field:    "each",
 			Values:   values,
-			Expected: "value(s) of form 'arg:alias'",
+			Expected: "value(s) of form 'list:element'",
 		}
 	}
 
@@ -74,10 +74,10 @@ func (check ValidEachNodeCheck) CheckNode(sequenceName string, node Node) error 
 }
 
 /* ========================================================================== */
-type EachAliasUniqueNodeCheck struct{}
+type EachElementUniqueNodeCheck struct{}
 
-/* Each cannot repeat aliases. */
-func (check EachAliasUniqueNodeCheck) CheckNode(sequenceName string, node Node) error {
+/* Each cannot repeat elements. */
+func (check EachElementUniqueNodeCheck) CheckNode(sequenceName string, node Node) error {
 	seen := map[string]bool{}
 	values := map[string]bool{}
 	for _, each := range node.Each {
@@ -85,11 +85,11 @@ func (check EachAliasUniqueNodeCheck) CheckNode(sequenceName string, node Node) 
 		if len(split) != 2 {
 			continue
 		}
-		alias := split[1]
-		if seen[alias] {
-			values[alias] = true
+		element := split[1]
+		if seen[element] {
+			values[element] = true
 		}
-		seen[alias] = true
+		seen[element] = true
 	}
 
 	if len(values) > 0 {
@@ -98,7 +98,7 @@ func (check EachAliasUniqueNodeCheck) CheckNode(sequenceName string, node Node) 
 			Node:        &node.Name,
 			Field:       "each",
 			Values:      stringSetToArray(values),
-			Explanation: "in 'each: arg:alias', a given 'alias' should appear at most once per node",
+			Explanation: "in 'each: list:element', a given 'element' should appear at most once per node",
 		}
 	}
 
@@ -108,21 +108,21 @@ func (check EachAliasUniqueNodeCheck) CheckNode(sequenceName string, node Node) 
 /* ========================================================================== */
 type EachNotRenamedTwiceNodeCheck struct{}
 
-/* Each cannot rename its args */
+/* Each cannot demux its list into differently named elements.  */
 func (check EachNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node Node) error {
-	aliases := map[string]string{}
+	elements := map[string]string{}
 	values := map[string]bool{}
 	for _, each := range node.Each {
 		split := strings.Split(each, ":")
 		if len(split) != 2 {
 			continue
 		}
-		arg := split[0]
-		alias := split[1]
-		if existingAlias, ok := aliases[arg]; ok && alias != existingAlias {
-			values[arg] = true
+		list := split[0]
+		element := split[1]
+		if existingElement, ok := elements[list]; ok && element != existingElement {
+			values[list] = true
 		}
-		aliases[arg] = alias
+		elements[list] = element
 	}
 
 	if len(values) > 0 {
@@ -131,7 +131,7 @@ func (check EachNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node No
 			Node:        &node.Name,
 			Field:       "each",
 			Values:      stringSetToArray(values),
-			Explanation: "in 'each: arg:alias', a given 'arg' value should appear at most once per node",
+			Explanation: "in 'each: list:element', a given 'list' value should appear at most once per node",
 		}
 	}
 
@@ -197,16 +197,16 @@ type ArgsNotRenamedTwiceNodeCheck struct{}
 // - expected: y
 //   given: foo
 func (check ArgsNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node Node) error {
-	aliases := map[string]string{}
+	elements := map[string]string{}
 	values := map[string]bool{}
 	for _, nodeSet := range node.Args {
 		if nodeSet.Given == nil || nodeSet.Expected == nil {
 			continue
 		}
-		if alias, ok := aliases[*nodeSet.Given]; ok && alias != *nodeSet.Expected {
+		if element, ok := elements[*nodeSet.Given]; ok && element != *nodeSet.Expected {
 			values[*nodeSet.Given] = true
 		}
-		aliases[*nodeSet.Given] = *nodeSet.Expected
+		elements[*nodeSet.Given] = *nodeSet.Expected
 	}
 
 	if len(values) > 0 {
@@ -223,10 +223,10 @@ func (check ArgsNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node No
 }
 
 /* ========================================================================== */
-type EachAliasDoesNotDuplicateArgsExpectedNodeCheck struct{}
+type EachElementDoesNotDuplicateArgsExpectedNodeCheck struct{}
 
-/* 'alias' in 'each' cannot share a name as an 'expected' job arg. */
-func (check EachAliasDoesNotDuplicateArgsExpectedNodeCheck) CheckNode(sequenceName string, node Node) error {
+/* 'element' in 'each' cannot share a name as an 'expected' job arg. */
+func (check EachElementDoesNotDuplicateArgsExpectedNodeCheck) CheckNode(sequenceName string, node Node) error {
 	expected := map[string]bool{} // All expected args
 	for _, nodeSet := range node.Args {
 		if nodeSet.Expected == nil {
@@ -241,9 +241,9 @@ func (check EachAliasDoesNotDuplicateArgsExpectedNodeCheck) CheckNode(sequenceNa
 		if len(split) != 2 {
 			continue
 		}
-		alias := split[1]
-		if expected[alias] {
-			values[alias] = true
+		element := split[1]
+		if expected[element] {
+			values[element] = true
 		}
 	}
 
@@ -253,7 +253,7 @@ func (check EachAliasDoesNotDuplicateArgsExpectedNodeCheck) CheckNode(sequenceNa
 			Node:        &node.Name,
 			Field:       "each",
 			Values:      stringSetToArray(values),
-			Explanation: "in 'each: arg:alias', a given 'alias' should not be repeated in 'args.expected'",
+			Explanation: "in 'each: list:element', a given 'element' should not be repeated in 'args.expected'",
 		}
 	}
 
@@ -261,10 +261,10 @@ func (check EachAliasDoesNotDuplicateArgsExpectedNodeCheck) CheckNode(sequenceNa
 }
 
 /* ========================================================================== */
-type EachArgDoesNotDuplicateArgsGivenNodeCheck struct{}
+type EachListDoesNotDuplicateArgsGivenNodeCheck struct{}
 
-/* 'each' cannot take a job arg as an arg if it a 'given' job arg. */
-func (check EachArgDoesNotDuplicateArgsGivenNodeCheck) CheckNode(sequenceName string, node Node) error {
+/* 'each' cannot take a job arg as a list if it a 'given' job arg. */
+func (check EachListDoesNotDuplicateArgsGivenNodeCheck) CheckNode(sequenceName string, node Node) error {
 	given := map[string]bool{} // All given args
 	for _, nodeSet := range node.Args {
 		if nodeSet.Given == nil || nodeSet.Expected == nil {
@@ -279,9 +279,9 @@ func (check EachArgDoesNotDuplicateArgsGivenNodeCheck) CheckNode(sequenceName st
 		if len(split) != 2 {
 			continue
 		}
-		arg := split[0]
-		if given[arg] {
-			values[arg] = true
+		list := split[0]
+		if given[list] {
+			values[list] = true
 		}
 	}
 
@@ -291,7 +291,7 @@ func (check EachArgDoesNotDuplicateArgsGivenNodeCheck) CheckNode(sequenceName st
 			Node:        &node.Name,
 			Field:       "each",
 			Values:      stringSetToArray(values),
-			Explanation: "in 'each: arg:alias', a given 'arg' value should not be repeated in 'args.given'; note that if 'given' is not explicitly specified, then its value is the same as 'expected'",
+			Explanation: "in 'each: list:element', a given 'list' value should not be repeated in 'args.given'; note that if 'given' is not explicitly specified, then its value is the same as 'expected'",
 		}
 	}
 
@@ -352,16 +352,16 @@ type SetsNotRenamedTwiceNodeCheck struct{}
 
 /* A single 'sets' arg cannot be renamed. */
 func (check SetsNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node Node) error {
-	aliases := map[string]string{}
+	elements := map[string]string{}
 	values := map[string]bool{}
 	for _, nodeSet := range node.Sets {
 		if nodeSet.Arg == nil || nodeSet.As == nil {
 			continue
 		}
-		if alias, ok := aliases[*nodeSet.Arg]; ok && alias != *nodeSet.As {
+		if element, ok := elements[*nodeSet.Arg]; ok && element != *nodeSet.As {
 			values[*nodeSet.Arg] = true
 		}
-		aliases[*nodeSet.Arg] = *nodeSet.As
+		elements[*nodeSet.Arg] = *nodeSet.As
 	}
 
 	if len(values) > 0 {
@@ -703,7 +703,7 @@ func (check NoExtraSequenceArgsProvidedNodeCheck) CheckNode(sequenceName string,
 		return InvalidValueError{
 			Sequence: sequenceName,
 			Node:     &node.Name,
-			Field:    "args', 'each.alias",
+			Field:    "args', 'each.element",
 			Values:   stringSetToArray(excessArgs),
 			Expected: fmt.Sprintf("only args that the subsequence%s require%s", multiple1, multiple2),
 		}

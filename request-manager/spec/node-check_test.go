@@ -54,41 +54,41 @@ func TestFailValidEachNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted each not in format 'arg:alias', expected error")
+	compareError(t, err, expectedErr, "accepted each not in format 'list:element', expected error")
 }
 
-func TestFailEachAliasUniqueNodeCheck(t *testing.T) {
-	check := EachAliasUniqueNodeCheck{}
+func TestFailEachElementUniqueNodeCheck(t *testing.T) {
+	check := EachElementUniqueNodeCheck{}
 	node := Node{
 		Name: nodeA,
-		Each: []string{"a:alias", "b:alias"},
+		Each: []string{"a:element", "b:element"},
 	}
 	expectedErr := DuplicateValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "each",
-		Values:   []string{"alias"},
+		Values:   []string{"element"},
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted duplicated each alias, expected error")
+	compareError(t, err, expectedErr, "accepted duplicated each element, expected error")
 }
 
 func TestFailEachNotRenamedTwiceNodeCheck(t *testing.T) {
 	check := EachNotRenamedTwiceNodeCheck{}
 	node := Node{
 		Name: nodeA,
-		Each: []string{"arg:a", "arg:b"},
+		Each: []string{"list:a", "list:b"},
 	}
 	expectedErr := DuplicateValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "each",
-		Values:   []string{"arg"},
+		Values:   []string{"list"},
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted duplicated each arg, expected error")
+	compareError(t, err, expectedErr, "accepted duplicated each list, expected error")
 }
 
 func TestFailArgsAreNamedNodeCheck(t *testing.T) {
@@ -217,12 +217,12 @@ func TestFailArgsNotRenamedTwiceNodeCheck(t *testing.T) {
 	compareError(t, err, expectedErr, "arg renamed differently with args.given, expected error")
 }
 
-func TestFailEachAliasDoesNotDuplicateArgsExpectedNodeCheck(t *testing.T) {
-	check := EachAliasDoesNotDuplicateArgsExpectedNodeCheck{}
+func TestFailEachElementDoesNotDuplicateArgsExpectedNodeCheck(t *testing.T) {
+	check := EachElementDoesNotDuplicateArgsExpectedNodeCheck{}
 	given := "given"
 	node := Node{
 		Name: nodeA,
-		Each: []string{"arg:" + value},
+		Each: []string{"list:" + value},
 		Args: []*NodeArg{
 			&NodeArg{
 				Expected: &value,
@@ -238,15 +238,15 @@ func TestFailEachAliasDoesNotDuplicateArgsExpectedNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, fmt.Sprintf("allowed two args to be renamed %s, expected error", value))
+	compareError(t, err, expectedErr, fmt.Sprintf("allowed two lists to be renamed %s, expected error", value))
 }
 
-func TestFailEachArgDoesNotDuplicateArgsGivenNodeCheck1(t *testing.T) {
-	check := EachArgDoesNotDuplicateArgsGivenNodeCheck{}
+func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck1(t *testing.T) {
+	check := EachListDoesNotDuplicateArgsGivenNodeCheck{}
 	expected := "expected"
 	node := Node{
 		Name: nodeA,
-		Each: []string{value + ":alias"},
+		Each: []string{value + ":element"},
 		Args: []*NodeArg{
 			&NodeArg{
 				Expected: &expected,
@@ -265,11 +265,11 @@ func TestFailEachArgDoesNotDuplicateArgsGivenNodeCheck1(t *testing.T) {
 	compareError(t, err, expectedErr, fmt.Sprintf("allowed %s to be renamed twice, expected error", value))
 }
 
-func TestFailEachArgDoesNotDuplicateArgsGivenNodeCheck2(t *testing.T) {
-	check := EachArgDoesNotDuplicateArgsGivenNodeCheck{}
+func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck2(t *testing.T) {
+	check := EachListDoesNotDuplicateArgsGivenNodeCheck{}
 	node := Node{
 		Name: nodeA,
-		Each: []string{value + ":alias"},
+		Each: []string{value + ":element"},
 		Args: []*NodeArg{
 			&NodeArg{
 				Expected: &value,
@@ -288,11 +288,11 @@ func TestFailEachArgDoesNotDuplicateArgsGivenNodeCheck2(t *testing.T) {
 	compareError(t, err, expectedErr, fmt.Sprintf("allowed %s to be renamed twice, expected error", value))
 }
 
-func TestEachArgDoesNotDuplicateArgsGivenNodeCheck(t *testing.T) {
-	check := EachArgDoesNotDuplicateArgsGivenNodeCheck{}
+func TestEachListDoesNotDuplicateArgsGivenNodeCheck(t *testing.T) {
+	check := EachListDoesNotDuplicateArgsGivenNodeCheck{}
 	node := Node{
 		Name: nodeA,
-		Each: []string{value + ":alias"},
+		Each: []string{value + ":element"},
 		Args: []*NodeArg{
 			&NodeArg{
 				Expected: &value,
@@ -757,7 +757,7 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck1(t *testing.T) {
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
-		Field:    "args', 'each.alias",
+		Field:    "args', 'each.element",
 		Values:   []string{argC},
 	}
 
@@ -810,7 +810,7 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck2(t *testing.T) {
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
-		Field:    "args', 'each.alias",
+		Field:    "args', 'each.element",
 		Values:   []string{argC},
 	}
 
@@ -854,7 +854,7 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck3(t *testing.T) {
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
-		Field:    "args', 'each.alias",
+		Field:    "args', 'each.element",
 		Values:   []string{argC},
 	}
 

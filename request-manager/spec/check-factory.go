@@ -50,7 +50,7 @@ func (c BaseCheckFactory) MakeNodeErrorChecks() ([]NodeCheck, error) {
 		HasCategoryNodeCheck{},
 		ValidCategoryNodeCheck{},
 
-		SubsequencesExistNodeCheck{},
+		SubsequencesExistNodeCheck{c.AllSpecs},
 
 		ValidEachNodeCheck{},
 		ArgsAreNamedNodeCheck{},
@@ -73,7 +73,9 @@ func (c BaseCheckFactory) MakeNodeWarningChecks() ([]NodeCheck, error) {
 }
 
 // Some default checks. Not strictly necessary for proper operation of RM, but generally reasonable.
-type DefaultCheckFactory struct{}
+type DefaultCheckFactory struct {
+	AllSpecs Specs // All specs in specs dir
+}
 
 func (c DefaultCheckFactory) MakeSequenceErrorChecks() ([]SequenceCheck, error) {
 	return []SequenceCheck{
@@ -91,7 +93,7 @@ func (c DefaultCheckFactory) MakeSequenceWarningChecks() ([]SequenceCheck, error
 func (c DefaultCheckFactory) MakeNodeErrorChecks() ([]NodeCheck, error) {
 	return []NodeCheck{
 		ArgsExpectedUniqueNodeCheck{},
-		EachAliasDoesNotDuplicateArgsExpectedNodeCheck{},
+		EachElementDoesNotDuplicateArgsExpectedNodeCheck{},
 		SetsAsUniqueNodeCheck{},
 
 		EachIfParallelNodeCheck{},
@@ -102,7 +104,7 @@ func (c DefaultCheckFactory) MakeNodeErrorChecks() ([]NodeCheck, error) {
 
 		RetryIfRetryWaitNodeCheck{},
 
-		NoExtraSequenceArgsProvidedNodeCheck{},
+		NoExtraSequenceArgsProvidedNodeCheck{c.AllSpecs},
 	}, nil
 }
 
@@ -110,7 +112,7 @@ func (c DefaultCheckFactory) MakeNodeWarningChecks() ([]NodeCheck, error) {
 	return []NodeCheck{
 		EachNotRenamedTwiceNodeCheck{},
 		ArgsNotRenamedTwiceNodeCheck{},
-		EachAliasDoesNotDuplicateArgsExpectedNodeCheck{},
+		EachElementDoesNotDuplicateArgsExpectedNodeCheck{},
 		SetsNotRenamedTwiceNodeCheck{},
 	}, nil
 }
