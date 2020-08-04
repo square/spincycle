@@ -49,7 +49,7 @@ func NewChecker(checkFactories []CheckFactory, logFunc func(string, ...interface
 }
 
 // Runs checks on allSpecs.
-// `logFunc` is a Printf-like function used to log warnings and errors should they occur.
+// 'logFunc' is a Printf-like function used to log warnings and errors should they occur.
 // If any error is logged, this function returns an error.
 func (checker *Checker) RunChecks(allSpecs Specs) bool {
 	errOccurred := false

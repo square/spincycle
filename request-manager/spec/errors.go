@@ -43,7 +43,7 @@ func (e InvalidValueError) Error() string {
 		multipleValues = "s"
 	}
 
-	return fmt.Sprintf("%s: invalid value%s %s in field `%s`, expected %s",
+	return fmt.Sprintf("%s: invalid value%s %s in field '%s', expected %s",
 		loc, multipleValues, values, e.Field, e.Expected)
 }
 
@@ -75,7 +75,7 @@ func (e MissingValueError) Error() string {
 		explanation = fmt.Sprintf(": %s", e.Explanation)
 	}
 
-	return fmt.Sprintf("%s: field `%s` missing%s", loc, e.Field, explanation)
+	return fmt.Sprintf("%s: field '%s' missing%s", loc, e.Field, explanation)
 }
 
 /* =========================================================================== */
@@ -114,6 +114,6 @@ func (e DuplicateValueError) Error() string {
 		explanation = fmt.Sprintf(": %s", e.Explanation)
 	}
 
-	return fmt.Sprintf("%s: value%s %s duplicated in field `%s`%s",
+	return fmt.Sprintf("%s: value%s %s duplicated in field '%s'%s",
 		loc, multipleValues, values, e.Field, explanation)
 }

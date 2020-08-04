@@ -12,7 +12,7 @@ import (
 )
 
 // Parse a single request (YAML) file.
-// `logFunc` is a Printf-like function used to log warning(s) should they occur.
+// 'logFunc' is a Printf-like function used to log warning(s) should they occur.
 // Errors are returned, not logged.
 func ParseSpec(specFile string, logFunc func(string, ...interface{})) (Specs, error) {
 	var spec Specs
@@ -37,7 +37,7 @@ func ParseSpec(specFile string, logFunc func(string, ...interface{})) (Specs, er
 }
 
 // Read all specs file in indicated specs directory.
-// `logFunc` is a Printf-like function used to log warning(s) should they occur.
+// 'logFunc' is a Printf-like function used to log warning(s) should they occur.
 // Errors are returned, not logged.
 func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs, error) {
 	specs := Specs{

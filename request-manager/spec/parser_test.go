@@ -192,7 +192,7 @@ func TestProcessSpecs(t *testing.T) {
 
 	expectedSpecs := Specs{
 		Sequences: map[string]*Sequence{
-			// `Name` should be set
+			// 'Name' should be set
 			"seq-a": &Sequence{
 				Name:    "seq-a",
 				Request: true,
@@ -203,7 +203,7 @@ func TestProcessSpecs(t *testing.T) {
 				},
 
 				Nodes: map[string]*Node{
-					// `Name`, `Given`, `As`, and `RetryWait` should've been set
+					// 'Name', 'Given', 'As', and 'RetryWait' should've been set
 					"node-a": &Node{
 						Name:         "node-a",
 						Category:     &job,
@@ -215,7 +215,7 @@ func TestProcessSpecs(t *testing.T) {
 						Retry:        3,
 						RetryWait:    "0s",
 					},
-					// `Name` should've been set, everything else stays the same
+					// 'Name' should've been set, everything else stays the same
 					"node-b": &Node{
 						Name:         "node-b",
 						Category:     &sequence,
@@ -227,7 +227,7 @@ func TestProcessSpecs(t *testing.T) {
 						Retry:        3,
 						RetryWait:    "10s",
 					},
-					// `Name`, `Given` for arg-e, and `As` for arg-g should've been set
+					// 'Name', 'Given' for arg-e, and 'As' for arg-g should've been set
 					"node-c": &Node{
 						Name:         "node-c",
 						Category:     &conditional,

@@ -14,7 +14,7 @@ type SequenceCheck interface {
 /* ========================================================================== */
 type RequiredArgsNamedSequenceCheck struct{}
 
-/* Sequence args must be named, i.e. include a `name` field. */
+/* Sequence args must be named, i.e. include a 'name' field. */
 func (check RequiredArgsNamedSequenceCheck) CheckSequence(sequence Sequence) error {
 	for _, arg := range sequence.Args.Required {
 		if arg.Name == nil {
@@ -33,7 +33,7 @@ func (check RequiredArgsNamedSequenceCheck) CheckSequence(sequence Sequence) err
 /* ========================================================================== */
 type OptionalArgsNamedSequenceCheck struct{}
 
-/* Sequence args must be named, i.e. include a `name` field. */
+/* Sequence args must be named, i.e. include a 'name' field. */
 func (check OptionalArgsNamedSequenceCheck) CheckSequence(sequence Sequence) error {
 	for _, arg := range sequence.Args.Optional {
 		if arg.Name == nil {
@@ -52,7 +52,7 @@ func (check OptionalArgsNamedSequenceCheck) CheckSequence(sequence Sequence) err
 /* ========================================================================== */
 type StaticArgsNamedSequenceCheck struct{}
 
-/* Sequence args must be named, i.e. include a `name` field. */
+/* Sequence args must be named, i.e. include a 'name' field. */
 func (check StaticArgsNamedSequenceCheck) CheckSequence(sequence Sequence) error {
 	for _, arg := range sequence.Args.Static {
 		if arg.Name == nil {
@@ -212,7 +212,7 @@ func (check NodesSetsUniqueSequenceCheck) CheckSequence(sequence Sequence) error
 			Node:        nil,
 			Field:       "nodes.sets.as",
 			Values:      values,
-			Explanation: "note that if `as` is not explicitly specified, then its value is the same as `args`",
+			Explanation: "note that if 'as' is not explicitly specified, then its value is the same as 'args'",
 		}
 	}
 
@@ -222,7 +222,7 @@ func (check NodesSetsUniqueSequenceCheck) CheckSequence(sequence Sequence) error
 /* ========================================================================== */
 type ACLAdminXorOpsSequenceCheck struct{}
 
-/* `admin` and `ops` are mutually exclusive. */
+/* 'admin' and 'ops' are mutually exclusive. */
 func (check ACLAdminXorOpsSequenceCheck) CheckSequence(sequence Sequence) error {
 	for _, acl := range sequence.ACL {
 		if acl.Admin && len(acl.Ops) != 0 {
@@ -250,7 +250,7 @@ func (check ACLsHaveRolesSequenceCheck) CheckSequence(sequence Sequence) error {
 				Sequence:    sequence.Name,
 				Node:        nil,
 				Field:       "acl.role",
-				Explanation: "roles may not be the empty string",
+				Explanation: "'role' may not be the empty string",
 			}
 		}
 	}

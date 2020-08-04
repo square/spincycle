@@ -54,7 +54,7 @@ func TestFailValidEachNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted each not in format `arg:alias`, expected error")
+	compareError(t, err, expectedErr, "accepted each not in format 'arg:alias', expected error")
 }
 
 func TestFailEachAliasUniqueNodeCheck(t *testing.T) {
@@ -108,7 +108,7 @@ func TestFailArgsAreNamedNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted node arg without `expected` field, expected error")
+	compareError(t, err, expectedErr, "accepted node arg without 'expected' field, expected error")
 }
 
 func TestFailArgsExpectedUniqueNodeCheck1(t *testing.T) {
@@ -323,7 +323,7 @@ func TestFailSetsAreNamedNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted node sets without `arg` field, expected error")
+	compareError(t, err, expectedErr, "accepted node sets without 'arg' field, expected error")
 }
 
 func TestFailSetsAsUniqueNodeCheck1(t *testing.T) {
@@ -449,7 +449,7 @@ func TestFailEachIfParallelNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted node with `parallel` field with empty `each` field, expected error")
+	compareError(t, err, expectedErr, "accepted node with 'parallel' field with empty 'each' field, expected error")
 }
 
 func TestFailValidParallelNodeCheck(t *testing.T) {
@@ -503,7 +503,7 @@ func TestFailConditionalHasIfNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted conditional sequence without `if` field, expected error")
+	compareError(t, err, expectedErr, "accepted conditional sequence without 'if' field, expected error")
 }
 
 func TestFailConditionalHasEqNodeCheck(t *testing.T) {
@@ -520,7 +520,7 @@ func TestFailConditionalHasEqNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted conditional sequence without `eq` field, expected error")
+	compareError(t, err, expectedErr, "accepted conditional sequence without 'eq' field, expected error")
 }
 
 func TestFailNonconditionalHasTypeNodeCheck(t *testing.T) {
@@ -552,7 +552,7 @@ func TestFailNonconditionalNoIfNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted nonconditional sequence with `if` field, expected error")
+	compareError(t, err, expectedErr, "accepted nonconditional sequence with 'if' field, expected error")
 }
 
 func TestFailNonconditionalNoEqNodeCheck(t *testing.T) {
@@ -570,7 +570,7 @@ func TestFailNonconditionalNoEqNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted nonconditional sequence with `eq` field, expected error")
+	compareError(t, err, expectedErr, "accepted nonconditional sequence with 'eq' field, expected error")
 }
 
 func TestFailRetryIfRetryWaitNodeCheck(t *testing.T) {
@@ -586,7 +586,7 @@ func TestFailRetryIfRetryWaitNodeCheck(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "accepted node with `retryWait` field with retry: 0, expected error")
+	compareError(t, err, expectedErr, "accepted node with 'retryWait' field with retry: 0, expected error")
 }
 
 func TestFailValidRetryWaitNodeCheck(t *testing.T) {
@@ -634,7 +634,7 @@ func TestFailRequiredArgsProvidedNodeCheck1(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "not all required args to sequence node listed in `args`, expected error")
+	compareError(t, err, expectedErr, "not all required args to sequence node listed in 'args', expected error")
 }
 
 func TestFailRequiredArgsProvidedNodeCheck2(t *testing.T) {
@@ -672,7 +672,7 @@ func TestFailRequiredArgsProvidedNodeCheck2(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "not all required args to conditional sequence node listed in `args`, expected error")
+	compareError(t, err, expectedErr, "not all required args to conditional sequence node listed in 'args', expected error")
 }
 
 func TestFailRequiredArgsProvidedNodeCheck3(t *testing.T) {
@@ -703,11 +703,11 @@ func TestFailRequiredArgsProvidedNodeCheck3(t *testing.T) {
 		Category: &sequence,
 		NodeType: &seqa,
 		Each: []string{
-			fmt.Sprintf("%ss:%s", reqa, reqa), // Specify in `each` and `args`
+			fmt.Sprintf("%ss:%s", reqa, reqa), // Specify in 'each' and 'args'
 			fmt.Sprintf("%ss:%s", reqc, reqc), // Specify only here
 		},
 		Args: []*NodeArg{
-			&NodeArg{Expected: &reqa, Given: &reqa}, // Specified above in `each`
+			&NodeArg{Expected: &reqa, Given: &reqa}, // Specified above in 'each'
 			&NodeArg{Expected: &reqb, Given: &reqb}, // Specify only here
 		},
 	}
@@ -718,7 +718,7 @@ func TestFailRequiredArgsProvidedNodeCheck3(t *testing.T) {
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, "not all required args to expanded sequence node listed in `args`, expected error")
+	compareError(t, err, expectedErr, "not all required args to expanded sequence node listed in 'args', expected error")
 }
 
 func TestFailNoExtraSequenceArgsProvidedNodeCheck1(t *testing.T) {
@@ -757,7 +757,7 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck1(t *testing.T) {
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
-		Field:    "args`, `each.alias",
+		Field:    "args', 'each.alias",
 		Values:   []string{argC},
 	}
 
@@ -810,7 +810,7 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck2(t *testing.T) {
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
-		Field:    "args`, `each.alias",
+		Field:    "args', 'each.alias",
 		Values:   []string{argC},
 	}
 
@@ -854,7 +854,7 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck3(t *testing.T) {
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
-		Field:    "args`, `each.alias",
+		Field:    "args', 'each.alias",
 		Values:   []string{argC},
 	}
 

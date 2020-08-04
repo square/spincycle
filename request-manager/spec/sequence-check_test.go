@@ -132,7 +132,7 @@ func TestFailNodesSetsUniqueSequenceCheck(t *testing.T) {
 				Sets: []*NodeSet{&NodeSet{Arg: &value, As: &value}},
 			},
 			nodeB: &Node{
-				Name: nodeA, // Cheat to make the `Values` field of the returned err predictable
+				Name: nodeA, // Cheat to make the 'Values' field of the returned err predictable
 				Sets: []*NodeSet{&NodeSet{Arg: &value, As: &value}},
 			},
 		},
