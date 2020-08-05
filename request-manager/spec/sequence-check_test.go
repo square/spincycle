@@ -121,10 +121,10 @@ func TestFailHasNodesSequenceCheck(t *testing.T) {
 	compareError(t, err, expectedErr, "accepted sequence with no nodes, expected error")
 }
 
-func TestFailNodesSetsUniqueSequenceCheck(t *testing.T) {
+func TestFailNodesSetsUniqueSequenceCheck1(t *testing.T) {
 	check := NodesSetsUniqueSequenceCheck{}
 	nodeB := "node-b"
-	sequence := Sequence{
+	sequence := Sequence{ // Check that repeats between nodes are caught
 		Name: seqA,
 		Nodes: map[string]*Node{
 			nodeA: &Node{
@@ -141,6 +141,31 @@ func TestFailNodesSetsUniqueSequenceCheck(t *testing.T) {
 		Sequence: seqA,
 		Field:    "nodes.sets.as",
 		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", value, nodeA, nodeA)},
+	}
+	err := check.CheckSequence(sequence)
+	compareError(t, err, expectedErr, "accepted sequence with multiple nodes setting the same arg, expected error")
+}
+
+func TestFailNodesSetsUniqueSequenceCheck2(t *testing.T) {
+	check := NodesSetsUniqueSequenceCheck{}
+	sequence := Sequence{ // Check that setting a sequence arg is caught
+		Name: seqA,
+		Args: SequenceArgs{
+			Required: []*Arg{
+				&Arg{Name: &value},
+			},
+		},
+		Nodes: map[string]*Node{
+			nodeA: &Node{
+				Name: "this sequence", // Cheat to make the 'Values' field of the returned err predictable
+				Sets: []*NodeSet{&NodeSet{Arg: &value, As: &value}},
+			},
+		},
+	}
+	expectedErr := DuplicateValueError{
+		Sequence: seqA,
+		Field:    "nodes.sets.as",
+		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", value, "this sequence", "this sequence")},
 	}
 	err := check.CheckSequence(sequence)
 	compareError(t, err, expectedErr, "accepted sequence with multiple nodes setting the same arg, expected error")

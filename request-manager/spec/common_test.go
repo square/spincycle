@@ -3,7 +3,6 @@
 package spec
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/go-test/deep"
@@ -43,7 +42,7 @@ func compareInvalidValueError(t *testing.T, err error, expectedErr InvalidValueE
 		if diff := deep.Equal(&invalidValueErr, &expectedErr); diff != nil {
 			t.Error(diff)
 		} else {
-			fmt.Println(err.Error())
+			t.Log(err.Error())
 		}
 	default:
 		t.Errorf("expected InvalidValueError, got %T: %s", err, err)
@@ -73,7 +72,7 @@ func compareDuplicateValueError(t *testing.T, err error, expectedErr DuplicateVa
 		if diff := deep.Equal(&duplicateValueErr, &expectedErr); diff != nil {
 			t.Error(diff)
 		} else {
-			fmt.Println(err.Error())
+			t.Log(err.Error())
 		}
 	default:
 		t.Errorf("expected DuplicateValueError, got %T: %s", err, err)

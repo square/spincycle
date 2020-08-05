@@ -146,10 +146,12 @@ func (check NoDuplicateArgsSequenceCheck) CheckSequence(sequence Sequence) error
 	values := map[string]bool{}
 	for _, args := range [][]*Arg{sequence.Args.Required, sequence.Args.Optional, sequence.Args.Static} {
 		for _, arg := range args {
-			if arg.Name != nil && seen[*arg.Name] {
-				values[*arg.Name] = true
+			if arg.Name != nil {
+				if seen[*arg.Name] {
+					values[*arg.Name] = true
+				}
+				seen[*arg.Name] = true
 			}
-			seen[*arg.Name] = true
 		}
 	}
 
@@ -186,10 +188,19 @@ func (check HasNodesSequenceCheck) CheckSequence(sequence Sequence) error {
 /* ========================================================================== */
 type NodesSetsUniqueSequenceCheck struct{}
 
-/* Nodes can't set the same args. */
+/* Nodes can't set the same args as other nodes, or as the sequence (args). */
 func (check NodesSetsUniqueSequenceCheck) CheckSequence(sequence Sequence) error {
 	set := map[string]string{}          // arg --> first node that sets it
 	duplicated := map[string][]string{} // duplicated arg --> nodes that set it
+
+	for _, args := range [][]*Arg{sequence.Args.Required, sequence.Args.Optional, sequence.Args.Static} {
+		for _, arg := range args {
+			if arg.Name != nil {
+				set[*arg.Name] = "this sequence"
+			}
+		}
+	}
+
 	for _, node := range sequence.Nodes {
 		for _, nodeSet := range node.Sets {
 			if setBy, ok := duplicated[*nodeSet.As]; ok {

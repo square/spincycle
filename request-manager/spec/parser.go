@@ -45,6 +45,7 @@ func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs
 	}
 
 	failedFiles := []string{}
+	seqFile := map[string]string{} // sequence name --> file it was first seen in
 	err := filepath.Walk(specsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -64,7 +65,12 @@ func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs
 		}
 
 		for name, spec := range spec.Sequences {
-			specs.Sequences[name] = spec
+			if _, ok := seqFile[name]; ok {
+				failedFiles = append(failedFiles, fmt.Sprintf("%s: sequence %s already seen in file %s", relPath, name, seqFile[name]))
+			} else {
+				specs.Sequences[name] = spec
+				seqFile[name] = relPath
+			}
 		}
 
 		return nil
@@ -77,7 +83,7 @@ func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs
 		if len(failedFiles) > 1 {
 			multiple = "s"
 		}
-		return specs, fmt.Errorf("error parsing spec file%s:\n%s", multiple, strings.Join(failedFiles, "\n"))
+		return specs, fmt.Errorf("error in file%s:\n%s", multiple, strings.Join(failedFiles, "\n"))
 	}
 
 	return specs, nil

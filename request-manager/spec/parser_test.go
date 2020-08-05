@@ -29,7 +29,7 @@ func TestFailParseSpec(t *testing.T) {
 	} else {
 		switch err.(type) {
 		case *yaml.TypeError:
-			fmt.Println(err.Error())
+			t.Log(err.Error())
 		default:
 			t.Errorf("expected yaml.TypeError, got %T: %s", err, err)
 		}
@@ -46,7 +46,7 @@ func TestWarnParseSpec(t *testing.T) {
 	if warning == "" {
 		t.Errorf("failed to give warning for duplicated field")
 	} else if strings.Contains(strings.ToLower(warning), "warning") {
-		fmt.Println(warning)
+		t.Log(warning)
 	} else {
 		t.Errorf("expected warning containing 'warning' as substring, got: %s", warning)
 	}
@@ -56,8 +56,17 @@ func TestParseSpecsDir(t *testing.T) {
 	specsDir := specsDir + "parse-specs-dir"
 	_, err := ParseSpecsDir(specsDir, t.Logf)
 	if err != nil {
-		t.Errorf("failed to parse specs directory, expected success")
+		t.Errorf("failed to parse specs directory, expected success: %s", err)
 	}
+}
+
+func TestFailParseSpecsDir(t *testing.T) {
+	specsDir := specsDir + "fail-parse-specs-dir"
+	_, err := ParseSpecsDir(specsDir, t.Logf)
+	if err == nil {
+		t.Fatalf("successfully parsed specs directory with repeated sequences, expected failure")
+	}
+	t.Log(err)
 }
 
 func TestProcessSpecs(t *testing.T) {
