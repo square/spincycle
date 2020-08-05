@@ -7,7 +7,7 @@ nav_order: 3
 
 # Requests
 
-Requests are specified in YAML files. On startup, the Request Manager (RM) reads all specs: all the .yaml files in [specs.dir](/spincycle/v2.0/operate/configure#rm.specs.dir). Subdirectories are not currently supported, so be sure to combine all specs in one directory.
+Requests are specified in YAML files. On startup, the Request Manager (RM) reads and checks all specs: all the .yaml files in [specs.dir](/spincycle/v2.0/operate/configure#rm.specs.dir). All files in and under the specs directory ending with `.yaml` (case-insensitive) will be assumed to be specs files.
 
 All spec files have the same syntax. The RM combines specs from multiple files to complete a request. One sequence per file and descriptively named files help keep all the specs oranized and easy to find by humans.
 
@@ -213,3 +213,15 @@ The `args:` are passed to each expanded sequence as-is, i.e. each "decomm-node" 
 A conditional node with sequence expansion expands the sequence that matches `if:` and `eq:`.
 
 The same rules about `deps:` apply (described above).
+
+## Linter
+
+The RM checks all spec files on startup. This includes static checks, most of which can be performed by looking at a single node or sequence, and graph checks, which necessarily involve building graphs that describe the request specs. If some (less important) checks fail, the RM logs warnings; if others fail, the RM logs those errors and fails.
+
+Some examples of static checks: ensuring that the `category` field is one of `job`, `conditional`, or `sequence`; checking that a sequence has at least one node; making sure a sequence node calls an actual sequence.
+
+Some examples of graph checks: catching circular dependencies; making sure all job args for a node has been set by previous nodes, or by the sequence.
+
+### spinc-linter CLI
+
+spinc-linter is a CLI into a local build of the linter (and only the linter). It runs exactly the same checks that the RM does on startup and logs all errors to stdout. Any errors thrown by linter should be addressed, because they will cause the RM to fail. Warnings should be ignored with caution; they indicate likely typos or mistakes in the specs.
