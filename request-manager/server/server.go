@@ -206,40 +206,41 @@ func (s *Server) Boot() error {
 	}
 
 	// Generator factory used to generate IDs for jobs in template.Grapher and chain.Creator.
-	gf, err := s.appCtx.Factories.MakeGeneratorFactory(s.appCtx)
+	gf, err := s.appCtx.Factories.MakeIDGeneratorFactory(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("MakeGeneratorFactory: %s", err)
 	}
 
 	// Build and check validity of sequence templates.
 	tg := template.NewGrapher(specs, gf, log.Errorf)
-	err = tg.CreateTemplates()
-	if err != nil {
+	templates, ok := tg.CreateTemplates()
+	if !ok {
 		return fmt.Errorf("Graph check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 
 	// Chain Creator: creates job chains to be sent to Job Runners
-	jccf := chain.NewCreatorFactory(jobs.Factory, specs.Sequences, tg.SequenceTemplates, gf)
+	jobChainCreatorFactory := chain.NewCreatorFactory(jobs.Factory, specs.Sequences, templates, gf)
 
 	// Job Runner Client: how the Request Manager talks to Job Runners
-	jrc, err := s.appCtx.Factories.MakeJobRunnerClient(s.appCtx)
+	jrClient, err := s.appCtx.Factories.MakeJobRunnerClient(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("MakeJobRunnerClient: %s", err)
 	}
 
 	// Db connection pool: for requests, job chains, etc. (pretty much everything)
-	dbc, err := s.appCtx.Factories.MakeDbConnPool(s.appCtx)
+	dbConnector, err := s.appCtx.Factories.MakeDbConnPool(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("MakeDbConnPool: %s", err)
 	}
 
 	// Request Manager: core logic and coordination
 	managerConfig := request.ManagerConfig{
-		CreatorFactory: jccf,
-		DBConnector:    dbc,
-		JRClient:       jrc,
-		DefaultJRURL:   s.appCtx.Config.JRClient.ServerURL,
-		ShutdownChan:   s.shutdownChan,
+		ChainCreatorFactory: jobChainCreatorFactory,
+		Sequences:           specs.Sequences,
+		DBConnector:         dbConnector,
+		JRClient:            jrClient,
+		DefaultJRURL:        s.appCtx.Config.JRClient.ServerURL,
+		ShutdownChan:        s.shutdownChan,
 	}
 	s.appCtx.RM = request.NewManager(managerConfig)
 
@@ -250,8 +251,8 @@ func (s *Server) Boot() error {
 	}
 	resumerConfig := request.ResumerConfig{
 		RequestManager:       s.appCtx.RM,
-		DBConnector:          dbc,
-		JRClient:             jrc,
+		DBConnector:          dbConnector,
+		JRClient:             jrClient,
 		DefaultJRURL:         s.appCtx.Config.JRClient.ServerURL,
 		RMHost:               hostname,
 		ShutdownChan:         s.shutdownChan,
@@ -260,10 +261,10 @@ func (s *Server) Boot() error {
 	s.appCtx.RR = request.NewResumer(resumerConfig)
 
 	// Status: figure out request status using db and Job Runners (real-time)
-	s.appCtx.Status = status.NewManager(dbc, jrc)
+	s.appCtx.Status = status.NewManager(dbConnector, jrClient)
 
 	// Job log store: save job log entries (JLE) from Job Runners
-	s.appCtx.JLS = joblog.NewStore(dbc)
+	s.appCtx.JLS = joblog.NewStore(dbConnector)
 
 	// Auth Manager: request authorization (pre- (built-in) and post- using plugin)
 	s.appCtx.Auth = auth.NewManager(s.appCtx.Plugins.Auth, mapACL(specs), cfg.Auth.AdminRoles, cfg.Auth.Strict)

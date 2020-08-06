@@ -50,11 +50,11 @@ func setupResumer(t *testing.T, dataFile string) string {
 	shutdownChan = make(chan struct{})
 
 	cfg := request.ManagerConfig{
-		CreatorFactory: &chain.MockCreatorFactory{},
-		DBConnector:    dbc,
-		JRClient:       &mock.JRClient{},
-		ShutdownChan:   shutdownChan,
-		DefaultJRURL:   "http://defaulturl:1111",
+		ChainCreatorFactory: &chain.MockCreatorFactory{},
+		DBConnector:         dbc,
+		JRClient:            &mock.JRClient{},
+		ShutdownChan:        shutdownChan,
+		DefaultJRURL:        "http://defaulturl:1111",
 	}
 	rm = request.NewManager(cfg)
 

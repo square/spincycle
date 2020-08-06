@@ -106,17 +106,30 @@ func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[s
 	spec.ProcessSpecs(specs)
 
 	tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
-	err = tg.CreateTemplates()
-	if err != nil {
+	templates, ok := tg.CreateTemplates()
+	if !ok {
 		t.Fatalf("failed to create templates")
 	}
 
-	creator := NewCreator(req, tf, specs.Sequences, tg.SequenceTemplates, idgen)
-	return creator.buildSequence("request_"+creator.req.Type, creator.req.Type, jobArgs, 0, "0s")
+	creator := creator{
+		Request:           req,
+		JobFactory:        tf,
+		AllSequences:      specs.Sequences,
+		SequenceTemplates: templates,
+		IdGen:             idgen,
+	}
+	cfg := buildSequenceConfig{
+		wrapperName:       "request_" + creator.Request.Type,
+		sequenceName:      creator.Request.Type,
+		jobArgs:           jobArgs,
+		sequenceRetry:     0,
+		sequenceRetryWait: "0s",
+	}
+	return creator.buildSequence(cfg)
 }
 
 func TestBuildJobChain(t *testing.T) {
-	/* Load templates + do checks. */
+	/* Load templates. */
 	sequencesFile := "a-b-c.yaml"
 	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, t.Logf)
 	if err != nil {
@@ -125,8 +138,8 @@ func TestBuildJobChain(t *testing.T) {
 	spec.ProcessSpecs(specs)
 
 	tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
-	err = tg.CreateTemplates()
-	if err != nil {
+	templates, ok := tg.CreateTemplates()
+	if !ok {
 		t.Fatalf("failed to create templates")
 	}
 
@@ -154,7 +167,13 @@ func TestBuildJobChain(t *testing.T) {
 	args := map[string]interface{}{
 		"foo": "foo-value",
 	}
-	creator := NewCreator(req, tf, specs.Sequences, tg.SequenceTemplates, id.NewGenerator(4, 100))
+	creator := creator{
+		Request:           req,
+		JobFactory:        tf,
+		AllSequences:      specs.Sequences,
+		SequenceTemplates: templates,
+		IdGen:             id.NewGenerator(4, 100),
+	}
 	actualJobChain, err := creator.BuildJobChain(args)
 	if err != nil {
 		t.Fatalf("failed to build job chain: %s", err)
@@ -254,6 +273,71 @@ func TestBuildJobChain(t *testing.T) {
 	}
 }
 
+func TestBuildNestedSequenceJobChain(t *testing.T) {
+	sequencesFile := "a-b-c.yaml"
+	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, t.Logf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec.ProcessSpecs(specs)
+
+	tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
+	templates, ok := tg.CreateTemplates()
+	if !ok {
+		t.Fatalf("failed to create templates")
+	}
+
+	/* Create test job factory. */
+	requestId := "reqABC"
+	tf := &mock.JobFactory{
+		MockJobs: map[string]*mock.Job{},
+	}
+	for i, c := range []string{"a", "b", "c"} {
+		jobType := c + "JobType"
+		tf.MockJobs[jobType] = &mock.Job{
+			IdResp: job.NewIdWithRequestId(jobType, c, fmt.Sprintf("id%d", i), requestId),
+		}
+	}
+	tf.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
+		"aArg": "aValue",
+	}
+
+	/* Create job chain. */
+	requestName := "retry-three-nodes"
+	req := proto.Request{
+		Id:   requestId,
+		Type: requestName,
+	}
+	args := map[string]interface{}{
+		"foo": "foo-value",
+	}
+	creator := creator{
+		Request:           req,
+		JobFactory:        tf,
+		AllSequences:      specs.Sequences,
+		SequenceTemplates: templates,
+		IdGen:             id.NewGenerator(4, 100),
+	}
+	jobChain, err := creator.BuildJobChain(args)
+	if err != nil {
+		t.Fatalf("failed to build job chain: %s", err)
+	}
+
+	/* We just want to check that sequence retries are set correctly. */
+	seen := false
+	for _, job := range jobChain.Jobs {
+		if job.SequenceRetry == 10 {
+			seen = true
+			if job.SequenceRetryWait != "500ms" {
+				t.Errorf("sequence three-nodes has retryWait: %s, expected retry: 500ms", job.SequenceRetryWait)
+			}
+		}
+	}
+	if !seen {
+		t.Errorf("no node with retry: 10, expected such a node")
+	}
+}
+
 func TestNodeArgs(t *testing.T) {
 	sequencesFile := "decomm.yaml"
 	requestName := "decommission-cluster"
@@ -269,14 +353,14 @@ func TestNodeArgs(t *testing.T) {
 
 	for _, node := range chainGraph.getVertices() {
 		// Verify that noop nodes do not have Args.
-		if strings.HasPrefix(node.Name, "sequence_") || strings.HasPrefix(node.Name, "repeat_") {
+		if strings.HasPrefix(node.Name(), "sequence_") || strings.HasPrefix(node.Name(), "repeat_") {
 			if len(node.Args) != 0 {
-				t.Errorf("node %s args = %#v, expected an empty map", node.Name, node.Args)
+				t.Errorf("node %s args = %#v, expected an empty map", node.Name(), node.Args)
 			}
 		}
 
 		// Check the Args on some nodes.
-		if node.Name == "get-instances" {
+		if node.Name() == "get-instances" {
 			expectedArgs := map[string]interface{}{
 				"cluster": "test-cluster-001",
 			}
@@ -284,7 +368,7 @@ func TestNodeArgs(t *testing.T) {
 				t.Error(diff)
 			}
 		}
-		if node.Name == "prep-1" {
+		if node.Name() == "prep-1" {
 			expectedArgs := map[string]interface{}{
 				"cluster":   "test-cluster-001",
 				"env":       "testing",
@@ -294,7 +378,7 @@ func TestNodeArgs(t *testing.T) {
 				t.Error(diff)
 			}
 		}
-		if node.Name == "third-cleanup-job" {
+		if node.Name() == "third-cleanup-job" {
 			expectedArgs := map[string]interface{}{
 				"cluster": "test-cluster-001",
 			}
@@ -321,20 +405,20 @@ func TestNodeRetry(t *testing.T) {
 	// Verify that the retries are set correctly on all nodes. Only the "get-instances" node should have retries.
 	found := false
 	for _, node := range chainGraph.getVertices() {
-		if node.Name == "get-instances" {
+		if node.Name() == "get-instances" {
 			found = true
 			if node.Retry != 3 {
-				t.Errorf("%s node retries = %d, expected %d", node.Name, node.Retry, 3)
+				t.Errorf("%s node retries = %d, expected %d", node.Name(), node.Retry, 3)
 			}
 			if node.RetryWait != "10s" {
-				t.Errorf("%s node retryWait = %s, expected 10s", node.Name, node.RetryWait)
+				t.Errorf("%s node retryWait = %s, expected 10s", node.Name(), node.RetryWait)
 			}
 		} else {
 			if node.Retry != 0 {
-				t.Errorf("%s node retries = %d, expected 0", node.Name, node.Retry)
+				t.Errorf("%s node retries = %d, expected 0", node.Name(), node.Retry)
 			}
 			if node.RetryWait != "" {
-				t.Errorf("%s node retryWait = %s, expected empty string", node.Name, node.RetryWait)
+				t.Errorf("%s node retryWait = %s, expected empty string", node.Name(), node.RetryWait)
 			}
 		}
 	}
@@ -360,14 +444,14 @@ func TestSequenceRetry(t *testing.T) {
 	found := false
 	sequenceStartNodeName := "sequence_pre-flight-checks_start"
 	for _, node := range chainGraph.getVertices() {
-		if node.Name == sequenceStartNodeName {
+		if node.Name() == sequenceStartNodeName {
 			found = true
 			if node.SequenceRetry != 3 {
-				t.Errorf("%s node sequence retries = %d, expected %d", node.Name, node.SequenceRetry, 2)
+				t.Errorf("%s node sequence retries = %d, expected %d", node.Name(), node.SequenceRetry, 2)
 			}
 		} else {
 			if node.SequenceRetry != 0 {
-				t.Errorf("%s node sequence retries = %d, expected %d", node.Name, node.SequenceRetry, 0)
+				t.Errorf("%s node sequence retries = %d, expected %d", node.Name(), node.SequenceRetry, 0)
 			}
 		}
 	}
@@ -407,7 +491,7 @@ func TestCreateDecomSetsGraph(t *testing.T) {
 }
 
 func verifyDecomGraph(t *testing.T, g *graph.Graph) {
-	startNode := g.First.GetId()
+	startNode := g.First.Id()
 	currentStep := g.Edges[startNode]
 	verifyStep(g, currentStep, 1, "decommission-cluster_start", t)
 
@@ -490,13 +574,13 @@ func verifyDecomGraph(t *testing.T, g *graph.Graph) {
 	if len(currentStep) != 2 {
 		t.Fatalf("Expected %s to have 2 out edges", "second-cleanup-job")
 	}
-	if g.Vertices[currentStep[0]].GetName() != "third-cleanup-job" &&
-		g.Vertices[currentStep[1]].GetName() != "third-cleanup-job" {
+	if g.Vertices[currentStep[0]].Name() != "third-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name() != "third-cleanup-job" {
 		t.Fatalf("third-cleanup-job@ missing")
 	}
 
-	if g.Vertices[currentStep[0]].GetName() != "fourth-cleanup-job" &&
-		g.Vertices[currentStep[1]].GetName() != "fourth-cleanup-job" {
+	if g.Vertices[currentStep[0]].Name() != "fourth-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name() != "fourth-cleanup-job" {
 		t.Fatalf("fourth-cleanup-job@ missing")
 	}
 
@@ -538,7 +622,7 @@ func TestCreateDestroyConditionalGraph(t *testing.T) {
 	g := &chainGraph.Graph
 
 	// validate the adjacency list
-	startNode := g.First.GetId()
+	startNode := g.First.Id()
 	currentStep := g.Edges[startNode]
 	verifyStep(g, currentStep, 1, "destroy-conditional_start", t)
 
@@ -588,7 +672,7 @@ func TestCreateDoubleConditionalGraph(t *testing.T) {
 	g := &chainGraph.Graph
 
 	// validate the adjacency list
-	startNode := g.First.GetId()
+	startNode := g.First.Id()
 	currentStep := g.Edges[startNode]
 	verifyStep(g, currentStep, 1, "double-conditional_start", t)
 
@@ -656,7 +740,7 @@ func TestCreateNestedConditionalGraph(t *testing.T) {
 	g := &chainGraph.Graph
 
 	// validate the adjacency list
-	startNode := g.First.GetId()
+	startNode := g.First.Id()
 	currentStep := g.Edges[startNode]
 	verifyStep(g, currentStep, 1, "conditional-in-conditional_start", t)
 
@@ -724,7 +808,7 @@ func TestCreateDefaultConditionalGraph(t *testing.T) {
 	g := &chainGraph.Graph
 
 	// validate the adjacency list
-	startNode := g.First.GetId()
+	startNode := g.First.Id()
 	currentStep := g.Edges[startNode]
 	verifyStep(g, currentStep, 1, "conditional-default_start", t)
 
@@ -799,7 +883,7 @@ func TestCreateLimitParallel(t *testing.T) {
 	g := &chainGraph.Graph
 
 	// validate the adjacency list
-	startNode := g.First.GetId()
+	startNode := g.First.Id()
 	currentStep := g.Edges[startNode]
 	verifyStep(g, currentStep, 1, "decommission-cluster_start", t)
 
@@ -933,13 +1017,13 @@ func TestCreateLimitParallel(t *testing.T) {
 	if len(currentStep) != 2 {
 		t.Fatalf("Expected %s to have 2 out edges", "second-cleanup-job")
 	}
-	if g.Vertices[currentStep[0]].GetName() != "third-cleanup-job" &&
-		g.Vertices[currentStep[1]].GetName() != "third-cleanup-job" {
+	if g.Vertices[currentStep[0]].Name() != "third-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name() != "third-cleanup-job" {
 		t.Fatalf("third-cleanup-job missing")
 	}
 
-	if g.Vertices[currentStep[0]].GetName() != "fourth-cleanup-job" &&
-		g.Vertices[currentStep[1]].GetName() != "fourth-cleanup-job" {
+	if g.Vertices[currentStep[0]].Name() != "fourth-cleanup-job" &&
+		g.Vertices[currentStep[1]].Name() != "fourth-cleanup-job" {
 		t.Fatalf("fourth-cleanup-job missing")
 	}
 
@@ -969,7 +1053,7 @@ func TestOptArgs(t *testing.T) {
 	// Find the node we want
 	var j *Node
 	for _, node := range chainGraph.getVertices() {
-		if node.Name == "job1name" {
+		if node.Name() == "job1name" {
 			j = node
 		}
 	}
@@ -981,7 +1065,7 @@ func TestOptArgs(t *testing.T) {
 		t.Logf("%#v\n", j.Args)
 		t.Error(diff)
 	}
-	job := tf.Created[j.GetName()]
+	job := tf.Created[j.Name()]
 	if job == nil {
 		t.Fatal("job job1name not created")
 	}
@@ -1004,7 +1088,7 @@ func TestOptArgs(t *testing.T) {
 
 	// Find the node we want
 	for _, node := range chainGraph.getVertices() {
-		if node.Name == "job1name" {
+		if node.Name() == "job1name" {
 			j = node
 		}
 	}
@@ -1016,7 +1100,7 @@ func TestOptArgs(t *testing.T) {
 		t.Logf("%#v\n", j.Args)
 		t.Error(diff)
 	}
-	job = tf.Created[j.GetName()]
+	job = tf.Created[j.Name()]
 	if job == nil {
 		t.Fatal("job job1name not created")
 	}
@@ -1084,39 +1168,39 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 	// are what we expect, and the order expressed by Edges. This lets us see/verify
 	// that defaultSeq is created.
 	id1 := &Node{
-		Name:       "request_request-name_start",
+		NodeName:   "request_request-name_start",
 		SequenceId: "id1",
 	}
 	id3 := &Node{
-		Name:       "request-name_start",
+		NodeName:   "request-name_start",
 		SequenceId: "id1",
 	}
 	id4 := &Node{
-		Name:       "conditional_job1name_start",
+		NodeName:   "conditional_job1name_start",
 		SequenceId: "id4",
 	}
 	id6 := &Node{
-		Name:       "defaultSeq_start",
+		NodeName:   "defaultSeq_start",
 		SequenceId: "id4",
 	}
 	id7 := &Node{ // category: job, type: job1
-		Name:       "job1name",
+		NodeName:   "job1name",
 		SequenceId: "id4",
 	}
 	id8 := &Node{
-		Name:       "defaultSeq_end",
+		NodeName:   "defaultSeq_end",
 		SequenceId: "id4",
 	}
 	id5 := &Node{
-		Name:       "conditional_job1name_end",
+		NodeName:   "conditional_job1name_end",
 		SequenceId: "id4",
 	}
 	id9 := &Node{
-		Name:       "request-name_end",
+		NodeName:   "request-name_end",
 		SequenceId: "id1",
 	}
 	id2 := &Node{
-		Name:       "request_request-name_end",
+		NodeName:   "request_request-name_end",
 		SequenceId: "id1",
 	}
 	vertices := map[string]*Node{
@@ -1153,8 +1237,8 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 	}
 	for k, v := range chainGraph.getVertices() {
 		t.Logf("vertex: %+v", v)
-		if v.Name != vertices[k].Name {
-			t.Errorf("node '%s'.Name = %s, expected %s", k, v.Name, vertices[k].Name)
+		if v.Name() != vertices[k].Name() {
+			t.Errorf("node '%s'.Name() = %s, expected %s", k, v.Name(), vertices[k].Name())
 		}
 		if v.SequenceId != vertices[k].SequenceId {
 			t.Errorf("node '%s'.SequenceId = %s, expected %s", k, v.SequenceId, vertices[k].SequenceId)
@@ -1186,8 +1270,8 @@ func verifyStep(g *graph.Graph, nodes []string, expectedCount int, expectedName 
 		t.Fatalf("%v: expected %d out edges, but got %d", nodes, expectedCount, len(nodes))
 	}
 	for _, n := range nodes {
-		if g.Vertices[n].GetName() != expectedName {
-			t.Fatalf("unexpected node: %v, expecting: %s", g.Vertices[n].GetName(), expectedName)
+		if g.Vertices[n].Name() != expectedName {
+			t.Fatalf("unexpected node: %v, expecting: %s", g.Vertices[n].Name(), expectedName)
 		}
 	}
 }

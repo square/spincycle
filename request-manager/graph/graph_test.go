@@ -8,17 +8,17 @@ import (
 )
 
 type mockNode struct {
-	Id   string
-	Next map[string]Node
-	Prev map[string]Node
+	NodeId string
+	Next   map[string]Node
+	Prev   map[string]Node
 }
 
-func (n *mockNode) GetId() string {
-	return n.Id
+func (n *mockNode) Id() string {
+	return n.NodeId
 }
 
-func (n *mockNode) GetName() string {
-	return n.Id
+func (n *mockNode) Name() string {
+	return n.NodeId
 }
 
 func (n *mockNode) GetNext() *map[string]Node {
@@ -30,14 +30,14 @@ func (n *mockNode) GetPrev() *map[string]Node {
 }
 
 func (n *mockNode) String() string {
-	return n.Id
+	return n.NodeId
 }
 
 func newMockNode(id string) *mockNode {
 	return &mockNode{
-		Id:   id,
-		Next: map[string]Node{},
-		Prev: map[string]Node{},
+		NodeId: id,
+		Next:   map[string]Node{},
+		Prev:   map[string]Node{},
 	}
 }
 

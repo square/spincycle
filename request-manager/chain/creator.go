@@ -18,33 +18,10 @@ import (
 
 const DEFAULT = "default"
 
-// Creates a job chain for a single request.
-type Creator struct {
-	JobFactory        job.Factory                // factory to create nodes' jobs
-	AllSequences      map[string]*spec.Sequence  // sequence name --> sequence spec
-	SequenceTemplates map[string]*template.Graph // sequence name --> template graph
-
-	idgen id.Generator  // generates UIDs for jobs
-	req   proto.Request // the request spec this creator can create job chain for
-}
-
-func NewCreator(req proto.Request, nf job.Factory, specs map[string]*spec.Sequence, templates map[string]*template.Graph, idgen id.Generator) *Creator {
-	o := &Creator{
-		JobFactory:        nf,
-		AllSequences:      specs,
-		SequenceTemplates: templates,
-		idgen:             idgen,
-		req:               req,
-	}
-	return o
-}
-
 // Returns Creator structs, tailored to create job chains for the input request.
 type CreatorFactory interface {
 	// Make makes a Creator. A new creator should be made for every request.
-	Make(proto.Request) *Creator
-	// Retrieve all sequences the factory knows about.
-	Sequences() map[string]*spec.Sequence
+	Make(proto.Request) Creator
 }
 
 // Implements CreatorFactory interface.
@@ -64,24 +41,43 @@ func NewCreatorFactory(jf job.Factory, specs map[string]*spec.Sequence, template
 	}
 }
 
-func (f *creatorFactory) Make(req proto.Request) *Creator {
-	return NewCreator(req, f.jf, f.seqs, f.templates, f.idf.Make()) // create a Creator with a new id Generator
+func (f *creatorFactory) Make(req proto.Request) Creator {
+	return &creator{
+		Request:           req,
+		JobFactory:        f.jf,
+		AllSequences:      f.seqs,
+		SequenceTemplates: f.templates,
+		IdGen:             f.idf.Make(),
+	}
 }
 
-func (f *creatorFactory) Sequences() map[string]*spec.Sequence {
-	return f.seqs
+// Creates a job chain for a single request.
+type Creator interface {
+	// Convert job args map to a list of proto.RequestArgs.
+	RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestArg, error)
+
+	// Build the actual job chain. Returns an error if any error occurs.
+	BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain, error)
 }
 
-// Convert job args map to a list of proto.RequestArgs.
-func (o *Creator) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
+// Implements Creator interface.
+type creator struct {
+	Request           proto.Request              // the request spec this creator can create job chain for
+	JobFactory        job.Factory                // factory to create nodes' jobs
+	AllSequences      map[string]*spec.Sequence  // sequence name --> sequence spec
+	SequenceTemplates map[string]*template.Graph // sequence name --> template graph
+	IdGen             id.Generator               // generates UIDs for jobs
+}
+
+func (o *creator) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
 	reqArgs := []proto.RequestArg{}
 
-	seq, ok := o.AllSequences[o.req.Type]
+	seq, ok := o.AllSequences[o.Request.Type]
 	if !ok {
-		return nil, fmt.Errorf("cannot find definition for request: %s", o.req.Type)
+		return nil, fmt.Errorf("cannot find definition for request: %s", o.Request.Type)
 	}
 	if !seq.Request {
-		return nil, fmt.Errorf("%s is not a request", o.req.Type)
+		return nil, fmt.Errorf("%s is not a request", o.Request.Type)
 	}
 
 	for i, arg := range seq.Args.Required {
@@ -125,10 +121,25 @@ func (o *Creator) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestAr
 	return reqArgs, nil
 }
 
-// Build the actual job chain. Returns an error if any error occurs.
-func (o *Creator) BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain, error) {
+// Parameters to buildSequence helper function.
+type buildSequenceConfig struct {
+	wrapperName       string                 // Name of graph and its source/sink nodes
+	sequenceName      string                 // Name of sequence to build
+	jobArgs           map[string]interface{} // Set of job args sequence is given
+	sequenceRetry     uint                   // Retry info for sequence
+	sequenceRetryWait string
+}
+
+func (o *creator) BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain, error) {
 	/* Build graph of actual jobs based on template. */
-	chainGraph, err := o.buildSequence("request_"+o.req.Type, o.req.Type, jobArgs, 0, "0s")
+	cfg := buildSequenceConfig{
+		wrapperName:       "request_" + o.Request.Type,
+		sequenceName:      o.Request.Type,
+		jobArgs:           jobArgs,
+		sequenceRetry:     0,
+		sequenceRetryWait: "0s",
+	}
+	chainGraph, err := o.buildSequence(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +147,7 @@ func (o *Creator) BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain
 	/* Turn it into a job chain. */
 	jc := &proto.JobChain{
 		AdjacencyList: chainGraph.Graph.Edges,
-		RequestId:     o.req.Id,
+		RequestId:     o.Request.Id,
 		State:         proto.STATE_PENDING,
 		Jobs:          map[string]proto.Job{},
 	}
@@ -165,11 +176,10 @@ func (o *Creator) BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain
 }
 
 // (Recursively) build a sequence.
-// `wrapperName` names the graph and its source/sink nodes.
-// `sequenceName` is the name of the sequence to build.
-// `jobArgs` is the set of job args the sequence is given.
-// `sequenceRetry(Wait)` is the retry info for this sequence, as given by the calling sequence.
-func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[string]interface{}, sequenceRetry uint, sequenceRetryWait string) (*Graph, error) {
+func (o *creator) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
+	sequenceName := cfg.sequenceName
+	jobArgs := cfg.jobArgs
+
 	/* Add optional and static sequence arguments to map. */
 	seq, ok := o.AllSequences[sequenceName]
 	if !ok {
@@ -192,7 +202,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 		return nil, fmt.Errorf("cannot find template for sequence: %s", sequenceName)
 	}
 
-	g, err := o.newEmptyGraph(wrapperName, jobArgs)
+	g, err := o.newEmptyGraph(cfg.wrapperName, jobArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -246,14 +256,28 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 				if err != nil {
 					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, n.Name, err)
 				}
-				chainSubgraph, err := o.buildSequence("conditional_"+n.Name, conditional, jobArgsCopy, n.Retry, n.RetryWait)
+				cfg := buildSequenceConfig{
+					wrapperName:       "conditional_" + n.Name,
+					sequenceName:      conditional,
+					jobArgs:           jobArgsCopy,
+					sequenceRetry:     n.Retry,
+					sequenceRetryWait: n.RetryWait,
+				}
+				chainSubgraph, err := o.buildSequence(cfg)
 				if err != nil {
 					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, n.Name, err)
 				}
 				subgraph = &chainSubgraph.Graph
 			} else if n.IsSequence() {
 				// Node is a sequence, recursively construct its components
-				chainSubgraph, err := o.buildSequence("sequence_"+n.Name, *n.NodeType, jobArgsCopy, n.Retry, n.RetryWait)
+				cfg := buildSequenceConfig{
+					wrapperName:       "sequence_" + n.Name,
+					sequenceName:      *n.NodeType,
+					jobArgs:           jobArgsCopy,
+					sequenceRetry:     n.Retry,
+					sequenceRetryWait: n.RetryWait,
+				}
+				chainSubgraph, err := o.buildSequence(cfg)
 				if err != nil {
 					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, n.Name, err)
 				}
@@ -344,7 +368,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 
 		// `wrappedSubgraph` is the graph of jobs corresponding directly to this
 		// template node. Insert it between its dependencies and the last node.
-		idMap[templateNode.GetId()] = wrappedSubgraph
+		idMap[templateNode.Id()] = wrappedSubgraph
 		if len(templateNode.Prev) == 0 {
 			// case: template graph's source node
 			g.InsertComponentBetween(wrappedSubgraph, g.First, g.Last)
@@ -354,7 +378,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 			for id, _ := range templateNode.Prev {
 				prev, ok := idMap[id]
 				if !ok {
-					return nil, fmt.Errorf("could not find previous component of %s (components added out of order)", templateNode.GetName())
+					return nil, fmt.Errorf("could not find previous component of %s (components added out of order)", templateNode.Name())
 				}
 				g.InsertComponentBetween(wrappedSubgraph, prev.Last, g.Last)
 			}
@@ -377,7 +401,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 	// on a subsequent pass. Lastly, the first vertex in the completed graph will
 	// have no SequenceId set, as that vertex is part of a larger sequence.
 	chainGraph := &Graph{*g}
-	sequenceId := g.First.GetId()
+	sequenceId := g.First.Id()
 	for _, vertex := range chainGraph.getVertices() {
 		// TODO(alyssa): Add `ParentSequenceId` to start vertex of each sequence.
 		// It's important to do this check before setting `SequenceId`
@@ -392,7 +416,7 @@ func (o *Creator) buildSequence(wrapperName, sequenceName string, jobArgs map[st
 		}
 	}
 	// store configured retry from sequence spec on the first node in the sequence
-	chainGraph.setSequenceRetryInfo(sequenceRetry, sequenceRetryWait)
+	chainGraph.setSequenceRetryInfo(cfg.sequenceRetry, cfg.sequenceRetryWait)
 	return chainGraph, nil
 }
 
@@ -429,7 +453,7 @@ func chooseConditional(n *spec.Node, jobArgs map[string]interface{}) (string, er
 // and the singleton [""], to indicate that only one iteration is needed.
 //
 // Precondition: the list must already be present in args
-func (o *Creator) getIterators(n *spec.Node, args map[string]interface{}) ([]string, [][]interface{}, error) {
+func (o *creator) getIterators(n *spec.Node, args map[string]interface{}) ([]string, [][]interface{}, error) {
 	empty := []string{""}
 	empties := [][]interface{}{[]interface{}{""}}
 	if len(n.Each) == 0 {
@@ -517,7 +541,7 @@ func setNodeArgs(n *spec.Node, argsTo, argsFrom map[string]interface{}) error {
 }
 
 // Builds a graph containing a single node
-func (o *Creator) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]interface{}) (*graph.Graph, error) {
+func (o *creator) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]interface{}) (*graph.Graph, error) {
 	n, err := o.newNode(nodeDef, jobArgs)
 	if err != nil {
 		return nil, err
@@ -526,7 +550,7 @@ func (o *Creator) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]
 		Name:     nodeDef.Name,
 		First:    n,
 		Last:     n,
-		Vertices: map[string]graph.Node{n.GetId(): n},
+		Vertices: map[string]graph.Node{n.Id(): n},
 		Edges:    map[string][]string{},
 	}
 	return g, nil
@@ -534,7 +558,7 @@ func (o *Creator) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]
 
 // NewEmptyGraph creates an "empty" graph. It contains two nodes: the "start" and "end" nodes. Both of these nodes
 // are no-op jobs
-func (o *Creator) newEmptyGraph(name string, jobArgs map[string]interface{}) (*graph.Graph, error) {
+func (o *creator) newEmptyGraph(name string, jobArgs map[string]interface{}) (*graph.Graph, error) {
 	var err error
 
 	jobArgsCopy, err := remapNodeArgs(noopSpec, jobArgs)
@@ -557,26 +581,26 @@ func (o *Creator) newEmptyGraph(name string, jobArgs map[string]interface{}) (*g
 		return nil, err
 	}
 
-	first.Next[last.GetId()] = last
-	last.Prev[first.GetId()] = first
+	first.Next[last.Id()] = last
+	last.Prev[first.Id()] = first
 
 	return &graph.Graph{
 		Name:     name,
 		First:    first,
 		Last:     last,
-		Vertices: map[string]graph.Node{first.GetId(): first, last.GetId(): last},
-		Edges:    map[string][]string{first.GetId(): []string{last.GetId()}},
+		Vertices: map[string]graph.Node{first.Id(): first, last.Id(): last},
+		Edges:    map[string][]string{first.Id(): []string{last.Id()}},
 	}, nil
 }
 
 // NewStartNode creates an empty "start" node. There is no job defined for this node, but it can serve
 // as a marker for a sequence/request.
-func (o *Creator) newNoopNode(name string, jobArgs map[string]interface{}) (*Node, error) {
-	id, err := o.idgen.UID()
+func (o *creator) newNoopNode(name string, jobArgs map[string]interface{}) (*Node, error) {
+	id, err := o.IdGen.UID()
 	if err != nil {
 		return nil, fmt.Errorf("Error making id for no-op node %s: %s", name, err)
 	}
-	jid := job.NewIdWithRequestId("noop", name, id, o.req.Id)
+	jid := job.NewIdWithRequestId("noop", name, id, o.Request.Id)
 	rj, err := o.JobFactory.Make(jid)
 	if err != nil {
 		switch err {
@@ -595,15 +619,15 @@ func (o *Creator) newNoopNode(name string, jobArgs map[string]interface{}) (*Nod
 	}
 
 	return &Node{
-		Job:  rj,
-		Next: map[string]graph.Node{},
-		Prev: map[string]graph.Node{},
-		Name: name,
+		Job:      rj,
+		Next:     map[string]graph.Node{},
+		Prev:     map[string]graph.Node{},
+		NodeName: name,
 	}, nil
 }
 
 // newNode creates a node for the given job j
-func (o *Creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, error) {
+func (o *creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, error) {
 	// Make a copy of the jobArgs before this node gets created and potentially
 	// adds additional keys to the jobArgs. A shallow copy is sufficient because
 	// args values should never change.
@@ -613,13 +637,13 @@ func (o *Creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, 
 	}
 
 	// Make the name of this node unique within the request by assigning it an id.
-	id, err := o.idgen.UID()
+	id, err := o.IdGen.UID()
 	if err != nil {
 		return nil, fmt.Errorf("Error making id for '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
 	// Create the job
-	rj, err := o.JobFactory.Make(job.NewIdWithRequestId(*j.NodeType, j.Name, id, o.req.Id))
+	rj, err := o.JobFactory.Make(job.NewIdWithRequestId(*j.NodeType, j.Name, id, o.Request.Id))
 	if err != nil {
 		return nil, fmt.Errorf("Error making '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
@@ -633,27 +657,40 @@ func (o *Creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, 
 		Job:       rj,
 		Next:      map[string]graph.Node{},
 		Prev:      map[string]graph.Node{},
-		Name:      j.Name,
+		NodeName:  j.Name,
 		Args:      originalArgs, // Args is the jobArgs map that this node was created with
 		Retry:     j.Retry,
 		RetryWait: j.RetryWait,
 	}, nil
 }
 
-// ------------------------------------------------------------------------- //
-
-// Mock creator factory for testing.
+/* ========================================================================== */
+// Mocks for testing
 type MockCreatorFactory struct {
-	MakeFunc func(proto.Request) *Creator
+	MakeFunc func(proto.Request) Creator
 }
 
-func (cf *MockCreatorFactory) Make(req proto.Request) *Creator {
-	if cf.MakeFunc != nil {
-		return cf.MakeFunc(req)
+func (f *MockCreatorFactory) Make(req proto.Request) Creator {
+	if f.MakeFunc != nil {
+		return f.MakeFunc(req)
 	}
 	return nil
 }
 
-func (cf *MockCreatorFactory) Sequences() map[string]*spec.Sequence {
-	return map[string]*spec.Sequence{}
+type MockCreator struct {
+	RequestArgsFunc   func(jobArgs map[string]interface{}) ([]proto.RequestArg, error)
+	BuildJobChainFunc func(jobArgs map[string]interface{}) (*proto.JobChain, error)
+}
+
+func (o *MockCreator) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
+	if o.RequestArgsFunc != nil {
+		return o.RequestArgsFunc(jobArgs)
+	}
+	return []proto.RequestArg{}, nil
+}
+func (o *MockCreator) BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain, error) {
+	if o.BuildJobChainFunc != nil {
+		return o.BuildJobChainFunc(jobArgs)
+	}
+	return nil, nil
 }

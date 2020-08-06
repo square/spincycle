@@ -13,7 +13,7 @@ import (
 type Node struct {
 	// payload
 	Job               job.Job                // runnable job that this graph node represents
-	Name              string                 // name of node
+	NodeName          string                 // name of node
 	Args              map[string]interface{} // the args the node was created with
 	Retry             uint                   // the number of times to retry a node
 	RetryWait         string                 // the time to sleep between retries
@@ -26,7 +26,7 @@ type Node struct {
 	Prev map[string]graph.Node
 }
 
-func (g *Node) GetId() string {
+func (g *Node) Id() string {
 	return g.Job.Id().Id
 }
 
@@ -38,8 +38,8 @@ func (g *Node) GetPrev() *map[string]graph.Node {
 	return &g.Prev
 }
 
-func (g *Node) GetName() string {
-	return g.Name
+func (g *Node) Name() string {
+	return g.NodeName
 }
 
 func (g *Node) String() string {

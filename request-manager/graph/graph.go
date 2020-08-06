@@ -21,18 +21,18 @@ type Graph struct {
 // work properly, i.e. GetNext() should be a map of strings -> pointers.
 type Node interface {
 	// functions involving graph functionality
-	GetId() string             // get node's unique id within graph
+	Id() string                // get node's unique id within graph
 	GetNext() *map[string]Node // get out edges (node id -> Node)
 	GetPrev() *map[string]Node // get in edges (node id -> Node)
 
 	// pretty printer functions (for use with PrintDot)
-	GetName() string // get node's name
-	String() string  // get implementation-specific attributes
+	Name() string   // get node's name
+	String() string // get implementation-specific attributes
 }
 
 // returns true iff the graph has at least one cycle in it
 func (g *Graph) HasCycles() bool {
-	seen := map[string]Node{g.First.GetId(): g.First}
+	seen := map[string]Node{g.First.Id(): g.First}
 	return hasCyclesDFS(seen, g.First)
 }
 
@@ -51,12 +51,12 @@ func (g *Graph) AdjacencyListMatchesLL() bool {
 
 	// check that all the vertex lists match
 	for vertexName, node := range vertices {
-		if n, ok := g.Vertices[vertexName]; !ok || n.GetId() != node.GetId() {
+		if n, ok := g.Vertices[vertexName]; !ok || n.Id() != node.Id() {
 			return false
 		}
 	}
 	for vertexName, node := range g.Vertices {
-		if n, ok := vertices[vertexName]; !ok || n.GetId() != node.GetId() {
+		if n, ok := vertices[vertexName]; !ok || n.Id() != node.Id() {
 			return false
 		}
 	}
@@ -95,16 +95,16 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev Node, next Node) e
 	}
 
 	// have component point to prev and next nodes
-	(*component.First.GetPrev())[prev.GetId()] = prev
-	(*component.Last.GetNext())[next.GetId()] = next
+	(*component.First.GetPrev())[prev.Id()] = prev
+	(*component.Last.GetNext())[next.Id()] = next
 
 	// have prev and next nodes point to component
-	(*prev.GetNext())[component.First.GetId()] = component.First
-	(*next.GetPrev())[component.Last.GetId()] = component.Last
+	(*prev.GetNext())[component.First.Id()] = component.First
+	(*next.GetPrev())[component.Last.Id()] = component.Last
 
 	// Remove edges between prev and next if it exists
-	delete(*prev.GetNext(), next.GetId())
-	delete(*next.GetPrev(), prev.GetId())
+	delete(*prev.GetNext(), next.Id())
+	delete(*next.GetPrev(), prev.Id())
 
 	// update vertices list
 
@@ -119,19 +119,19 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev Node, next Node) e
 	}
 
 	// for the edges of the previous node, add the start node of this component
-	g.Edges[prev.GetId()] = append(g.Edges[prev.GetId()], component.First.GetId())
+	g.Edges[prev.Id()] = append(g.Edges[prev.Id()], component.First.Id())
 
 	// for the edges of the last node of this component, add the next node
-	if find(g.Edges[component.Last.GetId()], next.GetId()) < 0 {
-		g.Edges[component.Last.GetId()] = append(g.Edges[component.Last.GetId()], next.GetId())
+	if find(g.Edges[component.Last.Id()], next.Id()) < 0 {
+		g.Edges[component.Last.Id()] = append(g.Edges[component.Last.Id()], next.Id())
 	}
 
 	// Remove all occurences next from the adjacency list of prev
-	i := find(g.Edges[prev.GetId()], next.GetId())
+	i := find(g.Edges[prev.Id()], next.Id())
 	for i >= 0 {
-		g.Edges[prev.GetId()][i] = g.Edges[prev.GetId()][len(g.Edges[prev.GetId()])-1]
-		g.Edges[prev.GetId()] = g.Edges[prev.GetId()][:len(g.Edges[prev.GetId()])-1]
-		i = find(g.Edges[prev.GetId()], next.GetId())
+		g.Edges[prev.Id()][i] = g.Edges[prev.Id()][len(g.Edges[prev.Id()])-1]
+		g.Edges[prev.Id()] = g.Edges[prev.Id()][:len(g.Edges[prev.Id()])-1]
+		i = find(g.Edges[prev.Id()], next.Id())
 	}
 
 	// verify resulting graph is ok
@@ -180,8 +180,8 @@ func (g *Graph) PrintDot() {
 	fmt.Printf("\tfontsize=22\n")
 	for vertexName, vertex := range g.Vertices {
 		fmt.Printf("\tnode [style=filled,color=\"%s\",shape=box]\n", "#86cedf")
-		fmt.Printf("\t\"%s\" [label=\"%s\\n ", vertexName, vertex.GetName())
-		fmt.Printf("Vertex ID: %s\\n ", vertex.GetId())
+		fmt.Printf("\t\"%s\" [label=\"%s\\n ", vertexName, vertex.Name())
+		fmt.Printf("Vertex ID: %s\\n ", vertex.Id())
 		fmt.Printf("%v\n", vertex)
 		fmt.Printf("\"]\n")
 	}
@@ -200,10 +200,10 @@ func (g *Graph) connectedToLastNodeDFS(n Node) bool {
 	if n == nil {
 		return false
 	}
-	if g.Last.GetId() == n.GetId() {
+	if g.Last.Id() == n.Id() {
 		return true
 	}
-	if g.Last.GetId() != n.GetId() && (n.GetNext() == nil || len(*n.GetNext()) == 0) {
+	if g.Last.Id() != n.Id() && (n.GetNext() == nil || len(*n.GetNext()) == 0) {
 		return false
 	}
 	for _, next := range *n.GetNext() {
@@ -222,10 +222,10 @@ func (g *Graph) connectedToFirstNodeDFS(n Node) bool {
 	if n == nil {
 		return false
 	}
-	if g.First.GetId() == n.GetId() {
+	if g.First.Id() == n.Id() {
 		return true
 	}
-	if g.First.GetId() != n.GetId() && (n.GetPrev() == nil || len(*n.GetPrev()) == 0) {
+	if g.First.Id() != n.Id() && (n.GetPrev() == nil || len(*n.GetPrev()) == 0) {
 		return false
 	}
 	for _, prev := range *n.GetPrev() {
@@ -265,7 +265,7 @@ func (g *Graph) createAdjacencyList() (map[string][]string, map[string]Node) {
 	for name, node := range *n.GetNext() {
 		frontier[name] = node
 	}
-	seen[n.GetId()] = n
+	seen[n.Id()] = n
 
 	// Search while the frontier set is non-empty
 	for len(frontier) > 0 {
@@ -309,12 +309,12 @@ func hasCyclesDFS(seen map[string]Node, start Node) bool {
 	for _, next := range *start.GetNext() {
 
 		// If the next node has already been seen, return true
-		if _, ok := seen[next.GetId()]; ok {
+		if _, ok := seen[next.Id()]; ok {
 			return true
 		}
 
 		// Add next node to seen list
-		seen[next.GetId()] = next
+		seen[next.Id()] = next
 
 		// Continue searching after next node
 		if hasCyclesDFS(seen, next) {
@@ -322,7 +322,7 @@ func hasCyclesDFS(seen map[string]Node, start Node) bool {
 		}
 
 		// Remove next node from seen list
-		delete(seen, next.GetId())
+		delete(seen, next.Id())
 	}
 	return false
 }

@@ -52,7 +52,7 @@ type Factories struct {
 	// MakeGeneratorFactory makes a factory of (U)ID generators for jobs within a
 	// request. Generators should be able to generate at least as many IDs as jobs
 	// in the largest possible request.
-	MakeGeneratorFactory func(Context) (id.GeneratorFactory, error)
+	MakeIDGeneratorFactory func(Context) (id.GeneratorFactory, error)
 
 	// Makes list of check factories. Checks may overlap. spec.BaseCheckFactory is
 	// automatically included by caller (does not need to be included here).
@@ -114,10 +114,10 @@ func Defaults() Context {
 	return Context{
 		ShutdownChan: make(chan struct{}),
 		Factories: Factories{
-			MakeGeneratorFactory: MakeGeneratorFactory,
-			MakeCheckFactories:   MakeCheckFactories,
-			MakeJobRunnerClient:  MakeJobRunnerClient,
-			MakeDbConnPool:       MakeDbConnPool,
+			MakeIDGeneratorFactory: MakeIDGeneratorFactory,
+			MakeCheckFactories:     MakeCheckFactories,
+			MakeJobRunnerClient:    MakeJobRunnerClient,
+			MakeDbConnPool:         MakeDbConnPool,
 		},
 		Hooks: Hooks{
 			LoadConfig: LoadConfig,
@@ -146,8 +146,8 @@ func LoadSpecs(ctx Context) (spec.Specs, error) {
 	return spec.ParseSpecsDir(ctx.Config.Specs.Dir, log.Printf)
 }
 
-// MakeGeneratorFactory is the default MakeGeneratorFactory factory.
-func MakeGeneratorFactory(ctx Context) (id.GeneratorFactory, error) {
+// MakeIDGeneratorFactory is the default MakeIDGeneratorFactory factory.
+func MakeIDGeneratorFactory(ctx Context) (id.GeneratorFactory, error) {
 	return id.NewGeneratorFactory(4, 100), nil // generates 4-character ids for jobs
 }
 

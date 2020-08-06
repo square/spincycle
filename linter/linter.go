@@ -35,14 +35,14 @@ func Run(ctx app.Context) error {
 	}
 	ok := checker.RunChecks(specs)
 	if !ok {
-		return fmt.Errorf("spec.checker: error occurred") // checker prints details for us already
+		return fmt.Errorf("static check failed") // checker prints details for us
 	}
 
 	/* Graph checks. */
 	templateG := template.NewGrapher(specs, ctx.Factories.GeneratorFactory, printf)
-	err = templateG.CreateTemplates()
-	if err != nil {
-		return err
+	_, ok = templateG.CreateTemplates()
+	if !ok {
+		return fmt.Errorf("graph check failed") // grapher prints details for us
 	}
 
 	return nil
