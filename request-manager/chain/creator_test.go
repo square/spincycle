@@ -1229,6 +1229,16 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 			"id5": []string{"id9"},
 			"id9": []string{"id2"},
 		},
+		RevEdges: map[string][]string{
+			"id3": []string{"id1"},
+			"id4": []string{"id3"},
+			"id6": []string{"id4"},
+			"id7": []string{"id6"},
+			"id8": []string{"id7"},
+			"id5": []string{"id8"},
+			"id9": []string{"id5"},
+			"id2": []string{"id9"},
+		},
 	}
 	if diff := deep.Equal(got.Edges, expect.Edges); diff != nil {
 		t.Logf("   got: %#v", got.Edges)

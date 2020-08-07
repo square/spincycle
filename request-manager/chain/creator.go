@@ -290,7 +290,7 @@ func (o *creator) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 				}
 			}
 			if !subgraph.IsValidGraph() {
-				return nil, fmt.Errorf("malformed graph created")
+				return nil, fmt.Errorf("malformed subgraph created")
 			}
 
 			// Add the new node to the map of completed components
@@ -363,19 +363,20 @@ func (o *creator) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 			}
 		}
 		if !wrappedSubgraph.IsValidGraph() {
-			return nil, fmt.Errorf("malformed graph created")
+			return nil, fmt.Errorf("malformed wrappedSubgraph created")
 		}
 
 		// `wrappedSubgraph` is the graph of jobs corresponding directly to this
 		// template node. Insert it between its dependencies and the last node.
 		idMap[templateNode.Id()] = wrappedSubgraph
-		if len(templateNode.Prev) == 0 {
+		prevs := templateGraph.GetPrev(templateNode)
+		if len(prevs) == 0 {
 			// case: template graph's source node
 			g.InsertComponentBetween(wrappedSubgraph, g.First, g.Last)
 		} else {
 			// case: every other node; insert between sink node of previous node's
 			// subgraph, and the last node of the sequence graph
-			for id, _ := range templateNode.Prev {
+			for id, _ := range prevs {
 				prev, ok := idMap[id]
 				if !ok {
 					return nil, fmt.Errorf("could not find previous component of %s (components added out of order)", templateNode.Name())
@@ -384,13 +385,8 @@ func (o *creator) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 			}
 		}
 		if !g.IsValidGraph() {
-			return nil, fmt.Errorf("malformed graph created")
+			return nil, fmt.Errorf("malformed g created")
 		}
-	}
-
-	// Assert g is a well formed graph
-	if !g.IsValidGraph() {
-		return nil, fmt.Errorf("malformed graph created")
 	}
 
 	// Mark all vertices in sequence except start vertex start sequence id
@@ -552,6 +548,7 @@ func (o *creator) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]
 		Last:     n,
 		Vertices: map[string]graph.Node{n.Id(): n},
 		Edges:    map[string][]string{},
+		RevEdges: map[string][]string{},
 	}
 	return g, nil
 }
@@ -581,15 +578,13 @@ func (o *creator) newEmptyGraph(name string, jobArgs map[string]interface{}) (*g
 		return nil, err
 	}
 
-	first.Next[last.Id()] = last
-	last.Prev[first.Id()] = first
-
 	return &graph.Graph{
 		Name:     name,
 		First:    first,
 		Last:     last,
 		Vertices: map[string]graph.Node{first.Id(): first, last.Id(): last},
 		Edges:    map[string][]string{first.Id(): []string{last.Id()}},
+		RevEdges: map[string][]string{last.Id(): []string{first.Id()}},
 	}, nil
 }
 
@@ -620,8 +615,6 @@ func (o *creator) newNoopNode(name string, jobArgs map[string]interface{}) (*Nod
 
 	return &Node{
 		Job:      rj,
-		Next:     map[string]graph.Node{},
-		Prev:     map[string]graph.Node{},
 		NodeName: name,
 	}, nil
 }
@@ -655,8 +648,6 @@ func (o *creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, 
 
 	return &Node{
 		Job:       rj,
-		Next:      map[string]graph.Node{},
-		Prev:      map[string]graph.Node{},
 		NodeName:  j.Name,
 		Args:      originalArgs, // Args is the jobArgs map that this node was created with
 		Retry:     j.Retry,

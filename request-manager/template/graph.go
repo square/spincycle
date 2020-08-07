@@ -14,21 +14,11 @@ type Node struct {
 	Node *spec.Node // sequence node that this graph node represents
 
 	// node metainfo fields
-	NodeId string                // unique ID of node within template
-	Next   map[string]graph.Node // out edges (node id --> *Node)
-	Prev   map[string]graph.Node // in edges (node id --> *Node)
+	NodeId string // unique ID of node within template
 }
 
 func (g *Node) Id() string {
 	return g.NodeId
-}
-
-func (g *Node) GetNext() *map[string]graph.Node {
-	return &g.Next
-}
-
-func (g *Node) GetPrev() *map[string]graph.Node {
-	return &g.Prev
 }
 
 func (g *Node) Name() string {
@@ -61,6 +51,11 @@ func (t *Graph) Iterator() []*Node {
 	return append(t.iterator, t.Graph.Last.(*Node))
 }
 
+// Get previous nodes (in edges) as node id --> node
+func (t *Graph) GetPrev(n graph.Node) map[string]graph.Node {
+	return t.Graph.GetPrev(n)
+}
+
 // Get new (empty) graph with single source and single sink node.
 func newGraph(name string, idgen id.Generator) (*Graph, error) {
 	t := &Graph{
@@ -86,15 +81,13 @@ func (t *Graph) initGraph(name string) error {
 		return err
 	}
 
-	first.Next[last.Id()] = last
-	last.Prev[first.Id()] = first
-
 	t.Graph = graph.Graph{
 		Name:     name,
 		First:    first,
 		Last:     last,
 		Vertices: map[string]graph.Node{first.Id(): first, last.Id(): last},
 		Edges:    map[string][]string{first.Id(): []string{last.Id()}},
+		RevEdges: map[string][]string{last.Id(): []string{first.Id()}},
 	}
 
 	return nil
@@ -108,6 +101,7 @@ func (t *Graph) addNodeAfter(node *Node, prev graph.Node) error {
 		Last:     node,
 		Vertices: map[string]graph.Node{node.Id(): node},
 		Edges:    map[string][]string{},
+		RevEdges: map[string][]string{},
 	}
 	err := t.Graph.InsertComponentBetween(subgraph, prev, t.Graph.Last)
 	if err != nil {
@@ -126,8 +120,6 @@ func (t *Graph) newNode(node *spec.Node) (*Node, error) {
 	return &Node{
 		Node:   node,
 		NodeId: id,
-		Next:   map[string]graph.Node{},
-		Prev:   map[string]graph.Node{},
 	}, nil
 }
 
@@ -146,7 +138,5 @@ func (t *Graph) newNoopNode(name string) (*Node, error) {
 			NodeType: &noopType,
 		},
 		NodeId: id,
-		Next:   map[string]graph.Node{},
-		Prev:   map[string]graph.Node{},
 	}, nil
 }

@@ -20,22 +20,10 @@ type Node struct {
 	SequenceId        string                 // ID for first node in sequence
 	SequenceRetry     uint                   // Number of times to retry a sequence. Only set for first node in sequence.
 	SequenceRetryWait string                 // the time to sleep between sequence retries
-
-	// node metainfo fields
-	Next map[string]graph.Node
-	Prev map[string]graph.Node
 }
 
 func (g *Node) Id() string {
 	return g.Job.Id().Id
-}
-
-func (g *Node) GetNext() *map[string]graph.Node {
-	return &g.Next
-}
-
-func (g *Node) GetPrev() *map[string]graph.Node {
-	return &g.Prev
 }
 
 func (g *Node) Name() string {

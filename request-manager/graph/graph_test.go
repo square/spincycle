@@ -5,6 +5,8 @@ package graph
 import (
 	"fmt"
 	"testing"
+
+	"github.com/go-test/deep"
 )
 
 type mockNode struct {
@@ -19,14 +21,6 @@ func (n *mockNode) Id() string {
 
 func (n *mockNode) Name() string {
 	return n.NodeId
-}
-
-func (n *mockNode) GetNext() *map[string]Node {
-	return &n.Next
-}
-
-func (n *mockNode) GetPrev() *map[string]Node {
-	return &n.Prev
 }
 
 func (n *mockNode) String() string {
@@ -66,6 +60,10 @@ func g1() *Graph {
 		Edges: map[string][]string{
 			"g1n1": []string{"g1n2"},
 			"g1n2": []string{"g1n3"},
+		},
+		RevEdges: map[string][]string{
+			"g1n2": []string{"g1n1"},
+			"g1n3": []string{"g1n2"},
 		},
 	}
 }
@@ -175,6 +173,27 @@ func g2() *Graph {
 			"g2n18": []string{"g2n14"},
 			"g2n19": []string{"g2n16"},
 		},
+		RevEdges: map[string][]string{
+			"g2n1":  []string{"g2n0"},
+			"g2n2":  []string{"g2n1"},
+			"g2n3":  []string{"g2n2"},
+			"g2n4":  []string{"g2n2"},
+			"g2n5":  []string{"g2n1"},
+			"g2n6":  []string{"g2n1"},
+			"g2n7":  []string{"g2n3"},
+			"g2n8":  []string{"g2n4", "g2n7"},
+			"g2n9":  []string{"g2n5"},
+			"g2n10": []string{"g2n6"},
+			"g2n11": []string{"g2n10"},
+			"g2n12": []string{"g2n9", "g2n11"},
+			"g2n13": []string{"g2n8"},
+			"g2n14": []string{"g2n12", "g2n13", "g2n18"},
+			"g2n15": []string{"g2n16"},
+			"g2n16": []string{"g2n19"},
+			"g2n17": []string{"g2n16"},
+			"g2n18": []string{"g2n15", "g2n17"},
+			"g2n19": []string{"g2n10"},
+		},
 	}
 }
 
@@ -216,7 +235,72 @@ func g3() *Graph {
 			"g3n2": []string{"g3n4"},
 			"g3n3": []string{"g3n4"},
 		},
+		RevEdges: map[string][]string{
+			"g3n2": []string{"g3n1"},
+			"g3n3": []string{"g3n1"},
+			"g3n4": []string{"g3n2", "g3n3"},
+		},
 	}
+}
+
+func testGetNext(t *testing.T, g *Graph) {
+	for _, n := range g.Vertices {
+		node, ok := n.(*mockNode)
+		if !ok {
+			t.Fatalf("Expected *mockNode, got %T", n)
+		}
+
+		next := g.GetNext(node)
+		actualNext := node.Next
+		if diff := deep.Equal(next, actualNext); diff != nil {
+			t.Error(diff)
+		}
+	}
+}
+
+func TestGetNext1(t *testing.T) {
+	g := g1()
+	testGetNext(t, g)
+}
+
+func TestGetNext2(t *testing.T) {
+	g := g2()
+	testGetNext(t, g)
+}
+
+func TestGetNext3(t *testing.T) {
+	g := g3()
+	testGetNext(t, g)
+}
+
+func testGetPrev(t *testing.T, g *Graph) {
+	for _, n := range g.Vertices {
+		node, ok := n.(*mockNode)
+		if !ok {
+			t.Fatalf("Expected *mockNode, got %T", n)
+		}
+
+		prev := g.GetPrev(node)
+		actualPrev := node.Prev
+		if diff := deep.Equal(prev, actualPrev); diff != nil {
+			t.Error(diff)
+		}
+	}
+}
+
+func TestGetPrev1(t *testing.T) {
+	g := g1()
+	testGetPrev(t, g)
+}
+
+func TestGetPrev2(t *testing.T) {
+	g := g2()
+	testGetPrev(t, g)
+}
+
+func TestGetPrev3(t *testing.T) {
+	g := g3()
+	testGetPrev(t, g)
 }
 
 func TestCreateAdjacencyList1(t *testing.T) {
