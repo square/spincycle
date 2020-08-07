@@ -39,7 +39,7 @@ func verifyDecomGraph(t *testing.T, grapher *Grapher) {
 	if !ok {
 		t.Fatalf("could not find template for sequence %s", sequence)
 	}
-	g = &template.Graph
+	g = &template.graph
 
 	startNode = g.First.Id()
 	currentStep = g.Edges[startNode]
@@ -72,7 +72,7 @@ func verifyDecomGraph(t *testing.T, grapher *Grapher) {
 	if !ok {
 		t.Fatalf("could not find template for sequence %s", sequence)
 	}
-	g = &template.Graph
+	g = &template.graph
 
 	startNode = g.First.Id()
 	currentStep = g.Edges[startNode]
@@ -90,7 +90,7 @@ func verifyDecomGraph(t *testing.T, grapher *Grapher) {
 	if !ok {
 		t.Fatalf("could not find template for sequence %s", sequence)
 	}
-	g = &template.Graph
+	g = &template.graph
 
 	startNode = g.First.Id()
 	currentStep = g.Edges[startNode]
@@ -163,7 +163,7 @@ func TestCreateDestroyConditionalGraph(t *testing.T) {
 	if !ok {
 		t.Fatalf("could not find template for sequence %s", sequence)
 	}
-	g = &template.Graph
+	g = &template.graph
 
 	startNode = g.First.Id()
 	currentStep = g.Edges[startNode]

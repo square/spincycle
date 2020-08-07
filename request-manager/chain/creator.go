@@ -558,7 +558,7 @@ func (o *creator) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]
 func (o *creator) newEmptyGraph(name string, jobArgs map[string]interface{}) (*graph.Graph, error) {
 	var err error
 
-	jobArgsCopy, err := remapNodeArgs(noopSpec, jobArgs)
+	jobArgsCopy, err := remapNodeArgs(&spec.NoopNode, jobArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -573,7 +573,7 @@ func (o *creator) newEmptyGraph(name string, jobArgs map[string]interface{}) (*g
 		return nil, err
 	}
 
-	err = setNodeArgs(noopSpec, jobArgs, jobArgsCopy)
+	err = setNodeArgs(&spec.NoopNode, jobArgs, jobArgsCopy)
 	if err != nil {
 		return nil, err
 	}

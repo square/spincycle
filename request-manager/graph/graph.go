@@ -205,26 +205,6 @@ func (g *Graph) connectedToLastNodeDFS(n Node) bool {
 	return true
 }
 
-func (g *Graph) edgesMatchesRevEdges() bool {
-	for source, sinks := range g.Edges {
-		for _, sink := range sinks {
-			revSources, ok := g.RevEdges[sink]
-			if !ok || find(revSources, source) < 0 {
-				return false
-			}
-		}
-	}
-	for revSink, revSources := range g.RevEdges {
-		for _, revSource := range revSources {
-			sinks, ok := g.Edges[revSource]
-			if !ok || find(sinks, revSink) < 0 {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 // Returns true if n is reachable from the first node in g
 func (g *Graph) connectedToFirstNodeDFS(n Node) bool {
 	if n == nil {
@@ -242,6 +222,27 @@ func (g *Graph) connectedToFirstNodeDFS(n Node) bool {
 		connected := g.connectedToFirstNodeDFS(prev)
 		if !connected {
 			return false
+		}
+	}
+	return true
+}
+
+// Returns true iff `Edges` represents exactly the same set of edges as `RevEdges`.
+func (g *Graph) edgesMatchesRevEdges() bool {
+	for source, sinks := range g.Edges {
+		for _, sink := range sinks {
+			revSources, ok := g.RevEdges[sink]
+			if !ok || find(revSources, source) < 0 {
+				return false
+			}
+		}
+	}
+	for revSink, revSources := range g.RevEdges {
+		for _, revSource := range revSources {
+			sinks, ok := g.Edges[revSource]
+			if !ok || find(sinks, revSink) < 0 {
+				return false
+			}
 		}
 	}
 	return true

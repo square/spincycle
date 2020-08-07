@@ -10,11 +10,8 @@ import (
 
 // Node in template graph. Implments graph.Node.
 type Node struct {
-	// payload
-	Node *spec.Node // sequence node that this graph node represents
-
-	// node metainfo fields
-	NodeId string // unique ID of node within template
+	Node   *spec.Node // sequence node that this graph node represents
+	NodeId string     // unique ID of node within template
 }
 
 func (g *Node) Id() string {
@@ -32,12 +29,13 @@ func (g *Node) String() string {
 
 // Template graph (containing template nodes). Includes graph itself, some other metainfo,
 // and useful functions.
-// Graph will have a single source and a single sink node. Graph modification functions enforce this.
+// Built by template.Grapher while performing graph checks. Serves as template for creator.Chain
+// when building job chains.
 type Graph struct {
 	// Graph of Nodes. Write operations must be performed using methods below. Can be read directly.
-	Graph graph.Graph
-	// Set of arguments set by sequence described by graph. Can be read/written directly.
-	Sets map[string]bool
+	graph graph.Graph
+	// Set of arguments set by sequence described by graph. Should be read/written directly.
+	sets map[string]bool
 
 	// List of nodes in graph in topological order. All operations, read and write, must be performed using methods below.
 	iterator []*Node
@@ -48,25 +46,25 @@ type Graph struct {
 // Iterate through graph in topological order. Order is not deterministic, but order for
 // a single instance of a template graph will be the same eveyr time.
 func (t *Graph) Iterator() []*Node {
-	return append(t.iterator, t.Graph.Last.(*Node))
+	return append(t.iterator, t.graph.Last.(*Node))
 }
 
 // Get previous nodes (in edges) as node id --> node
 func (t *Graph) GetPrev(n graph.Node) map[string]graph.Node {
-	return t.Graph.GetPrev(n)
+	return t.graph.GetPrev(n)
 }
 
 // Get new (empty) graph with single source and single sink node.
 func newGraph(name string, idgen id.Generator) (*Graph, error) {
 	t := &Graph{
-		Sets:  map[string]bool{},
+		sets:  map[string]bool{},
 		idgen: idgen,
 	}
 	err := t.initGraph(name)
 	if err != nil {
 		return nil, err
 	}
-	t.iterator = []*Node{t.Graph.First.(*Node)}
+	t.iterator = []*Node{t.graph.First.(*Node)}
 	return t, nil
 }
 
@@ -81,7 +79,7 @@ func (t *Graph) initGraph(name string) error {
 		return err
 	}
 
-	t.Graph = graph.Graph{
+	t.graph = graph.Graph{
 		Name:     name,
 		First:    first,
 		Last:     last,
@@ -103,7 +101,7 @@ func (t *Graph) addNodeAfter(node *Node, prev graph.Node) error {
 		Edges:    map[string][]string{},
 		RevEdges: map[string][]string{},
 	}
-	err := t.Graph.InsertComponentBetween(subgraph, prev, t.Graph.Last)
+	err := t.graph.InsertComponentBetween(subgraph, prev, t.graph.Last)
 	if err != nil {
 		return err
 	}
@@ -129,14 +127,10 @@ func (t *Graph) newNoopNode(name string) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	noopCategory := "job"
-	noopType := "noop"
+	noopSpec := spec.NoopNode // copy
+	noopSpec.Name = name
 	return &Node{
-		Node: &spec.Node{
-			Name:     name,
-			Category: &noopCategory,
-			NodeType: &noopType,
-		},
+		Node:   &noopSpec,
 		NodeId: id,
 	}, nil
 }

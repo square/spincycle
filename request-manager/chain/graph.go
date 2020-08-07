@@ -42,9 +42,9 @@ func (g *Node) String() string {
 
 // Graph of actual jobs. Most useful functions are implemented in creator.go. These are just some
 // convenience functions so that callers don't have to do typecasts.
-// Functions assume that all vertices are in fact chain.Nodes. There is no error checking--it just panics.
+// Functions assume that all vertices are in fact 'chain.Node's. There is no error checking--it just panics.
 type Graph struct {
-	Graph graph.Graph // graph of Nodes
+	Graph graph.Graph
 }
 
 func (g *Graph) setSequenceRetryInfo(retry uint, wait string) {
