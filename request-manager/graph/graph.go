@@ -27,24 +27,11 @@ type Node interface {
 	String() string // get implementation-specific attributes
 }
 
-// returns true iff the graph has at least one cycle in it
-func (g *Graph) HasCycles() bool {
-	seen := map[string]Node{g.First.Id(): g.First}
-	return g.hasCyclesDFS(seen, g.First)
-}
-
-// returns true iff every node is reachable from the start node, and every path
-// terminates at the end node
-func (g *Graph) IsConnected() bool {
-	// Check forwards connectivity and backwards connectivity
-	return g.connectedToLastNodeDFS(g.First) && g.connectedToFirstNodeDFS(g.Last)
-}
-
 // Asserts that g is a valid graph (according to Grapher's use case).
 // Ensures that g is acyclic, is connected (not fully connected),
 // and edge map matches reverse edge map.
 func (g *Graph) IsValidGraph() bool {
-	return !g.HasCycles() && g.IsConnected() && g.edgesMatchesRevEdges()
+	return !g.hasCycles() && g.isConnected() && g.edgesMatchesRevEdges()
 }
 
 // Get out edges of node (node id --> Node)
@@ -183,6 +170,19 @@ func SlicesMatch(a, b []string) bool {
 
 // --------------------------------------------------------------------------
 
+// returns true iff the graph has at least one cycle in it
+func (g *Graph) hasCycles() bool {
+	seen := map[string]Node{g.First.Id(): g.First}
+	return g.hasCyclesDFS(seen, g.First)
+}
+
+// returns true iff every node is reachable from the start node, and every path
+// terminates at the end node
+func (g *Graph) isConnected() bool {
+	// Check forwards connectivity and backwards connectivity
+	return g.connectedToLastNodeDFS(g.First) && g.connectedToFirstNodeDFS(g.Last)
+}
+
 // Returns true if the last node in g is reachable from n
 func (g *Graph) connectedToLastNodeDFS(n Node) bool {
 	if n == nil {
@@ -246,38 +246,6 @@ func (g *Graph) edgesMatchesRevEdges() bool {
 		}
 	}
 	return true
-}
-
-// Returns a list of edges and vertices. Useful for tests.
-func (g *Graph) createAdjacencyList() (map[string][]string, map[string]Node) {
-	edges := map[string][]string{}
-	vertices := map[string]Node{}
-
-	// Classic BFS
-	frontier := map[string]Node{}
-
-	n := g.First
-	vertices[n.Id()] = n
-	for id, node := range g.GetNext(n) {
-		frontier[id] = node
-		edges[n.Id()] = append(edges[n.Id()], id)
-	}
-
-	for len(frontier) > 0 {
-		for id, node := range frontier {
-			delete(frontier, id)
-			vertices[id] = node
-
-			for nextId, nextNode := range g.GetNext(node) {
-				if _, ok := vertices[nextId]; !ok {
-					frontier[nextId] = nextNode
-				}
-				edges[id] = append(edges[id], nextId)
-			}
-		}
-	}
-
-	return edges, vertices
 }
 
 // Determines if a graph has cycles, using dfs

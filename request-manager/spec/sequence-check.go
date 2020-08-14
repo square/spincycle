@@ -144,14 +144,14 @@ type NoDuplicateArgsSequenceCheck struct{}
 func (check NoDuplicateArgsSequenceCheck) CheckSequence(sequence Sequence) error {
 	seen := map[string]bool{}
 	values := map[string]bool{}
-	for _, args := range [][]*Arg{sequence.Args.Required, sequence.Args.Optional, sequence.Args.Static} {
-		for _, arg := range args {
-			if arg.Name != nil {
-				if seen[*arg.Name] {
-					values[*arg.Name] = true
-				}
-				seen[*arg.Name] = true
+	args := append(sequence.Args.Required, sequence.Args.Optional...)
+	args = append(args, sequence.Args.Static...)
+	for _, arg := range args {
+		if arg.Name != nil {
+			if seen[*arg.Name] {
+				values[*arg.Name] = true
 			}
+			seen[*arg.Name] = true
 		}
 	}
 
@@ -203,6 +203,9 @@ func (check NodesSetsUniqueSequenceCheck) CheckSequence(sequence Sequence) error
 
 	for _, node := range sequence.Nodes {
 		for _, nodeSet := range node.Sets {
+			if nodeSet.As == nil {
+				continue
+			}
 			if setBy, ok := duplicated[*nodeSet.As]; ok {
 				duplicated[*nodeSet.As] = append(setBy, node.Name)
 			} else if setBy, ok := set[*nodeSet.As]; ok {
@@ -223,7 +226,7 @@ func (check NodesSetsUniqueSequenceCheck) CheckSequence(sequence Sequence) error
 			Node:        nil,
 			Field:       "nodes.sets.as",
 			Values:      values,
-			Explanation: "note that if 'as' is not explicitly specified, then its value is the same as 'args'",
+			Explanation: "note that if 'as' is not explicitly specified, then its value is the same as 'arg'",
 		}
 	}
 
@@ -261,7 +264,7 @@ func (check ACLsHaveRolesSequenceCheck) CheckSequence(sequence Sequence) error {
 				Sequence:    sequence.Name,
 				Node:        nil,
 				Field:       "acl.role",
-				Explanation: "'role' may not be the empty string",
+				Explanation: "a non-empty role must be provided",
 			}
 		}
 	}

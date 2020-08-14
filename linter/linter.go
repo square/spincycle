@@ -26,7 +26,7 @@ func Run(ctx app.Context) error {
 	if err != nil {
 		return err
 	}
-	spec.ProcessSpecs(specs)
+	spec.ProcessSpecs(&specs)
 
 	checkFactories := append(ctx.Factories.CheckFactories, spec.BaseCheckFactory{specs})
 	checker, err := spec.NewChecker(checkFactories, printf)

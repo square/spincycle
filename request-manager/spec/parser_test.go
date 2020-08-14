@@ -1,6 +1,6 @@
 // Copyright 2020, Square, Inc.
 
-package spec
+package spec_test
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-test/deep"
 
+	. "github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/test"
 )
 
@@ -104,17 +105,17 @@ func TestProcessSpecs(t *testing.T) {
 			//         - name: required-a
 			//       optional:
 			//         - name: optional-a
-			//           default: value
+			//           default: testVal
 			//       static:
 			//         - name: static-a
-			//           default: value
+			//           default: testVal
 			"seq-a": &Sequence{
 				Name:    "",
 				Request: true,
 				Args: SequenceArgs{
 					Required: []*Arg{&Arg{Name: &requiredA}},
-					Optional: []*Arg{&Arg{Name: &optionalA, Default: &value}},
-					Static:   []*Arg{&Arg{Name: &staticA, Default: &value}},
+					Optional: []*Arg{&Arg{Name: &optionalA, Default: &testVal}},
+					Static:   []*Arg{&Arg{Name: &staticA, Default: &testVal}},
 				},
 				Nodes: map[string]*Node{
 					//       node-a:
@@ -194,7 +195,7 @@ func TestProcessSpecs(t *testing.T) {
 		},
 	}
 
-	err := ProcessSpecs(specs)
+	err := ProcessSpecs(&specs)
 	if err != nil {
 		t.Fatalf("Error processing specs: %s", err)
 	}
@@ -207,8 +208,8 @@ func TestProcessSpecs(t *testing.T) {
 				Request: true,
 				Args: SequenceArgs{
 					Required: []*Arg{&Arg{Name: &requiredA}},
-					Optional: []*Arg{&Arg{Name: &optionalA, Default: &value}},
-					Static:   []*Arg{&Arg{Name: &staticA, Default: &value}},
+					Optional: []*Arg{&Arg{Name: &optionalA, Default: &testVal}},
+					Static:   []*Arg{&Arg{Name: &staticA, Default: &testVal}},
 				},
 
 				Nodes: map[string]*Node{

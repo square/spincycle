@@ -49,13 +49,15 @@ type Context struct {
 // are sufficient to run the Request Manager. Users can provide custom factories
 // to modify behavior. For example, make Job Runner clients with custom TLS certs.
 type Factories struct {
-	// MakeGeneratorFactory makes a factory of (U)ID generators for jobs within a
+	// MakeIDGeneratorFactory makes a factory of (U)ID generators for jobs within a
 	// request. Generators should be able to generate at least as many IDs as jobs
 	// in the largest possible request.
 	MakeIDGeneratorFactory func(Context) (id.GeneratorFactory, error)
 
-	// Makes list of check factories. Checks may overlap. spec.BaseCheckFactory is
-	// automatically included by caller (does not need to be included here).
+	// Makes list of check factories, which create checks run on request specs on
+	// startup. Checks may appear in multiple factories, since checks should not modify
+	// the specs at all.  spec.BaseCheckFactory is automatically included by caller
+	// (and does not need to be included here).
 	MakeCheckFactories func(Context) ([]spec.CheckFactory, error)
 
 	MakeJobRunnerClient func(Context) (jr.Client, error)

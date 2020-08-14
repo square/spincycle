@@ -1,10 +1,12 @@
 // Copyright 2020, Square, Inc.
 
-package spec
+package spec_test
 
 import (
 	"fmt"
 	"testing"
+
+	. "github.com/square/spincycle/v2/request-manager/spec"
 )
 
 func TestFailRequiredArgsNamedSequenceCheck(t *testing.T) {
@@ -32,14 +34,14 @@ func TestFailRequiredArgsHaveNoDefaultsSequenceCheck(t *testing.T) {
 		Name: seqA,
 		Args: SequenceArgs{
 			Required: []*Arg{
-				&Arg{Name: &value, Default: &value},
+				&Arg{Name: &testVal, Default: &testVal},
 			},
 		},
 	}
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Field:    "args.required.default",
-		Values:   []string{fmt.Sprintf("%s (%s)", value, value)},
+		Values:   []string{fmt.Sprintf("%s (%s)", testVal, testVal)},
 	}
 
 	err := check.CheckSequence(sequence)
@@ -90,21 +92,21 @@ func TestFailNoDuplicateArgsSequenceCheck(t *testing.T) {
 		Name: seqA,
 		Args: SequenceArgs{
 			Required: []*Arg{
-				&Arg{Name: &value},
+				&Arg{Name: &testVal},
 			},
 			Static: []*Arg{
-				&Arg{Name: &value},
+				&Arg{Name: &testVal},
 			},
 		},
 	}
 	expectedErr := DuplicateValueError{
 		Sequence: seqA,
 		Field:    "args.*.name",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckSequence(sequence)
-	compareError(t, err, expectedErr, fmt.Sprintf("accepted two instances of %s in sequence args, expected error", value))
+	compareError(t, err, expectedErr, fmt.Sprintf("accepted two instances of %s in sequence args, expected error", testVal))
 }
 
 func TestFailHasNodesSequenceCheck(t *testing.T) {
@@ -129,18 +131,18 @@ func TestFailNodesSetsUniqueSequenceCheck1(t *testing.T) {
 		Nodes: map[string]*Node{
 			nodeA: &Node{
 				Name: nodeA,
-				Sets: []*NodeSet{&NodeSet{Arg: &value, As: &value}},
+				Sets: []*NodeSet{&NodeSet{Arg: &testVal, As: &testVal}},
 			},
 			nodeB: &Node{
 				Name: nodeA, // Cheat to make the 'Values' field of the returned err predictable
-				Sets: []*NodeSet{&NodeSet{Arg: &value, As: &value}},
+				Sets: []*NodeSet{&NodeSet{Arg: &testVal, As: &testVal}},
 			},
 		},
 	}
 	expectedErr := DuplicateValueError{
 		Sequence: seqA,
 		Field:    "nodes.sets.as",
-		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", value, nodeA, nodeA)},
+		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", testVal, nodeA, nodeA)},
 	}
 	err := check.CheckSequence(sequence)
 	compareError(t, err, expectedErr, "accepted sequence with multiple nodes setting the same arg, expected error")
@@ -152,20 +154,20 @@ func TestFailNodesSetsUniqueSequenceCheck2(t *testing.T) {
 		Name: seqA,
 		Args: SequenceArgs{
 			Required: []*Arg{
-				&Arg{Name: &value},
+				&Arg{Name: &testVal},
 			},
 		},
 		Nodes: map[string]*Node{
 			nodeA: &Node{
 				Name: "this sequence", // Cheat to make the 'Values' field of the returned err predictable
-				Sets: []*NodeSet{&NodeSet{Arg: &value, As: &value}},
+				Sets: []*NodeSet{&NodeSet{Arg: &testVal, As: &testVal}},
 			},
 		},
 	}
 	expectedErr := DuplicateValueError{
 		Sequence: seqA,
 		Field:    "nodes.sets.as",
-		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", value, "this sequence", "this sequence")},
+		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", testVal, "this sequence", "this sequence")},
 	}
 	err := check.CheckSequence(sequence)
 	compareError(t, err, expectedErr, "accepted sequence with multiple nodes setting the same arg, expected error")
@@ -212,14 +214,14 @@ func TestFailNoDuplicateACLRolesSequenceCheck(t *testing.T) {
 	sequence := Sequence{
 		Name: seqA,
 		ACL: []ACL{
-			ACL{Role: value},
-			ACL{Role: value},
+			ACL{Role: testVal},
+			ACL{Role: testVal},
 		},
 	}
 	expectedErr := DuplicateValueError{
 		Sequence: seqA,
 		Field:    "acl.role",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckSequence(sequence)

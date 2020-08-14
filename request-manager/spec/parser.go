@@ -30,7 +30,7 @@ func ParseSpec(specFile string, logFunc func(string, ...interface{})) (Specs, er
 		if err != nil {
 			return spec, err
 		}
-		logFunc("Warning: %s", warn)
+		logFunc("Warning: %s: %s", specFile, warn)
 	}
 
 	return spec, nil
@@ -90,7 +90,8 @@ func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs
 }
 
 // Specs require some processing after we've loaded them, but before we run the checker on them.
-func ProcessSpecs(specs Specs) error {
+// Function modifies specs passed in.
+func ProcessSpecs(specs *Specs) error {
 	for sequenceName, sequence := range specs.Sequences {
 		sequence.Name = sequenceName
 

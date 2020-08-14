@@ -35,11 +35,15 @@ type ValidCategoryNodeCheck struct{}
 /* 'category: (job | sequence | conditional)' */
 func (check ValidCategoryNodeCheck) CheckNode(sequenceName string, node Node) error {
 	if !node.IsJob() && !node.IsSequence() && !node.IsConditional() {
+		var category string
+		if node.Category != nil {
+			category = *node.Category
+		}
 		return InvalidValueError{
 			Sequence: sequenceName,
 			Node:     &node.Name,
 			Field:    "category",
-			Values:   []string{*node.Category},
+			Values:   []string{category},
 			Expected: "(job | sequence | conditional)",
 		}
 	}
@@ -164,14 +168,14 @@ type ArgsExpectedUniqueNodeCheck struct{}
 func (check ArgsExpectedUniqueNodeCheck) CheckNode(sequenceName string, node Node) error {
 	seen := map[string]bool{}
 	values := map[string]bool{}
-	for _, nodeSet := range node.Args {
-		if nodeSet.Expected == nil {
+	for _, nodeArg := range node.Args {
+		if nodeArg.Expected == nil {
 			continue
 		}
-		if seen[*nodeSet.Expected] {
-			values[*nodeSet.Expected] = true
+		if seen[*nodeArg.Expected] {
+			values[*nodeArg.Expected] = true
 		}
-		seen[*nodeSet.Expected] = true
+		seen[*nodeArg.Expected] = true
 	}
 
 	if len(values) > 0 {
@@ -197,16 +201,16 @@ type ArgsNotRenamedTwiceNodeCheck struct{}
 // - expected: y
 //   given: foo
 func (check ArgsNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node Node) error {
-	elements := map[string]string{}
+	expected := map[string]string{}
 	values := map[string]bool{}
-	for _, nodeSet := range node.Args {
-		if nodeSet.Given == nil || nodeSet.Expected == nil {
+	for _, nodeArg := range node.Args {
+		if nodeArg.Given == nil || nodeArg.Expected == nil {
 			continue
 		}
-		if element, ok := elements[*nodeSet.Given]; ok && element != *nodeSet.Expected {
-			values[*nodeSet.Given] = true
+		if element, ok := expected[*nodeArg.Given]; ok && element != *nodeArg.Expected {
+			values[*nodeArg.Given] = true
 		}
-		elements[*nodeSet.Given] = *nodeSet.Expected
+		expected[*nodeArg.Given] = *nodeArg.Expected
 	}
 
 	if len(values) > 0 {
@@ -228,11 +232,11 @@ type EachElementDoesNotDuplicateArgsExpectedNodeCheck struct{}
 /* 'element' in 'each' cannot share a name as an 'expected' job arg. */
 func (check EachElementDoesNotDuplicateArgsExpectedNodeCheck) CheckNode(sequenceName string, node Node) error {
 	expected := map[string]bool{} // All expected args
-	for _, nodeSet := range node.Args {
-		if nodeSet.Expected == nil {
+	for _, nodeArg := range node.Args {
+		if nodeArg.Expected == nil {
 			continue
 		}
-		expected[*nodeSet.Expected] = true
+		expected[*nodeArg.Expected] = true
 	}
 
 	values := map[string]bool{}
@@ -266,11 +270,11 @@ type EachListDoesNotDuplicateArgsGivenNodeCheck struct{}
 /* 'each' cannot take a job arg as a list if it a 'given' job arg. */
 func (check EachListDoesNotDuplicateArgsGivenNodeCheck) CheckNode(sequenceName string, node Node) error {
 	given := map[string]bool{} // All given args
-	for _, nodeSet := range node.Args {
-		if nodeSet.Given == nil || nodeSet.Expected == nil {
+	for _, nodeArg := range node.Args {
+		if nodeArg.Given == nil {
 			continue
 		}
-		given[*nodeSet.Given] = true
+		given[*nodeArg.Given] = true
 	}
 
 	values := map[string]bool{}
@@ -340,7 +344,7 @@ func (check SetsAsUniqueNodeCheck) CheckNode(sequenceName string, node Node) err
 			Node:        &node.Name,
 			Field:       "sets.as",
 			Values:      stringSetToArray(values),
-			Explanation: "note that if 'as' is not explicitly specified, then its value is the same as 'args'",
+			Explanation: "note that if 'as' is not explicitly specified, then its value is the same as 'arg'",
 		}
 	}
 
@@ -352,16 +356,16 @@ type SetsNotRenamedTwiceNodeCheck struct{}
 
 /* A single 'sets' arg cannot be renamed. */
 func (check SetsNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node Node) error {
-	elements := map[string]string{}
+	as := map[string]string{}
 	values := map[string]bool{}
 	for _, nodeSet := range node.Sets {
 		if nodeSet.Arg == nil || nodeSet.As == nil {
 			continue
 		}
-		if element, ok := elements[*nodeSet.Arg]; ok && element != *nodeSet.As {
+		if element, ok := as[*nodeSet.Arg]; ok && element != *nodeSet.As {
 			values[*nodeSet.Arg] = true
 		}
-		elements[*nodeSet.Arg] = *nodeSet.As
+		as[*nodeSet.Arg] = *nodeSet.As
 	}
 
 	if len(values) > 0 {
@@ -496,7 +500,7 @@ func (check NonconditionalHasTypeNodeCheck) CheckNode(sequenceName string, node 
 /* ========================================================================== */
 type NonconditionalNoIfNodeCheck struct{}
 
-/* Nononditional nodes may not specify 'if'. */
+/* Nonconditional nodes may not specify 'if'. */
 func (check NonconditionalNoIfNodeCheck) CheckNode(sequenceName string, node Node) error {
 	if !node.IsConditional() {
 		if node.If != nil {
@@ -505,7 +509,7 @@ func (check NonconditionalNoIfNodeCheck) CheckNode(sequenceName string, node Nod
 				Node:     &node.Name,
 				Field:    "if",
 				Values:   []string{*node.If},
-				Expected: "no value; noncoditional nodes may not specify if",
+				Expected: "no value; nonconditional nodes may not specify if",
 			}
 		}
 	}
@@ -516,7 +520,7 @@ func (check NonconditionalNoIfNodeCheck) CheckNode(sequenceName string, node Nod
 /* ========================================================================== */
 type NonconditionalNoEqNodeCheck struct{}
 
-/* Nononditional nodes may not specify 'eq'. */
+/* Nonconditional nodes may not specify 'eq'. */
 func (check NonconditionalNoEqNodeCheck) CheckNode(sequenceName string, node Node) error {
 	if !node.IsConditional() {
 		if len(node.Eq) != 0 {
@@ -526,7 +530,7 @@ func (check NonconditionalNoEqNodeCheck) CheckNode(sequenceName string, node Nod
 				Node:     &node.Name,
 				Field:    "eq",
 				Values:   []string{eq},
-				Expected: "no value; noncoditional nodes may not specify eq",
+				Expected: "no value; nonconditional nodes may not specify eq",
 			}
 		}
 	}
@@ -573,40 +577,25 @@ func (check ValidRetryWaitNodeCheck) CheckNode(sequenceName string, node Node) e
 
 /* ========================================================================== */
 type RequiredArgsProvidedNodeCheck struct {
-	specs Specs
+	AllSpecs Specs
 }
 
 /* Sequence and conditional nodes must be provided with their required args. */
 func (check RequiredArgsProvidedNodeCheck) CheckNode(sequenceName string, node Node) error {
-	// List of sequences to check
-	// (This will also include jobs, but we'll ignore them later)
-	var sequences []string
-	if node.NodeType != nil {
-		sequences = []string{*node.NodeType}
-	}
-	for _, seq := range node.Eq {
-		sequences = append(sequences, seq)
+	if node.IsJob() {
+		return nil
 	}
 
+	// List of sequences to check
+	sequences := getCalledSequences(node)
+
 	// Set of all (declared) inputs to a node
-	var declaredArgs = map[string]bool{}
-	for _, nodeArg := range node.Args {
-		if nodeArg.Expected != nil {
-			declaredArgs[*nodeArg.Expected] = true
-		}
-	}
-	for _, each := range node.Each {
-		split := strings.Split(each, ":")
-		if len(split) != 2 {
-			continue
-		}
-		declaredArgs[split[1]] = true
-	}
+	declaredArgs := getInputArgs(node)
 
 	// Check that all required args are present
 	missing := map[string][]string{} // missing arg -> list of sequences that require it
 	for _, sequence := range sequences {
-		seq, ok := check.specs.Sequences[sequence]
+		seq, ok := check.AllSpecs.Sequences[sequence]
 		if !ok {
 			continue
 		}
@@ -647,48 +636,32 @@ func (check RequiredArgsProvidedNodeCheck) CheckNode(sequenceName string, node N
 
 /* ========================================================================== */
 type NoExtraSequenceArgsProvidedNodeCheck struct {
-	specs Specs
+	AllSpecs Specs
 }
 
 /* Sequence and conditional nodes shouldn't provide more than the specified sequence args. */
 func (check NoExtraSequenceArgsProvidedNodeCheck) CheckNode(sequenceName string, node Node) error {
+	if node.IsJob() {
+		return nil
+	}
+
 	// List of sequences to check
-	// (This will also include jobs, but we'll ignore them later)
-	var sequences []string
-	if node.NodeType != nil {
-		sequences = []string{*node.NodeType}
-	}
-	for _, seq := range node.Eq {
-		sequences = append(sequences, seq)
-	}
+	sequences := getCalledSequences(node)
 
 	// Set of all (excess) inputs to a node
 	// Starts out as all the input args
-	var excessArgs = map[string]bool{}
-	for _, nodeArg := range node.Args {
-		if nodeArg.Expected != nil {
-			excessArgs[*nodeArg.Expected] = true
-		}
-	}
-	for _, each := range node.Each {
-		split := strings.Split(each, ":")
-		if len(split) != 2 {
-			continue
-		}
-		excessArgs[split[1]] = true
-	}
+	excessArgs := getInputArgs(node)
 
 	// Delete from 'excessArgs' the ones that actually show up as sequence args to some subsequence
 	for _, sequence := range sequences {
-		seq, ok := check.specs.Sequences[sequence]
+		seq, ok := check.AllSpecs.Sequences[sequence]
 		if !ok {
 			continue
 		}
-		for _, argList := range [][]*Arg{seq.Args.Required, seq.Args.Optional} {
-			for _, arg := range argList {
-				if arg.Name != nil && excessArgs[*arg.Name] {
-					delete(excessArgs, *arg.Name)
-				}
+		args := append(seq.Args.Required, seq.Args.Optional...)
+		for _, arg := range args {
+			if arg.Name != nil && excessArgs[*arg.Name] {
+				delete(excessArgs, *arg.Name)
 			}
 		}
 	}
@@ -714,25 +687,22 @@ func (check NoExtraSequenceArgsProvidedNodeCheck) CheckNode(sequenceName string,
 
 /* ========================================================================== */
 type SubsequencesExistNodeCheck struct {
-	specs Specs
+	AllSpecs Specs
 }
 
 /* All sequences called by the node exist in the specs. */
 func (check SubsequencesExistNodeCheck) CheckNode(sequenceName string, node Node) error {
-	// List of sequences to check
-	var sequences []string
-	if node.IsSequence() {
-		sequences = []string{*node.NodeType}
-	} else if node.IsConditional() {
-		for _, seq := range node.Eq {
-			sequences = append(sequences, seq)
-		}
+	if node.IsJob() {
+		return nil
 	}
+
+	// List of sequences to check
+	sequences := getCalledSequences(node)
 
 	// Check that subsequences exist
 	values := map[string]bool{}
 	for _, sequence := range sequences {
-		_, ok := check.specs.Sequences[sequence]
+		_, ok := check.AllSpecs.Sequences[sequence]
 		if !ok {
 			values[sequence] = true
 		}
@@ -761,4 +731,38 @@ func (check SubsequencesExistNodeCheck) CheckNode(sequenceName string, node Node
 	}
 
 	return nil
+}
+
+/* ========================================================================== */
+// Helper functions
+
+// Get list of all sequences called by node
+func getCalledSequences(node Node) []string {
+	var sequences []string
+	if node.IsSequence() {
+		sequences = []string{*node.NodeType}
+	} else if node.IsConditional() {
+		for _, seq := range node.Eq {
+			sequences = append(sequences, seq)
+		}
+	}
+	return sequences
+}
+
+// Get set of all (declared) inputs to a node (i.e. `args -> expected` and `each -> element`).
+func getInputArgs(node Node) map[string]bool {
+	var declaredArgs = map[string]bool{}
+	for _, nodeArg := range node.Args {
+		if nodeArg.Expected != nil {
+			declaredArgs[*nodeArg.Expected] = true
+		}
+	}
+	for _, each := range node.Each {
+		split := strings.Split(each, ":")
+		if len(split) != 2 {
+			continue
+		}
+		declaredArgs[split[1]] = true
+	}
+	return declaredArgs
 }

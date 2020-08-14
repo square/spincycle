@@ -1,10 +1,12 @@
 // Copyright 2020, Square, Inc.
 
-package spec
+package spec_test
 
 import (
 	"fmt"
 	"testing"
+
+	. "github.com/square/spincycle/v2/request-manager/spec"
 )
 
 func TestFailHasCategoryNodeCheck(t *testing.T) {
@@ -27,13 +29,13 @@ func TestFailValidCategoryNodeCheck(t *testing.T) {
 	check := ValidCategoryNodeCheck{}
 	node := Node{
 		Name:     nodeA,
-		Category: &value,
+		Category: &testVal,
 	}
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "category",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -44,13 +46,13 @@ func TestFailValidEachNodeCheck(t *testing.T) {
 	check := ValidEachNodeCheck{}
 	node := Node{
 		Name: nodeA,
-		Each: []string{value},
+		Each: []string{testVal},
 	}
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "each",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -97,7 +99,7 @@ func TestFailArgsAreNamedNodeCheck(t *testing.T) {
 		Name: nodeA,
 		Args: []*NodeArg{
 			&NodeArg{
-				Given: &value,
+				Given: &testVal,
 			},
 		},
 	}
@@ -117,10 +119,10 @@ func TestFailArgsExpectedUniqueNodeCheck1(t *testing.T) {
 		Name: nodeA,
 		Args: []*NodeArg{
 			&NodeArg{
-				Expected: &value,
+				Expected: &testVal,
 			},
 			&NodeArg{
-				Expected: &value,
+				Expected: &testVal,
 			},
 		},
 	}
@@ -128,7 +130,7 @@ func TestFailArgsExpectedUniqueNodeCheck1(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "args.expected",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -143,11 +145,11 @@ func TestFailArgsExpectedUniqueNodeCheck2(t *testing.T) {
 		Name: nodeA,
 		Args: []*NodeArg{
 			&NodeArg{
-				Expected: &value,
+				Expected: &testVal,
 				Given:    &given1,
 			},
 			&NodeArg{
-				Expected: &value,
+				Expected: &testVal,
 				Given:    &given2,
 			},
 		},
@@ -156,7 +158,7 @@ func TestFailArgsExpectedUniqueNodeCheck2(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "args.expected",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -170,11 +172,11 @@ func TestFailArgsExpectedUniqueNodeCheck3(t *testing.T) {
 		Name: nodeA,
 		Args: []*NodeArg{
 			&NodeArg{
-				Expected: &value,
+				Expected: &testVal,
 				Given:    &given1,
 			},
 			&NodeArg{
-				Expected: &value,
+				Expected: &testVal,
 			},
 		},
 	}
@@ -182,7 +184,7 @@ func TestFailArgsExpectedUniqueNodeCheck3(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "args.expected",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -198,11 +200,11 @@ func TestFailArgsNotRenamedTwiceNodeCheck(t *testing.T) {
 		Args: []*NodeArg{
 			&NodeArg{
 				Expected: &expected1,
-				Given:    &value,
+				Given:    &testVal,
 			},
 			&NodeArg{
 				Expected: &expected2,
-				Given:    &value,
+				Given:    &testVal,
 			},
 		},
 	}
@@ -210,7 +212,7 @@ func TestFailArgsNotRenamedTwiceNodeCheck(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "args.given",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -222,10 +224,10 @@ func TestFailEachElementDoesNotDuplicateArgsExpectedNodeCheck(t *testing.T) {
 	given := "given"
 	node := Node{
 		Name: nodeA,
-		Each: []string{"list:" + value},
+		Each: []string{"list:" + testVal},
 		Args: []*NodeArg{
 			&NodeArg{
-				Expected: &value,
+				Expected: &testVal,
 				Given:    &given,
 			},
 		},
@@ -234,11 +236,11 @@ func TestFailEachElementDoesNotDuplicateArgsExpectedNodeCheck(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "each",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, fmt.Sprintf("allowed two lists to be renamed %s, expected error", value))
+	compareError(t, err, expectedErr, fmt.Sprintf("allowed two lists to be renamed %s, expected error", testVal))
 }
 
 func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck1(t *testing.T) {
@@ -246,11 +248,11 @@ func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck1(t *testing.T) {
 	expected := "expected"
 	node := Node{
 		Name: nodeA,
-		Each: []string{value + ":element"},
+		Each: []string{testVal + ":element"},
 		Args: []*NodeArg{
 			&NodeArg{
 				Expected: &expected,
-				Given:    &value,
+				Given:    &testVal,
 			},
 		},
 	}
@@ -258,22 +260,22 @@ func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck1(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "each",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, fmt.Sprintf("allowed %s to be renamed twice, expected error", value))
+	compareError(t, err, expectedErr, fmt.Sprintf("allowed %s to be renamed twice, expected error", testVal))
 }
 
 func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck2(t *testing.T) {
 	check := EachListDoesNotDuplicateArgsGivenNodeCheck{}
 	node := Node{
 		Name: nodeA,
-		Each: []string{value + ":element"},
+		Each: []string{testVal + ":element"},
 		Args: []*NodeArg{
 			&NodeArg{
-				Expected: &value,
-				Given:    &value,
+				Expected: &testVal,
+				Given:    &testVal,
 			},
 		},
 	}
@@ -281,21 +283,21 @@ func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck2(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "each",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
-	compareError(t, err, expectedErr, fmt.Sprintf("allowed %s to be renamed twice, expected error", value))
+	compareError(t, err, expectedErr, fmt.Sprintf("allowed %s to be renamed twice, expected error", testVal))
 }
 
 func TestEachListDoesNotDuplicateArgsGivenNodeCheck(t *testing.T) {
 	check := EachListDoesNotDuplicateArgsGivenNodeCheck{}
 	node := Node{
 		Name: nodeA,
-		Each: []string{value + ":element"},
+		Each: []string{testVal + ":element"},
 		Args: []*NodeArg{
 			&NodeArg{
-				Expected: &value,
+				Expected: &testVal,
 			},
 		},
 	}
@@ -312,7 +314,7 @@ func TestFailSetsAreNamedNodeCheck(t *testing.T) {
 		Name: nodeA,
 		Sets: []*NodeSet{
 			&NodeSet{
-				As: &value,
+				As: &testVal,
 			},
 		},
 	}
@@ -332,12 +334,12 @@ func TestFailSetsAsUniqueNodeCheck1(t *testing.T) {
 		Name: nodeA,
 		Sets: []*NodeSet{
 			&NodeSet{
-				Arg: &value,
-				As:  &value,
+				Arg: &testVal,
+				As:  &testVal,
 			},
 			&NodeSet{
-				Arg: &value,
-				As:  &value,
+				Arg: &testVal,
+				As:  &testVal,
 			},
 		},
 	}
@@ -345,7 +347,7 @@ func TestFailSetsAsUniqueNodeCheck1(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "sets.as",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -361,11 +363,11 @@ func TestFailSetsAsUniqueNodeCheck2(t *testing.T) {
 		Sets: []*NodeSet{
 			&NodeSet{
 				Arg: &arg1,
-				As:  &value,
+				As:  &testVal,
 			},
 			&NodeSet{
 				Arg: &arg2,
-				As:  &value,
+				As:  &testVal,
 			},
 		},
 	}
@@ -373,7 +375,7 @@ func TestFailSetsAsUniqueNodeCheck2(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "sets.as",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -388,11 +390,11 @@ func TestFailSetsAsUniqueNodeCheck3(t *testing.T) {
 		Sets: []*NodeSet{
 			&NodeSet{
 				Arg: &arg1,
-				As:  &value,
+				As:  &testVal,
 			},
 			&NodeSet{
-				Arg: &value,
-				As:  &value,
+				Arg: &testVal,
+				As:  &testVal,
 			},
 		},
 	}
@@ -400,7 +402,7 @@ func TestFailSetsAsUniqueNodeCheck3(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "sets.as",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -415,11 +417,11 @@ func TestFailSetsNotRenamedTwiceNodeCheck(t *testing.T) {
 		Name: nodeA,
 		Sets: []*NodeSet{
 			&NodeSet{
-				Arg: &value,
+				Arg: &testVal,
 				As:  &as1,
 			},
 			&NodeSet{
-				Arg: &value,
+				Arg: &testVal,
 				As:  &as2,
 			},
 		},
@@ -428,7 +430,7 @@ func TestFailSetsNotRenamedTwiceNodeCheck(t *testing.T) {
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "sets.arg",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -476,13 +478,13 @@ func TestFailConditionalNoTypeNodeCheck(t *testing.T) {
 	node := Node{
 		Name:     nodeA,
 		Category: &conditional,
-		NodeType: &value,
+		NodeType: &testVal,
 	}
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "type",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -542,13 +544,13 @@ func TestFailNonconditionalNoIfNodeCheck(t *testing.T) {
 	check := NonconditionalNoIfNodeCheck{}
 	node := Node{
 		Name: nodeA,
-		If:   &value,
+		If:   &testVal,
 	}
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "if",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -577,7 +579,7 @@ func TestFailRetryIfRetryWaitNodeCheck(t *testing.T) {
 	check := RetryIfRetryWaitNodeCheck{}
 	node := Node{
 		Name:      nodeA,
-		RetryWait: value,
+		RetryWait: testVal,
 	}
 	expectedErr := MissingValueError{
 		Sequence: seqA,
@@ -593,13 +595,13 @@ func TestFailValidRetryWaitNodeCheck(t *testing.T) {
 	check := ValidRetryWaitNodeCheck{}
 	node := Node{
 		Name:      nodeA,
-		RetryWait: value,
+		RetryWait: testVal,
 	}
 	expectedErr := InvalidValueError{
 		Sequence: seqA,
 		Node:     &nodeA,
 		Field:    "retryWait",
-		Values:   []string{value},
+		Values:   []string{testVal},
 	}
 
 	err := check.CheckNode(seqA, node)
@@ -614,7 +616,7 @@ func TestFailRequiredArgsProvidedNodeCheck1(t *testing.T) {
 				Name: seqa,
 				Args: SequenceArgs{
 					Required: []*Arg{
-						&Arg{Name: &value},
+						&Arg{Name: &testVal},
 					},
 				},
 			},
@@ -646,7 +648,7 @@ func TestFailRequiredArgsProvidedNodeCheck2(t *testing.T) {
 				Name: seqa,
 				Args: SequenceArgs{
 					Required: []*Arg{
-						&Arg{Name: &value},
+						&Arg{Name: &testVal},
 					},
 				},
 			},

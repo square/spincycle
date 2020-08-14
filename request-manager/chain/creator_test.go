@@ -81,19 +81,19 @@ func (tj testJob) Run(map[string]interface{}) (job.Return, error) {
 	return job.Return{}, nil
 }
 
-func createGraph(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}) (*Graph, error) {
+func createGraph(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}) (*jobGraph, error) {
 	return createGraph0(t, sequencesFile, requestName, jobArgs, &testFactory{}, id.NewGenerator(4, 100))
 }
 
-func createGraph1(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory) (*Graph, error) {
+func createGraph1(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory) (*jobGraph, error) {
 	return createGraph0(t, sequencesFile, requestName, jobArgs, tf, id.NewGenerator(4, 100))
 }
 
-func createGraph2(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, idgen id.Generator) (*Graph, error) {
+func createGraph2(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, idgen id.Generator) (*jobGraph, error) {
 	return createGraph0(t, sequencesFile, requestName, jobArgs, &testFactory{}, idgen)
 }
 
-func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory, idgen id.Generator) (*Graph, error) {
+func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory, idgen id.Generator) (*jobGraph, error) {
 	req := proto.Request{
 		Id:   "reqABC",
 		Type: requestName,
@@ -103,7 +103,7 @@ func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[s
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec.ProcessSpecs(specs)
+	spec.ProcessSpecs(&specs)
 
 	tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
 	templates, ok := tg.CreateTemplates()
@@ -135,7 +135,7 @@ func TestBuildJobChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec.ProcessSpecs(specs)
+	spec.ProcessSpecs(&specs)
 
 	tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
 	templates, ok := tg.CreateTemplates()
@@ -294,7 +294,7 @@ func TestBuildNestedSequenceJobChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec.ProcessSpecs(specs)
+	spec.ProcessSpecs(&specs)
 
 	tg := template.NewGrapher(specs, id.NewGeneratorFactory(4, 100), t.Logf)
 	templates, ok := tg.CreateTemplates()
@@ -1068,7 +1068,7 @@ func TestOptArgs(t *testing.T) {
 	}
 
 	// Find the node we want
-	var j *Node
+	var j *node
 	for _, node := range chainGraph.getVertices() {
 		if node.Name() == "job1name" {
 			j = node
@@ -1184,43 +1184,43 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 	// Partial nodes from the spec. Just want to verify the name and sequence IDs
 	// are what we expect, and the order expressed by Edges. This lets us see/verify
 	// that defaultSeq is created.
-	id1 := &Node{
+	id1 := &node{
 		NodeName:   "request_request-name_start",
 		SequenceId: "id1",
 	}
-	id3 := &Node{
+	id3 := &node{
 		NodeName:   "request-name_start",
 		SequenceId: "id1",
 	}
-	id4 := &Node{
+	id4 := &node{
 		NodeName:   "conditional_job1name_start",
 		SequenceId: "id4",
 	}
-	id6 := &Node{
+	id6 := &node{
 		NodeName:   "defaultSeq_start",
 		SequenceId: "id4",
 	}
-	id7 := &Node{ // category: job, type: job1
+	id7 := &node{ // category: job, type: job1
 		NodeName:   "job1name",
 		SequenceId: "id4",
 	}
-	id8 := &Node{
+	id8 := &node{
 		NodeName:   "defaultSeq_end",
 		SequenceId: "id4",
 	}
-	id5 := &Node{
+	id5 := &node{
 		NodeName:   "conditional_job1name_end",
 		SequenceId: "id4",
 	}
-	id9 := &Node{
+	id9 := &node{
 		NodeName:   "request-name_end",
 		SequenceId: "id1",
 	}
-	id2 := &Node{
+	id2 := &node{
 		NodeName:   "request_request-name_end",
 		SequenceId: "id1",
 	}
-	vertices := map[string]*Node{
+	vertices := map[string]*node{
 		"id1": id1,
 		"id2": id2,
 		"id3": id3,

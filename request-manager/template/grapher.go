@@ -153,8 +153,10 @@ func (o *Grapher) buildAllSubsequences(subsequences map[string][]string) bool {
 }
 
 // Get the job args that were actually set by subsequences as a map of node name --> (intersection) of set of output job args.
+// (Conditional) nodes must set the args it lists under 'sets' regardless of which condiitonal subsequence is taken. Thus, its
+// set of actually set args is the intersection of the outputs of possible subsequences.
 func (o *Grapher) getActualSets(subsequences map[string][]string) map[string]map[string]bool {
-	actualSets := map[string]map[string]bool{}
+	numTimesSet := map[string]map[string]bool{}
 	for nodeName, nodeSubseqs := range subsequences {
 		actualMap := map[string]int{} // output job arg --> # of subsequences that output it
 		for _, seq := range nodeSubseqs {
@@ -165,14 +167,14 @@ func (o *Grapher) getActualSets(subsequences map[string][]string) map[string]map
 			}
 		}
 
-		actualSets[nodeName] = map[string]bool{}
-		for seq, count := range actualMap {
+		numTimesSet[nodeName] = map[string]bool{}
+		for arg, count := range actualMap {
 			if count == len(nodeSubseqs) {
-				actualSets[nodeName][seq] = true
+				numTimesSet[nodeName][arg] = true
 			}
 		}
 	}
-	return actualSets
+	return numTimesSet
 }
 
 // Get job args declared in `sets` that weren't actually set as map of node name --> list of missing job args.
@@ -228,9 +230,11 @@ func (o *Grapher) getTemplate(seq *spec.Sequence) (*Graph, error) {
 	jobArgs := getAllSequenceArgs(seq)
 
 	// Create a graph node for every node in the spec
-	components := map[*spec.Node]*Node{}
+	// Key on node names--they should be unique within a sequence (otherwise, dependencies
+	// are ill-defined)
+	nodes := map[string]*Node{}
 	for _, node := range seq.Nodes {
-		components[node], err = template.newNode(node)
+		nodes[node.Name], err = template.newNode(node)
 		if err != nil {
 			return nil, err
 		}
@@ -238,21 +242,22 @@ func (o *Grapher) getTemplate(seq *spec.Sequence) (*Graph, error) {
 
 	// Components we've yet to add
 	// It's the complement of the set of nodes in the graph with respect to the set of all nodes
-	componentsToAdd := map[*spec.Node]*Node{}
-	for k, v := range components {
-		componentsToAdd[k] = v
+	nodesToAdd := map[string]*Node{}
+	for k, v := range nodes {
+		nodesToAdd[k] = v
 	}
-	componentsAdded := map[*spec.Node]bool{}
+	nodesAdded := map[string]bool{}
 
-	// Build graph by adding components, starting from the source node, and then
+	// Build graph by adding nodes, starting from the source node, and then
 	// adding all adjacent nodes to the source node, and so on.
-	// We cannot add components in any order because we do not know the reverse dependencies
-	for len(componentsToAdd) > 0 {
+	// We cannot add nodes in any order because we do not know the reverse dependencies
+	for len(nodesToAdd) > 0 {
 
 		componentAdded := false
 
-		for node, component := range componentsToAdd {
-			if dependenciesSatisfied(componentsAdded, node.Dependencies, seq.Nodes) {
+		for nodeName, component := range nodesToAdd {
+			node := seq.Nodes[nodeName]
+			if dependenciesSatisfied(nodesAdded, node.Dependencies) {
 				// Dependencies for node have been satisfied; presumably, all input job args are
 				// present in job args map. If not, it's an error.
 				missingArgs, err := getMissingArgs(node, jobArgs)
@@ -273,8 +278,7 @@ func (o *Grapher) getTemplate(seq *spec.Sequence) (*Graph, error) {
 				} else {
 					// Case: dependencies exist; insert between all its dependencies and the end node
 					for _, dependencyName := range node.Dependencies {
-						dependency := seq.Nodes[dependencyName]
-						prevComponent := components[dependency]
+						prevComponent := nodes[dependencyName]
 						err := template.addNodeAfter(component, prevComponent)
 						if err != nil {
 							return nil, err
@@ -287,20 +291,20 @@ func (o *Grapher) getTemplate(seq *spec.Sequence) (*Graph, error) {
 					jobArgs[*nodeSet.As] = true
 				}
 
-				delete(componentsToAdd, node)
-				componentsAdded[node] = true
+				delete(nodesToAdd, nodeName)
+				nodesAdded[nodeName] = true
 				componentAdded = true
 			}
 
 		}
 
-		// If we were unable to add nodes, there must be a circular dependency, which is an error
+		// If we were unable to add nodes, there must be a cyclical dependency, which is an error
 		if !componentAdded {
-			cs := []string{}
-			for c, _ := range componentsToAdd {
-				cs = append(cs, c.Name)
+			ns := []string{}
+			for n, _ := range nodesToAdd {
+				ns = append(ns, n)
 			}
-			return nil, fmt.Errorf("impossible dependencies found amongst: %v", cs)
+			return nil, fmt.Errorf("cyclical dependencies found amongst: %v", ns)
 		}
 	}
 
@@ -314,10 +318,9 @@ func (o *Grapher) getTemplate(seq *spec.Sequence) (*Graph, error) {
 }
 
 // Check whether the set of nodes in graph (`inGraph`) satisfies all `dependencies`.
-func dependenciesSatisfied(inGraph map[*spec.Node]bool, dependencies []string, nodes map[string]*spec.Node) bool {
+func dependenciesSatisfied(inGraph map[string]bool, dependencies []string) bool {
 	for _, dep := range dependencies {
-		node := nodes[dep]
-		if _, ok := inGraph[node]; !ok {
+		if _, ok := inGraph[dep]; !ok {
 			return false
 		}
 	}

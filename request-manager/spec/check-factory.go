@@ -5,7 +5,7 @@ package spec
 // Generates static checks to be performed on sequence and node specs.
 //
 // Errors are mistakes in the specs that prevent the RM from functioning
-// properly. For example, when a node specifies an invalid value.
+// properly. For example, when a field specifies an invalid value.
 // Errors can also be used to enforce reasonable conventions. For example,
 // sequences should have nodes. Presumably, if a sequence has no nodes, this
 // was an oversight on the writer's part.
@@ -82,16 +82,18 @@ func (c DefaultCheckFactory) MakeSequenceErrorChecks() ([]SequenceCheck, error) 
 		NoDuplicateArgsSequenceCheck{},
 		RequiredArgsHaveNoDefaultsSequenceCheck{},
 		HasNodesSequenceCheck{},
-		NodesSetsUniqueSequenceCheck{},
 	}, nil
 }
 
 func (c DefaultCheckFactory) MakeSequenceWarningChecks() ([]SequenceCheck, error) {
-	return []SequenceCheck{}, nil
+	return []SequenceCheck{
+		NodesSetsUniqueSequenceCheck{},
+	}, nil
 }
 
 func (c DefaultCheckFactory) MakeNodeErrorChecks() ([]NodeCheck, error) {
 	return []NodeCheck{
+		EachElementUniqueNodeCheck{},
 		ArgsExpectedUniqueNodeCheck{},
 		EachElementDoesNotDuplicateArgsExpectedNodeCheck{},
 		SetsAsUniqueNodeCheck{},
@@ -103,8 +105,6 @@ func (c DefaultCheckFactory) MakeNodeErrorChecks() ([]NodeCheck, error) {
 		NonconditionalNoEqNodeCheck{},
 
 		RetryIfRetryWaitNodeCheck{},
-
-		NoExtraSequenceArgsProvidedNodeCheck{c.AllSpecs},
 	}, nil
 }
 
@@ -112,7 +112,9 @@ func (c DefaultCheckFactory) MakeNodeWarningChecks() ([]NodeCheck, error) {
 	return []NodeCheck{
 		EachNotRenamedTwiceNodeCheck{},
 		ArgsNotRenamedTwiceNodeCheck{},
-		EachElementDoesNotDuplicateArgsExpectedNodeCheck{},
+		EachListDoesNotDuplicateArgsGivenNodeCheck{},
 		SetsNotRenamedTwiceNodeCheck{},
+
+		NoExtraSequenceArgsProvidedNodeCheck{c.AllSpecs},
 	}, nil
 }

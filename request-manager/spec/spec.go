@@ -1,15 +1,17 @@
 // Copyright 2020, Square, Inc.
+
 // Structs in this file completely describe the expected structure of the yaml file.
+//
 // Some fields are pointers. Having a field as a pointer allows us to determine
 // whether or not a field was explicitly set: if a field is a pointer, and the field was
 // not explicitly set in the yaml file, the value is nil. If a field is not a pointer, and
 // the field was not explicitly set in the yaml file, the value is the zero value.
+//
 // Some fields must always be explicitly set, even if only to the zero value. These are pointers.
-// Other fields are optional.
-// Sometimes, the zero value is the default value. These are not pointers.
-// If the default value is not the zero value, the field is a pointer.
-// If the zero value is in fact invalid, we need to know whether the user specified the invalid value
-// (and error if they did) or if it was simply not provided (which is not an error). These are pointers.
+//
+// Other fields are optional:
+//   Sometimes, the zero value is the default value. These are not pointers.
+//   If the default value is not the zero value, the field is a pointer.
 
 package spec
 
@@ -52,7 +54,8 @@ type Sequence struct {
 }
 
 // A sequence's arguments. A sequence can have required arguments; any arguments
-// on this list that are missing will result in an error from template.Grapher.
+// on this list that are not provided by the calling sequence will result in an
+// error from template.Grapher.
 // A sequence can also have optional arguemnts; arguments on this list that are
 // missing will not result in an error. Additionally optional arguments can
 // have default values that will be used if not explicitly given.

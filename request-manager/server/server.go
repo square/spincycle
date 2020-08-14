@@ -191,7 +191,7 @@ func (s *Server) Boot() error {
 	if err != nil {
 		return fmt.Errorf("LoadSpecs: %s", err)
 	}
-	spec.ProcessSpecs(specs)
+	spec.ProcessSpecs(&specs)
 	s.appCtx.Specs = specs
 
 	checkFactories, err := s.appCtx.Factories.MakeCheckFactories(s.appCtx)
@@ -208,7 +208,7 @@ func (s *Server) Boot() error {
 	// Generator factory used to generate IDs for jobs in template.Grapher and chain.Creator.
 	gf, err := s.appCtx.Factories.MakeIDGeneratorFactory(s.appCtx)
 	if err != nil {
-		return fmt.Errorf("MakeGeneratorFactory: %s", err)
+		return fmt.Errorf("MakeIDGeneratorFactory: %s", err)
 	}
 
 	// Build and check validity of sequence templates.

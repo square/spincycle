@@ -10,7 +10,7 @@ import (
 
 // Node in template graph. Implments graph.Node.
 type Node struct {
-	Node   *spec.Node // sequence node that this graph node represents
+	Spec   *spec.Node // sequence node that this graph node represents
 	NodeId string     // unique ID of node within template
 }
 
@@ -19,7 +19,7 @@ func (g *Node) Id() string {
 }
 
 func (g *Node) Name() string {
-	return g.Node.Name
+	return g.Spec.Name
 }
 
 // graph prety printer function already prints relevant info; there's nothing to add here
@@ -122,7 +122,7 @@ func (t *Graph) newNode(node *spec.Node) (*Node, error) {
 		return nil, err
 	}
 	return &Node{
-		Node:   node,
+		Spec:   node,
 		NodeId: id,
 	}, nil
 }
@@ -136,7 +136,7 @@ func (t *Graph) newNoopNode(name string) (*Node, error) {
 	noopSpec := spec.NoopNode // copy
 	noopSpec.Name = name
 	return &Node{
-		Node:   &noopSpec,
+		Spec:   &noopSpec,
 		NodeId: id,
 	}, nil
 }

@@ -243,6 +243,107 @@ func g3() *Graph {
 	}
 }
 
+func TestFailHasCycles(t *testing.T) {
+	g2 := g2()
+	if g2.hasCycles() {
+		t.Fatalf("g2.hasCycles() = true, expected false")
+	}
+}
+
+func TestIsConnected(t *testing.T) {
+	g2 := g2()
+	if !g2.isConnected() {
+		t.Fatalf("g2.isConnected() = false, expected true")
+	}
+}
+
+func TestEdgesMatchesRevEdges(t *testing.T) {
+	g2 := g2()
+	if !g2.edgesMatchesRevEdges() {
+		t.Fatalf("g2.edgesMatchesRevEdges() = false, expected true")
+	}
+}
+
+func TestHasCycles(t *testing.T) {
+	g0n1 := newMockNode("g0n1")
+	g0n2 := newMockNode("g0n2")
+	g0n3 := newMockNode("g0n3")
+	g0n4 := newMockNode("g0n4")
+
+	// .---- 3
+	// |     ^
+	// V     |
+	// 1 --> 2 --> 4
+	//
+	//
+	g0 := &Graph{
+		Name:  "g0",
+		First: g0n1,
+		Last:  g0n4,
+		Vertices: map[string]Node{
+			"g0n1": g0n1,
+			"g0n2": g0n2,
+			"g0n3": g0n3,
+			"g0n4": g0n4,
+		},
+		Edges: map[string][]string{
+			"g0n1": []string{"g0n2"},
+			"g0n2": []string{"g0n3", "g0n4"},
+			"g0n3": []string{"g0n1"},
+		},
+		RevEdges: map[string][]string{
+			"g0n1": []string{"g0n3"},
+			"g0n2": []string{"g0n1"},
+			"g0n3": []string{"g0n2"},
+			"g0n4": []string{"g0n2"},
+		},
+	}
+
+	if !g0.hasCycles() {
+		t.Fatalf("g0.hasCycles() = false, expected true")
+	}
+}
+
+func TestFailIsConnected(t *testing.T) {
+	g0n1 := newMockNode("g0n1")
+	g0n2 := newMockNode("g0n2")
+	g0n3 := newMockNode("g0n3")
+
+	//    -> 3
+	//   /
+	// 1 --> 2 (Last)
+	g0 := &Graph{
+		Name:  "g0",
+		First: g0n1,
+		Last:  g0n2,
+		Vertices: map[string]Node{
+			"g0n1": g0n1,
+			"g0n2": g0n2,
+			"g0n3": g0n3,
+		},
+		Edges: map[string][]string{
+			"g0n1": []string{"g0n2", "g0n3"},
+		},
+		RevEdges: map[string][]string{
+			"g0n2": []string{"g0n1"},
+			"g0n3": []string{"g0n1"},
+		},
+	}
+
+	if g0.isConnected() {
+		t.Fatalf("g0.isConnected() = true, expected false")
+	}
+}
+
+func TestFailEdgesMatchesRevEdges(t *testing.T) {
+	g2 := g2()
+	g2.RevEdges = map[string][]string{}
+
+	if g2.edgesMatchesRevEdges() {
+		t.Fatalf("g0.edgesMatchesRevEdges() = true, expected false")
+	}
+}
+
 func testGetNext(t *testing.T, g *Graph) {
 	for _, n := range g.Vertices {
 		node, ok := n.(*mockNode)
@@ -303,84 +404,6 @@ func TestGetPrev3(t *testing.T) {
 	testGetPrev(t, g)
 }
 
-func TestCreateAdjacencyList1(t *testing.T) {
-	g := g1()
-	edges, vertices := g.createAdjacencyList()
-	// check that all the vertex lists match
-	for vertexName, node := range vertices {
-		if n, ok := g.Vertices[vertexName]; !ok || n != node {
-			t.Fatalf("missing %v", n)
-		}
-	}
-	for vertexName, node := range g.Vertices {
-		if n, ok := vertices[vertexName]; !ok || n != node {
-			t.Fatalf("missing %v", n)
-		}
-	}
-	for source, sinks := range edges {
-		if e := g.Edges[source]; !SlicesMatch(e, sinks) {
-			t.Fatalf("missing %s -> %v", source, sinks)
-		}
-	}
-	for source, sinks := range g.Edges {
-		if e := edges[source]; !SlicesMatch(e, sinks) {
-			t.Fatalf("missing %s -> %v", source, sinks)
-		}
-	}
-}
-
-func TestCreateAdjacencyList2(t *testing.T) {
-	g := g2()
-	edges, vertices := g.createAdjacencyList()
-	// check that all the vertex lists match
-	for vertexName, node := range vertices {
-		if n, ok := g.Vertices[vertexName]; !ok || n != node {
-			t.Fatalf("missing %v", n)
-		}
-	}
-	for vertexName, node := range g.Vertices {
-		if n, ok := vertices[vertexName]; !ok || n != node {
-			t.Fatalf("missing %v", n)
-		}
-	}
-	for source, sinks := range edges {
-		if e := g.Edges[source]; !SlicesMatch(e, sinks) {
-			t.Fatalf("missing %s -> %v", source, sinks)
-		}
-	}
-	for source, sinks := range g.Edges {
-		if e := edges[source]; !SlicesMatch(e, sinks) {
-			t.Fatalf("missing %s -> %v", source, sinks)
-		}
-	}
-}
-
-func TestCreateAdjacencyList3(t *testing.T) {
-	g := g3()
-	edges, vertices := g.createAdjacencyList()
-	// check that all the vertex lists match
-	for vertexName, node := range vertices {
-		if n, ok := g.Vertices[vertexName]; !ok || n != node {
-			t.Fatalf("missing %v", n)
-		}
-	}
-	for vertexName, node := range g.Vertices {
-		if n, ok := vertices[vertexName]; !ok || n != node {
-			t.Fatalf("missing %v", n)
-		}
-	}
-	for source, sinks := range edges {
-		if e := g.Edges[source]; !SlicesMatch(e, sinks) {
-			t.Fatalf("missing %s -> %v", source, sinks)
-		}
-	}
-	for source, sinks := range g.Edges {
-		if e := edges[source]; !SlicesMatch(e, sinks) {
-			t.Fatalf("missing %s -> %v", source, sinks)
-		}
-	}
-}
-
 func TestInsertComponentBetween1(t *testing.T) {
 	g1 := g1()
 	g3 := g3()
@@ -409,7 +432,8 @@ func TestInsertComponentBetween1(t *testing.T) {
 		"g3n3": []string{"g3n4"},
 	}
 
-	actualEdges, actualVertices := g3.createAdjacencyList()
+	actualEdges := g3.Edges
+	actualVertices := g3.Vertices
 	for vertexName, node := range actualVertices {
 		if n, ok := expectedVertices[vertexName]; !ok || n != node {
 			t.Fatalf("missing1 %v", n)
@@ -460,7 +484,8 @@ func TestInsertComponentBetween2(t *testing.T) {
 		"g3n3": []string{"g1n1"},
 	}
 
-	actualEdges, actualVertices := g3.createAdjacencyList()
+	actualEdges := g3.Edges
+	actualVertices := g3.Vertices
 	for vertexName, node := range actualVertices {
 		if n, ok := expectedVertices[vertexName]; !ok || n != node {
 			t.Fatalf("missing1 %v", n)
@@ -511,7 +536,8 @@ func TestInsertComponentBetween3(t *testing.T) {
 		"g3n3": []string{"g3n4"},
 	}
 
-	actualEdges, actualVertices := g3.createAdjacencyList()
+	actualEdges := g3.Edges
+	actualVertices := g3.Vertices
 	for vertexName, node := range actualVertices {
 		if n, ok := expectedVertices[vertexName]; !ok || n != node {
 			t.Fatalf("missing1 %v", n)

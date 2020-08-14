@@ -203,7 +203,7 @@ The job args must be type `[]string` of equal lengths. In this example, the job 
 
 ```go
 nodeHostname := []string{"node1", "node2"}
-hsots := []string{"host1", "host2"}
+hosts := []string{"host1", "host2"}
 ```
 
 The syntax is `list:element` where each `jobArg[element]` is initialized from the next value in `list`. The target sequence should require `element`.

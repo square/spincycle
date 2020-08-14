@@ -2,14 +2,18 @@
 
 package spec
 
+// Runs checks on sequence and node specs.
 type Checker struct {
+	// Checks to run. ErrorChecks are fatal on failure. Warnings are not.
 	sequenceErrorChecks   []SequenceCheck
 	sequenceWarningChecks []SequenceCheck
 	nodeErrorChecks       []NodeCheck
 	nodeWarningChecks     []NodeCheck
-	logFunc               func(string, ...interface{})
+	// Printf-like function used to log warnings and errors should they occur.
+	logFunc func(string, ...interface{})
 }
 
+// Create a new Checker with the checks specified by check factories in list.
 func NewChecker(checkFactories []CheckFactory, logFunc func(string, ...interface{})) (*Checker, error) {
 	checker := &Checker{
 		sequenceErrorChecks:   []SequenceCheck{},
@@ -49,10 +53,9 @@ func NewChecker(checkFactories []CheckFactory, logFunc func(string, ...interface
 }
 
 // Runs checks on allSpecs.
-// 'logFunc' is a Printf-like function used to log warnings and errors should they occur.
-// If any error is logged, this function returns an error.
-func (checker *Checker) RunChecks(allSpecs Specs) bool {
-	errOccurred := false
+// If any error is logged, this function returns false. If no errors occur, returns true.
+func (checker *Checker) RunChecks(allSpecs Specs) (errOccurred bool) {
+	errOccurred = false
 
 	for _, sequence := range allSpecs.Sequences {
 		for _, sequenceCheck := range checker.sequenceErrorChecks {

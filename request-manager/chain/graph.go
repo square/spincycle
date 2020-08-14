@@ -10,7 +10,7 @@ import (
 )
 
 // Node in job graph. Implements graph.Node.
-type Node struct {
+type node struct {
 	// payload
 	Job               job.Job                // runnable job that this graph node represents
 	NodeName          string                 // name of node
@@ -22,15 +22,15 @@ type Node struct {
 	SequenceRetryWait string                 // the time to sleep between sequence retries
 }
 
-func (g *Node) Id() string {
+func (g *node) Id() string {
 	return g.Job.Id().Id
 }
 
-func (g *Node) Name() string {
+func (g *node) Name() string {
 	return g.NodeName
 }
 
-func (g *Node) String() string {
+func (g *node) String() string {
 	var s string
 	s += fmt.Sprintf("Sequence ID: %s\\n ", g.SequenceId)
 	s += fmt.Sprintf("Sequence Retry: %v ", g.SequenceRetry)
@@ -43,21 +43,21 @@ func (g *Node) String() string {
 // Graph of actual jobs. Most useful functions are implemented in creator.go. These are just some
 // convenience functions so that callers don't have to do typecasts.
 // Functions assume that all vertices are in fact 'chain.Node's. There is no error checking--it just panics.
-type Graph struct {
+type jobGraph struct {
 	Graph graph.Graph
 }
 
-func (g *Graph) setSequenceRetryInfo(retry uint, wait string) {
-	n, _ := g.Graph.First.(*Node)
+func (g *jobGraph) setSequenceRetryInfo(retry uint, wait string) {
+	n, _ := g.Graph.First.(*node)
 	n.SequenceRetry = retry
 	n.SequenceRetryWait = wait
 }
 
 // Cast Graph.Vertices to map of chain.Nodes
-func (g *Graph) getVertices() map[string]*Node {
-	m := map[string]*Node{}
+func (g *jobGraph) getVertices() map[string]*node {
+	m := map[string]*node{}
 	for jobId, graphNode := range g.Graph.Vertices {
-		node, _ := graphNode.(*Node)
+		node, _ := graphNode.(*node)
 		m[jobId] = node
 	}
 	return m

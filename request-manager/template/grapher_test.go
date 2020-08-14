@@ -21,7 +21,7 @@ func MakeGrapher(t *testing.T, sequencesFile string, logFunc func(string, ...int
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec.ProcessSpecs(specs)
+	spec.ProcessSpecs(&specs)
 
 	return NewGrapher(specs, id.NewGeneratorFactory(4, 100), logFunc)
 }
@@ -113,11 +113,7 @@ func TestCreateDecomGraph(t *testing.T) {
 	if !ok {
 		t.Fatal("unexpected error creating templates")
 	}
-	verifyDecomGraph(t, grapher)
-	_, ok = grapher.CreateTemplates()
-	if !ok {
-		t.Fatal("unexpected error creating templates")
-	}
+
 	verifyDecomGraph(t, grapher)
 }
 
@@ -134,13 +130,17 @@ func TestCreateDecomGraphTwice(t *testing.T) {
 }
 
 func TestCreateDecomSetsGraph(t *testing.T) {
-	sequenceFile := "decomm-sets.yaml"
+	sequenceFile := "decomm.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
 	_, ok := grapher.CreateTemplates()
 	if !ok {
 		t.Fatal("unexpected error creating templates")
 	}
-
+	verifyDecomGraph(t, grapher)
+	_, ok = grapher.CreateTemplates()
+	if !ok {
+		t.Fatal("unexpected error creating templates")
+	}
 	verifyDecomGraph(t, grapher)
 }
 

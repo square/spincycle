@@ -1,12 +1,13 @@
 // Copyright 2020, Square, Inc.
 
-package spec
+package spec_test
 
 import (
 	"testing"
 
 	"github.com/go-test/deep"
 
+	. "github.com/square/spincycle/v2/request-manager/spec"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
 )
 
@@ -14,7 +15,7 @@ var (
 	specsDir = rmtest.SpecPath + "/"
 	seqA     = "seq-a"
 	nodeA    = "node-a"
-	value    = "value"
+	testVal  = "testVal"
 )
 
 func compareError(t *testing.T, err, expectedErr error, errMsg string) {

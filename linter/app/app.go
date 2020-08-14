@@ -24,7 +24,7 @@ type Factories struct {
 }
 
 type Hooks struct {
-	LoadSpecs func(string, func(string, ...interface{})) (spec.Specs, error)
+	LoadSpecs func(specsDir string, logFunc func(string, ...interface{})) (spec.Specs, error)
 }
 
 func Defaults() Context {

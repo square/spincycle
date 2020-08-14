@@ -176,7 +176,7 @@ func (o *creator) BuildJobChain(jobArgs map[string]interface{}) (*proto.JobChain
 }
 
 // (Recursively) build a sequence.
-func (o *creator) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
+func (o *creator) buildSequence(cfg buildSequenceConfig) (*jobGraph, error) {
 	sequenceName := cfg.sequenceName
 	jobArgs := cfg.jobArgs
 
@@ -212,7 +212,7 @@ func (o *creator) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 	// graph.
 	idMap := map[string]*graph.Graph{} // template node id --> corresponding subgraph
 	for _, templateNode := range templateGraph.Iterator() {
-		n := templateNode.Node
+		n := templateNode.Spec
 
 		// Find out how many times this node has to be repeated
 		elements, lists, err := o.getIterators(n, jobArgs)
@@ -396,7 +396,7 @@ func (o *creator) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 	// sequence. The SequenceId for the first vertex in the sequence will be set
 	// on a subsequent pass. Lastly, the first vertex in the completed graph will
 	// have no SequenceId set, as that vertex is part of a larger sequence.
-	chainGraph := &Graph{*g}
+	chainGraph := &jobGraph{*g}
 	sequenceId := g.First.Id()
 	for _, vertex := range chainGraph.getVertices() {
 		// TODO(alyssa): Add `ParentSequenceId` to start vertex of each sequence.
@@ -421,6 +421,9 @@ func (o *creator) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 func chooseConditional(n *spec.Node, jobArgs map[string]interface{}) (string, error) {
 	// Node is a conditional, check the value of the "if" jobArg
 	val, ok := jobArgs[*n.If]
+	if !ok {
+		return "", fmt.Errorf("'if' not provided")
+	}
 	valstring, ok := val.(string)
 	if !ok {
 		return "", fmt.Errorf("'if' arg '%s' is not a string", *n.If)
@@ -490,11 +493,15 @@ func (o *creator) getIterators(n *spec.Node, args map[string]interface{}) ([]str
 	}
 
 	// Validate that the elements all have variable names
-	// @todo: I presume this means each: x\n y  len(x)==len(y) so we have an
-	//        "even" number of iterable values?
-	// @todo: fix, it doesn't catch uneven list len
 	if len(lists) != len(elements) || len(elements) < 1 {
 		return nil, nil, fmt.Errorf("args have different len")
+	}
+	// Check that all lists are the same length
+	listLen := len(lists[0])
+	for _, list := range lists {
+		if len(list) != listLen {
+			return nil, nil, fmt.Errorf("each lists have different lengths")
+		}
 	}
 
 	return elements, lists, nil
@@ -590,7 +597,7 @@ func (o *creator) newEmptyGraph(name string, jobArgs map[string]interface{}) (*g
 
 // NewStartNode creates an empty "start" node. There is no job defined for this node, but it can serve
 // as a marker for a sequence/request.
-func (o *creator) newNoopNode(name string, jobArgs map[string]interface{}) (*Node, error) {
+func (o *creator) newNoopNode(name string, jobArgs map[string]interface{}) (*node, error) {
 	id, err := o.IdGen.UID()
 	if err != nil {
 		return nil, fmt.Errorf("Error making id for no-op node %s: %s", name, err)
@@ -613,14 +620,14 @@ func (o *creator) newNoopNode(name string, jobArgs map[string]interface{}) (*Nod
 		return nil, fmt.Errorf("Error creating no-op node %s: %s", name, err)
 	}
 
-	return &Node{
+	return &node{
 		Job:      rj,
 		NodeName: name,
 	}, nil
 }
 
 // newNode creates a node for the given job j
-func (o *creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, error) {
+func (o *creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*node, error) {
 	// Make a copy of the jobArgs before this node gets created and potentially
 	// adds additional keys to the jobArgs. A shallow copy is sufficient because
 	// args values should never change.
@@ -646,7 +653,7 @@ func (o *creator) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, 
 		return nil, fmt.Errorf("Error creating '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
-	return &Node{
+	return &node{
 		Job:       rj,
 		NodeName:  j.Name,
 		Args:      originalArgs, // Args is the jobArgs map that this node was created with

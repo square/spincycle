@@ -1,11 +1,13 @@
 // Copyright 2020, Square, Inc.
 
-package spec
+package spec_test
 
 import (
 	"fmt"
 	"strings"
 	"testing"
+
+	. "github.com/square/spincycle/v2/request-manager/spec"
 )
 
 // Dummy check objects that always fail or always pass.
@@ -116,7 +118,6 @@ func TestPassWithWarningRunChecks(t *testing.T) {
 		t.Error("RunChecks reports some error, expected success")
 	}
 
-	// Check that nothing was printed (if anything was printed, it's an error or warning)
 	// Check that all warnings were printed properly
 	seqWarningFound := false
 	nodeWarningFound := false
