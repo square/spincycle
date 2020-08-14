@@ -271,6 +271,21 @@ func TestBuildJobChain(t *testing.T) {
 		test.Dump(actualJobChain.Jobs)
 		t.Errorf("job chain AdjacencyList len = %d, expected 6", len(actualJobChain.AdjacencyList))
 	}
+
+	jc := actualJobChain
+	fmt.Println("digraph G {")
+
+	for k, v := range jc.Jobs {
+		fmt.Printf("\t\"%s\" [label=\"%s\\njob: %s\"]\n", k, v.Name, v.Type)
+	}
+
+	for k, vs := range jc.AdjacencyList {
+		for _, v := range vs {
+			fmt.Printf("\t\"%s\" -> \"%s\";\n", k, v)
+		}
+	}
+
+	fmt.Println("}")
 }
 
 func TestBuildNestedSequenceJobChain(t *testing.T) {
@@ -473,6 +488,8 @@ func TestCreateDecomGraph(t *testing.T) {
 		t.Fatal(err)
 	}
 	verifyDecomGraph(t, &chainGraph.Graph)
+
+	chainGraph.Graph.PrintDot()
 }
 
 func TestCreateDecomSetsGraph(t *testing.T) {

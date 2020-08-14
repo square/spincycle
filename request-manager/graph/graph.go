@@ -141,7 +141,7 @@ func (g *Graph) PrintDot() {
 		fmt.Printf("\tnode [style=filled,color=\"%s\",shape=box]\n", "#86cedf")
 		fmt.Printf("\t\"%s\" [label=\"%s\\n ", vertexName, vertex.Name())
 		fmt.Printf("Vertex ID: %s\\n ", vertex.Id())
-		fmt.Printf("%v\n", vertex)
+		fmt.Printf("%v\\n", vertex)
 		fmt.Printf("\"]\n")
 	}
 	for out, ins := range g.Edges {

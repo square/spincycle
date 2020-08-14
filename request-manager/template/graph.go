@@ -39,6 +39,8 @@ type Graph struct {
 
 	// List of nodes in graph in topological order. All operations, read and write, must be performed using methods below.
 	iterator []*Node
+	// Make sure we don't duplicate nodes.
+	iteratorSet map[*Node]bool
 	// Generates UIDs for this graph. Should not be accessed externally.
 	idgen id.Generator
 }
@@ -65,6 +67,7 @@ func newGraph(name string, idgen id.Generator) (*Graph, error) {
 		return nil, err
 	}
 	t.iterator = []*Node{t.graph.First.(*Node)}
+	t.iteratorSet = map[*Node]bool{t.graph.First.(*Node): true}
 	return t, nil
 }
 
@@ -105,7 +108,10 @@ func (t *Graph) addNodeAfter(node *Node, prev graph.Node) error {
 	if err != nil {
 		return err
 	}
-	t.iterator = append(t.iterator, node)
+	if !t.iteratorSet[node] {
+		t.iterator = append(t.iterator, node)
+		t.iteratorSet[node] = true
+	}
 	return nil
 }
 
