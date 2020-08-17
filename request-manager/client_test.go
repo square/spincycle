@@ -190,7 +190,7 @@ func TestFindRequestsSuccess(t *testing.T) {
 		t.Error(diff)
 	}
 
-	expectedPath := "/api/v1/requests/"
+	expectedPath := "/api/v1/requests"
 	if path != expectedPath {
 		t.Errorf("url path = %s, expected %s", path, expectedPath)
 	}
