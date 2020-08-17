@@ -104,7 +104,7 @@ func (c *client) GetRequest(requestId string) (proto.Request, error) {
 
 func (c *client) FindRequests(filter proto.RequestFilter) ([]proto.Request, error) {
 	// GET /api/v1/requests
-	url := c.baseUrl + "/api/v1/requests/?" + filter.String()
+	url := c.baseUrl + "/api/v1/requests?" + filter.String()
 
 	var requests []proto.Request
 	err := c.makeRequest("GET", url, nil, &requests)
