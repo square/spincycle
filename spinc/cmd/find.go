@@ -3,12 +3,10 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
-
-	"github.com/alexflint/go-arg"
 
 	"github.com/square/spincycle/v2/proto"
 	"github.com/square/spincycle/v2/spinc/app"
@@ -35,19 +33,6 @@ type Find struct {
 	filter proto.RequestFilter
 }
 
-// Expected arguments to this command
-type FindCmd struct {
-	Type   string   `help:"type of request to return"`
-	States []string `help:"request states to include"`
-	User   string   `help:"user who made the request"`
-
-	Since string `help:"return requests created or run after this time (format: %s)"`
-	Until string `help:"return requests created or run before this time (format; %s)"`
-
-	Limit  uint `help:"limit response to this many requests"`
-	Offset uint `help:"skip the first <offset> requests, ignored if <limit> not set"`
-}
-
 func NewFind(ctx app.Context) *Find {
 	return &Find{
 		ctx: ctx,
@@ -56,58 +41,100 @@ func NewFind(ctx app.Context) *Find {
 
 func (c *Find) Prepare() error {
 	/* Parse. */
-	cmd := FindCmd{}
-	parser, err := arg.NewParser(arg.Config{Program: "spinc find"}, &cmd)
-	if err != nil {
-		return fmt.Errorf("Error in arg.Parser: %s", err)
+	validFilters := map[string]bool{
+		"type":   true,
+		"states": true,
+		"user":   true,
+		"since":  true,
+		"until":  true,
+		"limit":  true,
+		"offset": true,
 	}
-
-	err = parser.Parse(c.ctx.Command.Args)
-	if err != nil {
-		return fmt.Errorf("Error parsing args: %s", err)
-	}
-
-	/* Further process some args. */
-	states := make([]byte, 0, len(cmd.States))
-	for _, state := range cmd.States {
-		val, ok := proto.StateValue[state]
-		if !ok {
-			expected := make([]string, 0, len(proto.StateValue))
-			for k, _ := range proto.StateValue {
-				expected = append(expected, k)
-			}
-			return fmt.Errorf("Invalid state %s, expected one of: %s", state, strings.Join(expected, ", "))
+	filters := map[string]string{}
+	for _, arg := range c.ctx.Command.Args {
+		split := strings.SplitN(arg, "=", 2)
+		if len(split) != 2 {
+			return fmt.Errorf("Invalid command arg: %s: split on = produced %d values, expected 2 (key=val)", arg, len(split))
 		}
-		states = append(states, val)
+		filter := split[0]
+		value := split[1]
+
+		if !validFilters[filter] {
+			return fmt.Errorf("Invalid filter '%s'", filter)
+		}
+		if _, ok := filters[filter]; ok {
+			return fmt.Errorf("Filter '%s' specified multiple times", filter)
+		}
+		filters[filter] = value
+
+		if c.ctx.Options.Debug {
+			app.Debug("filter '%s'='%s'", filter, value)
+		}
+	}
+
+	/* Process some args. */
+	var err error
+
+	states := []byte{}
+	if len(filters["states"]) > 0 {
+		for _, state := range strings.Split(filters["states"], ",") {
+			val, ok := proto.StateValue[state]
+			if !ok {
+				expected := make([]string, 0, len(proto.StateValue))
+				for k, _ := range proto.StateValue {
+					expected = append(expected, k)
+				}
+				return fmt.Errorf("Invalid state '%s', expected one of: %s", state, strings.Join(expected, ", "))
+			}
+			states = append(states, val)
+		}
 	}
 
 	var since time.Time
-	if cmd.Since != "" {
-		since, err = time.Parse(findTimeFmtStr, cmd.Since)
+	if filters["since"] != "" {
+		since, err = time.Parse(findTimeFmtStr, filters["since"])
 		if err != nil {
-			return fmt.Errorf("Invalid time %s, expected form %s", cmd.Since, findTimeFmt)
+			return fmt.Errorf("Invalid time %s, expected form '%s'", filters["since"], findTimeFmt)
 		}
 	}
 
 	var until time.Time
-	if cmd.Until != "" {
-		until, err = time.Parse(findTimeFmtStr, cmd.Until)
+	if filters["until"] != "" {
+		until, err = time.Parse(findTimeFmtStr, filters["until"])
 		if err != nil {
-			return fmt.Errorf("Invalid time %s, expected form %s", cmd.Since, findTimeFmt)
+			return fmt.Errorf("Invalid time %s, expected form '%s'", filters["until"], findTimeFmt)
 		}
+	}
+
+	var limit uint
+	if filters["limit"] != "" {
+		l, err := strconv.ParseUint(filters["limit"], 10, strconv.IntSize)
+		if err != nil {
+			return fmt.Errorf("Invalid limit '%s', expected value >= 0", filters["limit"])
+		}
+		limit = uint(l)
+	}
+
+	var offset uint
+	if filters["offset"] != "" {
+		o, err := strconv.ParseUint(filters["offset"], 10, strconv.IntSize)
+		if err != nil {
+			return fmt.Errorf("Invalid offset '%s', expected value >= 0", filters["offset"])
+		}
+		offset = uint(o)
 	}
 
 	/* Build the request filter. */
 	c.filter = proto.RequestFilter{
-		Type:   cmd.Type,
+		Type:   filters["type"],
 		States: states,
-		User:   cmd.User,
+		User:   filters["user"],
 
 		Since: since,
 		Until: until,
 
-		Limit:  cmd.Limit,
-		Offset: cmd.Offset,
+		Limit:  limit,
+		Offset: offset,
 	}
 
 	return nil
@@ -181,17 +208,15 @@ func (c *Find) Cmd() string {
 }
 
 func (c *Find) Help() string {
-	return "'spinc find <args>' retrieves and filters requests.\n" +
-		findUsage()
-}
+	return fmt.Sprintf(`'spinc find [filter=value]' retrieves and filters requests.
 
-func findUsage() string {
-	parser, err := arg.NewParser(arg.Config{Program: "spinc find"}, &FindCmd{})
-	if err != nil {
-		return fmt.Sprintf("Unable to retrieve help message: error in arg.Parser: %s", err)
-	}
-
-	help := &bytes.Buffer{}
-	parser.WriteHelp(help)
-	return fmt.Sprintf(help.String(), findTimeFmt, findTimeFmt)
+Filters:
+  type        type of request to return
+  states      comma-separated list of request states to include
+  user        return only requests made by this user
+  since       return requests created or run after this time (format: %s)
+  until       return requests created or run before this time (format: %s)
+  limit       limit response to this many requests
+  offset      skip the first <offset> requests, ignored if <limit> not set
+`, findTimeFmt, findTimeFmt)
 }

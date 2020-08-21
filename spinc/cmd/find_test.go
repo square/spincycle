@@ -15,9 +15,9 @@ import (
 )
 
 func TestFindPrepare1(t *testing.T) {
-	args := []string{"--type", "requestname", "--states", "RUNNING", "PENDING", "FAIL",
-		"--user", "owner", "--since", "2006-01-02 15:04:05 UTC", "--until",
-		"2006-01-02 15:04:05 UTC", "--limit", "5", "--offset", "3"}
+	args := []string{"type=requestname", "states=RUNNING,PENDING,FAIL",
+		"user=owner", "since=2006-01-02 15:04:05 UTC",
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3"}
 
 	command := config.Command{
 		Args: args,
@@ -35,9 +35,8 @@ func TestFindPrepare1(t *testing.T) {
 }
 
 func TestFindPrepare2(t *testing.T) {
-	args := []string{"--type", "requestname",
-		"--user", "owner", "--until",
-		"2006-01-02 15:04:05 UTC", "--limit", "5"}
+	args := []string{"type=requestname",
+		"user=owner", "until=2006-01-02 15:04:05 UTC", "limit=5"}
 
 	command := config.Command{
 		Args: args,
@@ -55,9 +54,9 @@ func TestFindPrepare2(t *testing.T) {
 }
 
 func TestFailFindPrepare1(t *testing.T) {
-	args := []string{"--type", "--states", "RUNNING", "PENDING", "FAIL",
-		"--user", "owner", "--since", "2006-01-02 15:04:05 UTC", "--until",
-		"2006-01-02 15:04:05 UTC", "--limit", "5", "--offset", "3"}
+	args := []string{"type", "states=RUNNING,PENDING,FAIL",
+		"user=owner", "since=2006-01-02 15:04:05 UTC",
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3"}
 
 	command := config.Command{
 		Args: args,
@@ -76,9 +75,9 @@ func TestFailFindPrepare1(t *testing.T) {
 }
 
 func TestFailFindPrepare2(t *testing.T) {
-	args := []string{"--type", "requestname", "--states", "RUNNING", "PENDING", "FAIL",
-		"--user", "owner", "--since", "2006-01-02", "--until",
-		"2006-01-02 15:04:05 UTC", "--limit", "5", "--offset", "3"}
+	args := []string{"type=requestname", "states=RUNNING,PENDING,FAIL",
+		"user=owner", "since=2006-01-02",
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3"}
 
 	command := config.Command{
 		Args: args,
@@ -97,9 +96,9 @@ func TestFailFindPrepare2(t *testing.T) {
 }
 
 func TestFailFindPrepare3(t *testing.T) {
-	args := []string{"--type", "requestname", "--states", "RUNNING", "not-a-state", "FAIL",
-		"--user", "owner", "--since", "2006-01-02 15:04:05 UTC", "--until",
-		"2006-01-02 15:04:05 UTC", "--limit", "5", "--offset", "3"}
+	args := []string{"type=requestname", "states=RUNNING,not-a-state,FAIL",
+		"user=owner", "since=2006-01-02 15:04:05 UTC",
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3"}
 
 	command := config.Command{
 		Args: args,
