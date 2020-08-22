@@ -14,18 +14,19 @@ import (
 
 const (
 	// formatting for outputing request info
-	findReqColLen   = 20
+	findReqColLen   = 40
 	findIdColLen    = 20
 	findUserColLen  = 9
 	findStateColLen = 9
 	findJobsColLen  = 15
 
 	findTimeFmt    = "YYYY-MM-DD HH:MM:SS UTC" // expected time input format
-	findTimeFmtStr = "2006-01-02 15:04:05 UTC" // expected time input format as the actual format string (input to time.Parse)
+	findTimeFmtStr = "2006-01-02 15:04:05 MST" // expected time input format as the actual format string (input to time.Parse)
 )
 
 var (
 	findTimeColLen = len(findTimeFmt)
+	findUtcIndex   = strings.Index(findTimeFmt, "UTC")
 )
 
 type Find struct {
@@ -41,6 +42,7 @@ func NewFind(ctx app.Context) *Find {
 
 func (c *Find) Prepare() error {
 	/* Parse. */
+	// See command usage for details about each filter
 	validFilters := map[string]bool{
 		"type":   true,
 		"states": true,
@@ -54,7 +56,7 @@ func (c *Find) Prepare() error {
 	for _, arg := range c.ctx.Command.Args {
 		split := strings.SplitN(arg, "=", 2)
 		if len(split) != 2 {
-			return fmt.Errorf("Invalid command arg: %s: split on = produced %d values, expected 2 (key=val)", arg, len(split))
+			return fmt.Errorf("Invalid command arg: %s: split on = produced %d values, expected 2 (filter=value)", arg, len(split))
 		}
 		filter := split[0]
 		value := split[1]
@@ -92,6 +94,9 @@ func (c *Find) Prepare() error {
 
 	var since time.Time
 	if filters["since"] != "" {
+		if strings.Index(filters["since"], "UTC") != findUtcIndex {
+			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d", filters["since"], findUtcIndex)
+		}
 		since, err = time.Parse(findTimeFmtStr, filters["since"])
 		if err != nil {
 			return fmt.Errorf("Invalid time %s, expected form '%s'", filters["since"], findTimeFmt)
@@ -100,6 +105,9 @@ func (c *Find) Prepare() error {
 
 	var until time.Time
 	if filters["until"] != "" {
+		if strings.Index(filters["until"], "UTC") != findUtcIndex {
+			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d", filters["until"], findUtcIndex)
+		}
 		until, err = time.Parse(findTimeFmtStr, filters["until"])
 		if err != nil {
 			return fmt.Errorf("Invalid time %s, expected form '%s'", filters["until"], findTimeFmt)
@@ -159,13 +167,13 @@ func (c *Find) Run() error {
 	}
 
 	/*
-	   REQUEST              ID                    USER      STATE     CREATED STARTED FINISHED JOBS            HOST
-	   12345678901234567890 --------------------  123456789 123456789 ------- ------- -------- 123456789012345 *
+	   ID                   REQUEST                                  USER      STATE     CREATED STARTED FINISHED JOBS            HOST
+	   -------------------- 1234567890123456789012345678901234567890 123456789 123456789 ------- ------- -------- 123456789012345 *
 	*/
 	line := fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%s\n",
-		findReqColLen, findIdColLen, findUserColLen, findStateColLen, findTimeColLen, findTimeColLen, findTimeColLen, findJobsColLen)
+		findIdColLen, findReqColLen, findUserColLen, findStateColLen, findTimeColLen, findTimeColLen, findTimeColLen, findJobsColLen)
 
-	fmt.Fprintf(c.ctx.Out, line, "REQUEST", "ID", "USER", "STATE", "CREATED", "STARTED", "FINISHED", "JOBS", "HOST")
+	fmt.Fprintf(c.ctx.Out, line, "ID", "REQUEST", "USER", "STATE", "CREATED", "STARTED", "FINISHED", "JOBS", "HOST")
 
 	for _, r := range requests {
 		state, ok := proto.StateName[r.State]
@@ -173,23 +181,23 @@ func (c *Find) Run() error {
 			state = proto.StateName[proto.STATE_UNKNOWN]
 		}
 
-		createdAt := r.CreatedAt.Format(findTimeFmtStr)
+		createdAt := r.CreatedAt.Local().Format(findTimeFmtStr)
 
 		startedAt := "N/A"
 		if r.StartedAt != nil {
-			startedAt = r.StartedAt.Format(findTimeFmtStr)
+			startedAt = r.StartedAt.Local().Format(findTimeFmtStr)
 		}
 
 		finishedAt := "N/A"
 		if r.FinishedAt != nil {
-			finishedAt = r.FinishedAt.Format(findTimeFmtStr)
+			finishedAt = r.FinishedAt.Local().Format(findTimeFmtStr)
 		}
 
 		jobs := fmt.Sprintf("%d / %d", r.FinishedJobs, r.TotalJobs)
 
 		fmt.Fprintf(c.ctx.Out, line,
-			SqueezeString(r.Type, findReqColLen, ".."),
 			SqueezeString(r.Id, findIdColLen, ".."),
+			SqueezeString(r.Type, findReqColLen, ".."),
 			SqueezeString(r.User, findUserColLen, ".."),
 			SqueezeString(state, findStateColLen, ".."),
 			createdAt, startedAt, finishedAt,
@@ -214,9 +222,11 @@ Filters:
   type        type of request to return
   states      comma-separated list of request states to include
   user        return only requests made by this user
-  since       return requests created or run after this time (format: %s)
-  until       return requests created or run before this time (format: %s)
+  since       return requests created or run after this time
+  until       return requests created or run before this time
   limit       limit response to this many requests
   offset      skip the first <offset> requests, ignored if <limit> not set
-`, findTimeFmt, findTimeFmt)
+
+Times should be formated as '%s'. Time should be specified in UTC.
+`, findTimeFmt)
 }

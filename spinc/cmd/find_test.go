@@ -4,6 +4,7 @@ package cmd_test
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -116,8 +117,31 @@ func TestFailFindPrepare3(t *testing.T) {
 	t.Log(err)
 }
 
+func TestFailFindPrepare4(t *testing.T) {
+	args := []string{"type=requestname", "states=RUNNING,PENDING,FAIL",
+		"user=owner", "since=2006-01-02 15:04:05 PST",
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3"}
+
+	command := config.Command{
+		Args: args,
+	}
+
+	ctx := app.Context{
+		Command: command,
+	}
+
+	find := cmd.NewFind(ctx)
+	err := find.Prepare()
+	if err == nil {
+		t.Fatal("No error in 'Prepare' with invalid input (date must be in UTC)")
+	}
+	t.Log(err)
+}
+
 func TestFindRun(t *testing.T) {
-	ts, _ := time.Parse("2006-01-02 15:04:05", "2019-03-27 11:30:00")
+	tsutc := "2020-08-02 15:00:00 UTC"
+	ts, _ := time.Parse("2006-01-02 15:04:05 MST", tsutc)
+	tslocal := ts.Local().Format("2006-01-02 15:04:05 MST")
 	createdAt := ts
 	startedAt := ts
 	finishedAt := ts
@@ -178,10 +202,10 @@ func TestFindRun(t *testing.T) {
 		t.Fatalf("Unexpected error in 'Run': %s", err)
 	}
 
-	expectedOutput := `REQUEST              ID                   USER      STATE     CREATED                 STARTED                 FINISHED                JOBS            HOST
-requestname          b9uvdi8tk9kahl8ppvbg owner     RUNNING   2019-03-27 11:30:00 UTC 2019-03-27 11:30:00 UTC 2019-03-27 11:30:00 UTC 68 / 304        http://localhost
-requestname          b9uvdi8tk9kahl8ppvbh owner     RUNNING   2019-03-27 11:30:00 UTC N/A                     N/A                     68 / 304        http://localhost
-`
+	expectedOutput := fmt.Sprintf(`ID                   REQUEST                                  USER      STATE     CREATED                 STARTED                 FINISHED                JOBS            HOST
+b9uvdi8tk9kahl8ppvbg requestname                              owner     RUNNING   %s %s %s 68 / 304        http://localhost
+b9uvdi8tk9kahl8ppvbh requestname                              owner     RUNNING   %s N/A                     N/A                     68 / 304        http://localhost
+`, tslocal, tslocal, tslocal, tslocal)
 
 	if output.String() != expectedOutput {
 		t.Errorf("Wrong output:\nactual output:\n%s\nexpected:\n%s\n", output, expectedOutput)
