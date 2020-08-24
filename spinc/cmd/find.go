@@ -13,6 +13,8 @@ import (
 )
 
 const (
+	findLimitDefault = 10 // limit to 10 requests by default
+
 	// formatting for outputing request info
 	findReqColLen   = 40
 	findIdColLen    = 20
@@ -115,7 +117,9 @@ func (c *Find) Prepare() error {
 	}
 
 	var limit uint
-	if filters["limit"] != "" {
+	if filters["limit"] == "" {
+		limit = findLimitDefault
+	} else {
 		l, err := strconv.ParseUint(filters["limit"], 10, strconv.IntSize)
 		if err != nil {
 			return fmt.Errorf("Invalid limit '%s', expected value >= 0", filters["limit"])
@@ -224,9 +228,9 @@ Filters:
   user        return only requests made by this user
   since       return requests created or run after this time
   until       return requests created or run before this time
-  limit       limit response to this many requests
-  offset      skip the first <offset> requests, ignored if <limit> not set
+  limit       limit response to this many requests (default: %d)
+  offset      skip the first <offset> requests
 
 Times should be formated as '%s'. Time should be specified in UTC.
-`, findTimeFmt)
+`, findLimitDefault, findTimeFmt)
 }
