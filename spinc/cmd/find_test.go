@@ -18,7 +18,7 @@ import (
 func TestFindPrepare1(t *testing.T) {
 	args := []string{"type=requestname", "states=RUNNING,PENDING,FAIL",
 		"user=owner", "since=2006-01-02 15:04:05 UTC",
-		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3"}
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3", "timezone=local"}
 
 	command := config.Command{
 		Args: args,
@@ -37,7 +37,7 @@ func TestFindPrepare1(t *testing.T) {
 
 func TestFindPrepare2(t *testing.T) {
 	args := []string{"type=requestname",
-		"user=owner", "until=2006-01-02 15:04:05 UTC", "limit=5"}
+		"user=owner", "until=2006-01-02 15:04:05 UTC", "limit=5", "timezone=utc"}
 
 	command := config.Command{
 		Args: args,
@@ -138,7 +138,118 @@ func TestFailFindPrepare4(t *testing.T) {
 	t.Log(err)
 }
 
-func TestFindRun(t *testing.T) {
+func TestFailFindPrepare5(t *testing.T) {
+	args := []string{"type=requestname", "states=RUNNING,PENDING,FAIL",
+		"user=owner", "since=2006-01-02 15:04:05 UTC",
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3", "timezone=pst"}
+
+	command := config.Command{
+		Args: args,
+	}
+
+	ctx := app.Context{
+		Command: command,
+	}
+
+	find := cmd.NewFind(ctx)
+	err := find.Prepare()
+	if err == nil {
+		t.Fatalf("No error in 'Prepare' with invalid input (invalid timezone)")
+	}
+}
+
+func TestFailFindPrepare6(t *testing.T) {
+	args := []string{"type=requestname", "states=RUNNING,PENDING,FAIL",
+		"user=owner", "since=2006-01-02 15:04:05 UTC", "invalidarg=value",
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3"}
+
+	command := config.Command{
+		Args: args,
+	}
+
+	ctx := app.Context{
+		Command: command,
+	}
+
+	find := cmd.NewFind(ctx)
+	err := find.Prepare()
+	if err == nil {
+		t.Fatalf("No error in 'Prepare' with invalid input (invalid arg)")
+	}
+}
+
+func TestFindRunUTC(t *testing.T) {
+	tsutc := "2020-08-02 15:00:00 UTC"
+	ts, _ := time.Parse("2006-01-02 15:04:05 MST", tsutc)
+	tslocal := ts.UTC().Format("2006-01-02 15:04:05 MST")
+	createdAt := ts
+	startedAt := ts
+	finishedAt := ts
+	requests := []proto.Request{
+		proto.Request{
+			Id:    "b9uvdi8tk9kahl8ppvbg",
+			Type:  "requestname",
+			State: proto.STATE_RUNNING,
+			User:  "owner",
+
+			CreatedAt:  createdAt,
+			StartedAt:  &startedAt,
+			FinishedAt: &finishedAt,
+
+			TotalJobs:    304,
+			FinishedJobs: 68,
+		},
+		proto.Request{
+			Id:    "b9uvdi8tk9kahl8ppvbh",
+			Type:  "requestname",
+			State: proto.STATE_RUNNING,
+			User:  "owner",
+
+			CreatedAt: createdAt,
+
+			TotalJobs:    304,
+			FinishedJobs: 68,
+		},
+	}
+
+	output := &bytes.Buffer{}
+	rmc := &mock.RMClient{
+		FindRequestsFunc: func(proto.RequestFilter) ([]proto.Request, error) {
+			return requests, nil
+		},
+	}
+	command := config.Command{
+		Args: []string{},
+	}
+
+	ctx := app.Context{
+		Options:  config.Options{Debug: true},
+		Out:      output,
+		RMClient: rmc,
+		Command:  command,
+	}
+
+	find := cmd.NewFind(ctx)
+	err := find.Prepare()
+	if err != nil {
+		t.Fatalf("Unexpected error in 'Prepare': %s", err)
+	}
+	err = find.Run()
+	if err != nil {
+		t.Fatalf("Unexpected error in 'Run': %s", err)
+	}
+
+	expectedOutput := fmt.Sprintf(`ID                   REQUEST                                  USER      STATE     CREATED                 STARTED                 FINISHED                JOBS
+b9uvdi8tk9kahl8ppvbg requestname                              owner     RUNNING   %s %s %s 68 / 304
+b9uvdi8tk9kahl8ppvbh requestname                              owner     RUNNING   %s N/A                     N/A                     68 / 304
+`, tslocal, tslocal, tslocal, tslocal)
+
+	if output.String() != expectedOutput {
+		t.Errorf("Wrong output:\nactual output:\n%s\nexpected:\n%s\n", output, expectedOutput)
+	}
+}
+
+func TestFindRunLocal(t *testing.T) {
 	tsutc := "2020-08-02 15:00:00 UTC"
 	ts, _ := time.Parse("2006-01-02 15:04:05 MST", tsutc)
 	tslocal := ts.Local().Format("2006-01-02 15:04:05 MST")
@@ -158,8 +269,6 @@ func TestFindRun(t *testing.T) {
 
 			TotalJobs:    304,
 			FinishedJobs: 68,
-
-			JobRunnerURL: "http://localhost",
 		},
 		proto.Request{
 			Id:    "b9uvdi8tk9kahl8ppvbh",
@@ -171,8 +280,6 @@ func TestFindRun(t *testing.T) {
 
 			TotalJobs:    304,
 			FinishedJobs: 68,
-
-			JobRunnerURL: "http://localhost",
 		},
 	}
 
@@ -183,7 +290,7 @@ func TestFindRun(t *testing.T) {
 		},
 	}
 	command := config.Command{
-		Args: []string{},
+		Args: []string{"timezone=local"},
 	}
 
 	ctx := app.Context{
@@ -202,9 +309,9 @@ func TestFindRun(t *testing.T) {
 		t.Fatalf("Unexpected error in 'Run': %s", err)
 	}
 
-	expectedOutput := fmt.Sprintf(`ID                   REQUEST                                  USER      STATE     CREATED                 STARTED                 FINISHED                JOBS            HOST
-b9uvdi8tk9kahl8ppvbg requestname                              owner     RUNNING   %s %s %s 68 / 304        http://localhost
-b9uvdi8tk9kahl8ppvbh requestname                              owner     RUNNING   %s N/A                     N/A                     68 / 304        http://localhost
+	expectedOutput := fmt.Sprintf(`ID                   REQUEST                                  USER      STATE     CREATED                 STARTED                 FINISHED                JOBS
+b9uvdi8tk9kahl8ppvbg requestname                              owner     RUNNING   %s %s %s 68 / 304
+b9uvdi8tk9kahl8ppvbh requestname                              owner     RUNNING   %s N/A                     N/A                     68 / 304
 `, tslocal, tslocal, tslocal, tslocal)
 
 	if output.String() != expectedOutput {

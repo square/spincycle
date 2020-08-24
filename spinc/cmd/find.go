@@ -20,7 +20,6 @@ const (
 	findIdColLen    = 20
 	findUserColLen  = 9
 	findStateColLen = 9
-	findJobsColLen  = 15
 
 	findTimeFmt    = "YYYY-MM-DD HH:MM:SS UTC" // expected time input format
 	findTimeFmtStr = "2006-01-02 15:04:05 MST" // expected time input format as the actual format string (input to time.Parse)
@@ -32,7 +31,9 @@ var (
 )
 
 type Find struct {
-	ctx    app.Context
+	ctx app.Context
+
+	local  bool
 	filter proto.RequestFilter
 }
 
@@ -45,7 +46,9 @@ func NewFind(ctx app.Context) *Find {
 func (c *Find) Prepare() error {
 	/* Parse. */
 	// See command usage for details about each filter
-	validFilters := map[string]bool{
+	validArgs := map[string]bool{
+		"timezone": true,
+
 		"type":   true,
 		"states": true,
 		"user":   true,
@@ -54,34 +57,44 @@ func (c *Find) Prepare() error {
 		"limit":  true,
 		"offset": true,
 	}
-	filters := map[string]string{}
+	args := map[string]string{}
 	for _, arg := range c.ctx.Command.Args {
 		split := strings.SplitN(arg, "=", 2)
 		if len(split) != 2 {
 			return fmt.Errorf("Invalid command arg: %s: split on = produced %d values, expected 2 (filter=value)", arg, len(split))
 		}
-		filter := split[0]
+		arg := split[0]
 		value := split[1]
 
-		if !validFilters[filter] {
-			return fmt.Errorf("Invalid filter '%s'", filter)
+		if !validArgs[arg] {
+			return fmt.Errorf("Invalid arg '%s'", arg)
 		}
-		if _, ok := filters[filter]; ok {
-			return fmt.Errorf("Filter '%s' specified multiple times", filter)
+		if _, ok := args[arg]; ok {
+			return fmt.Errorf("Filter '%s' specified multiple times", arg)
 		}
-		filters[filter] = value
+		args[arg] = value
 
 		if c.ctx.Options.Debug {
-			app.Debug("filter '%s'='%s'", filter, value)
+			app.Debug("arg '%s'='%s'", arg, value)
 		}
 	}
 
 	/* Process some args. */
 	var err error
 
+	local := false
+	switch args["timezone"] {
+	case "":
+	case "utc":
+	case "local":
+		local = true
+	default:
+		return fmt.Errorf("Invalid timezone '%s': expected 'utc' or 'local'", args["timezone"])
+	}
+
 	states := []byte{}
-	if len(filters["states"]) > 0 {
-		for _, state := range strings.Split(filters["states"], ",") {
+	if len(args["states"]) > 0 {
+		for _, state := range strings.Split(args["states"], ",") {
 			val, ok := proto.StateValue[state]
 			if !ok {
 				expected := make([]string, 0, len(proto.StateValue))
@@ -95,52 +108,53 @@ func (c *Find) Prepare() error {
 	}
 
 	var since time.Time
-	if filters["since"] != "" {
-		if strings.Index(filters["since"], "UTC") != findUtcIndex {
-			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d", filters["since"], findUtcIndex)
+	if args["since"] != "" {
+		if strings.Index(args["since"], "UTC") != findUtcIndex {
+			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d", args["since"], findUtcIndex)
 		}
-		since, err = time.Parse(findTimeFmtStr, filters["since"])
+		since, err = time.Parse(findTimeFmtStr, args["since"])
 		if err != nil {
-			return fmt.Errorf("Invalid time %s, expected form '%s'", filters["since"], findTimeFmt)
+			return fmt.Errorf("Invalid time %s, expected form '%s'", args["since"], findTimeFmt)
 		}
 	}
 
 	var until time.Time
-	if filters["until"] != "" {
-		if strings.Index(filters["until"], "UTC") != findUtcIndex {
-			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d", filters["until"], findUtcIndex)
+	if args["until"] != "" {
+		if strings.Index(args["until"], "UTC") != findUtcIndex {
+			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d", args["until"], findUtcIndex)
 		}
-		until, err = time.Parse(findTimeFmtStr, filters["until"])
+		until, err = time.Parse(findTimeFmtStr, args["until"])
 		if err != nil {
-			return fmt.Errorf("Invalid time %s, expected form '%s'", filters["until"], findTimeFmt)
+			return fmt.Errorf("Invalid time %s, expected form '%s'", args["until"], findTimeFmt)
 		}
 	}
 
 	var limit uint
-	if filters["limit"] == "" {
+	if args["limit"] == "" {
 		limit = findLimitDefault
 	} else {
-		l, err := strconv.ParseUint(filters["limit"], 10, strconv.IntSize)
+		l, err := strconv.ParseUint(args["limit"], 10, strconv.IntSize)
 		if err != nil {
-			return fmt.Errorf("Invalid limit '%s', expected value >= 0", filters["limit"])
+			return fmt.Errorf("Invalid limit '%s', expected value >= 0", args["limit"])
 		}
 		limit = uint(l)
 	}
 
 	var offset uint
-	if filters["offset"] != "" {
-		o, err := strconv.ParseUint(filters["offset"], 10, strconv.IntSize)
+	if args["offset"] != "" {
+		o, err := strconv.ParseUint(args["offset"], 10, strconv.IntSize)
 		if err != nil {
-			return fmt.Errorf("Invalid offset '%s', expected value >= 0", filters["offset"])
+			return fmt.Errorf("Invalid offset '%s', expected value >= 0", args["offset"])
 		}
 		offset = uint(o)
 	}
 
-	/* Build the request filter. */
+	/* Save args. */
+	c.local = local
 	c.filter = proto.RequestFilter{
-		Type:   filters["type"],
+		Type:   args["type"],
 		States: states,
-		User:   filters["user"],
+		User:   args["user"],
 
 		Since: since,
 		Until: until,
@@ -171,13 +185,18 @@ func (c *Find) Run() error {
 	}
 
 	/*
-	   ID                   REQUEST                                  USER      STATE     CREATED STARTED FINISHED JOBS            HOST
-	   -------------------- 1234567890123456789012345678901234567890 123456789 123456789 ------- ------- -------- 123456789012345 *
+	   ID                   REQUEST                                  USER      STATE     CREATED STARTED FINISHED JOBS
+	   -------------------- 1234567890123456789012345678901234567890 123456789 123456789 ------- ------- -------- *
 	*/
-	line := fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%s\n",
-		findIdColLen, findReqColLen, findUserColLen, findStateColLen, findTimeColLen, findTimeColLen, findTimeColLen, findJobsColLen)
+	line := fmt.Sprintf("%%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%-%ds %%s\n",
+		findIdColLen, findReqColLen, findUserColLen, findStateColLen, findTimeColLen, findTimeColLen, findTimeColLen)
 
-	fmt.Fprintf(c.ctx.Out, line, "ID", "REQUEST", "USER", "STATE", "CREATED", "STARTED", "FINISHED", "JOBS", "HOST")
+	fmt.Fprintf(c.ctx.Out, line, "ID", "REQUEST", "USER", "STATE", "CREATED", "STARTED", "FINISHED", "JOBS")
+
+	timeConv := (time.Time).UTC
+	if c.local {
+		timeConv = (time.Time).Local
+	}
 
 	for _, r := range requests {
 		state, ok := proto.StateName[r.State]
@@ -185,16 +204,16 @@ func (c *Find) Run() error {
 			state = proto.StateName[proto.STATE_UNKNOWN]
 		}
 
-		createdAt := r.CreatedAt.Local().Format(findTimeFmtStr)
+		createdAt := timeConv(r.CreatedAt).Format(findTimeFmtStr)
 
 		startedAt := "N/A"
 		if r.StartedAt != nil {
-			startedAt = r.StartedAt.Local().Format(findTimeFmtStr)
+			startedAt = timeConv(*r.StartedAt).Format(findTimeFmtStr)
 		}
 
 		finishedAt := "N/A"
 		if r.FinishedAt != nil {
-			finishedAt = r.FinishedAt.Local().Format(findTimeFmtStr)
+			finishedAt = timeConv(*r.FinishedAt).Format(findTimeFmtStr)
 		}
 
 		jobs := fmt.Sprintf("%d / %d", r.FinishedJobs, r.TotalJobs)
@@ -205,8 +224,7 @@ func (c *Find) Run() error {
 			SqueezeString(r.User, findUserColLen, ".."),
 			SqueezeString(state, findStateColLen, ".."),
 			createdAt, startedAt, finishedAt,
-			SqueezeString(jobs, findJobsColLen, ".."),
-			r.JobRunnerURL)
+			jobs)
 	}
 
 	return nil
@@ -220,7 +238,10 @@ func (c *Find) Cmd() string {
 }
 
 func (c *Find) Help() string {
-	return fmt.Sprintf(`'spinc find [filter=value]' retrieves and filters requests.
+	return fmt.Sprintf(`'spinc find [arg=value] [filter=value]' retrieves and filters requests.
+
+Args:
+  timezone    timezone to use in output ('utc' | 'local')
 
 Filters:
   type        type of request to return
