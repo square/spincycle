@@ -22,24 +22,25 @@ func Run(ctx app.Context) error {
 	printf := func(s string, args ...interface{}) { fmt.Printf(s+"\n", args...) }
 
 	/* Static checks. */
-	specs, err := ctx.Hooks.LoadSpecs(cmd.SpecsDir, printf)
+	allSpecs, err := ctx.Hooks.LoadSpecs(cmd.SpecsDir, printf)
 	if err != nil {
 		return err
 	}
-	spec.ProcessSpecs(&specs)
+	spec.ProcessSpecs(&allSpecs)
 
-	checkFactories := append(ctx.Factories.CheckFactories, spec.BaseCheckFactory{specs})
+	checkFactories := ctx.Hooks.GetCheckFactories(allSpecs)
+	checkFactories = append(checkFactories, spec.BaseCheckFactory{allSpecs})
 	checker, err := spec.NewChecker(checkFactories, printf)
 	if err != nil {
 		return err
 	}
-	ok := checker.RunChecks(specs)
+	ok := checker.RunChecks(allSpecs)
 	if !ok {
 		return fmt.Errorf("static check failed") // checker prints details for us
 	}
 
 	/* Graph checks. */
-	templateG := template.NewGrapher(specs, ctx.Factories.GeneratorFactory, printf)
+	templateG := template.NewGrapher(allSpecs, ctx.Factories.GeneratorFactory, printf)
 	_, ok = templateG.CreateTemplates()
 	if !ok {
 		return fmt.Errorf("graph check failed") // grapher prints details for us

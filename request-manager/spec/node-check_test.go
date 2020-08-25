@@ -757,6 +757,132 @@ func TestFailRequiredArgsProvidedNodeCheck3(t *testing.T) {
 	compareError(t, err, expectedErr, "not all required args to expanded sequence node listed in 'args', expected error")
 }
 
+func TestNoExtraSequenceArgsProvidedNodeCheck1(t *testing.T) {
+	argA := "arg-a"
+	argB := "arg-b"
+	specs := Specs{
+		Sequences: map[string]*Sequence{
+			seqA: &Sequence{
+				Name: seqA,
+				Args: SequenceArgs{
+					Required: []*Arg{
+						&Arg{Name: &argA},
+					},
+					Optional: []*Arg{
+						&Arg{Name: &argB},
+					},
+				},
+			},
+		},
+	}
+	check := NoExtraSequenceArgsProvidedNodeCheck{specs}
+	sequence := "sequence" // Test sequence node
+	node := Node{
+		Name:     nodeA,
+		Category: &sequence,
+		NodeType: &seqA,
+		Each: []string{
+			fmt.Sprintf("%ss:%s", argA, argA),
+		},
+		Args: []*NodeArg{
+			&NodeArg{Expected: &argB, Given: &argB},
+		},
+	}
+
+	err := check.CheckNode(seqA, node)
+	if err != nil {
+		t.Errorf("NoExtraSequenceArgsProvidedNodeCheck failed, expected pass")
+	}
+}
+
+func TestNoExtraSequenceArgsProvidedNodeCheck2(t *testing.T) {
+	seqB := "seq-b"
+	argA := "arg-a"
+	argB := "arg-b"
+	argC := "arg-c"
+	specs := Specs{
+		Sequences: map[string]*Sequence{
+			seqA: &Sequence{
+				Name: seqA,
+				Args: SequenceArgs{
+					Optional: []*Arg{
+						&Arg{Name: &argB},
+					},
+				},
+			},
+			seqB: &Sequence{
+				Name: seqB,
+				Args: SequenceArgs{
+					Required: []*Arg{
+						&Arg{Name: &argA},
+						&Arg{Name: &argC},
+					},
+				},
+			},
+		},
+	}
+	check := NoExtraSequenceArgsProvidedNodeCheck{specs}
+	conditional := "conditional" // Test conditional node
+	node := Node{
+		Name:     nodeA,
+		Category: &conditional,
+		Eq: map[string]string{
+			seqA: seqA,
+			seqB: seqB,
+		},
+		Each: []string{
+			fmt.Sprintf("%ss:%s", argA, argA),
+		},
+		Args: []*NodeArg{
+			&NodeArg{Expected: &argB, Given: &argB},
+			&NodeArg{Expected: &argC, Given: &argC},
+		},
+	}
+
+	err := check.CheckNode(seqA, node)
+	if err != nil {
+		t.Errorf("NoExtraSequenceArgsProvidedNodeCheck failed, expected pass")
+	}
+}
+
+func TestNoExtraSequenceArgsProvidedNodeCheck3(t *testing.T) {
+	argA := "arg-a"
+	argB := "arg-b"
+	specs := Specs{
+		Sequences: map[string]*Sequence{
+			seqA: &Sequence{
+				Name: seqA,
+				Args: SequenceArgs{
+					Required: []*Arg{
+						&Arg{Name: &argA},
+					},
+					Optional: []*Arg{
+						&Arg{Name: &argB},
+					},
+				},
+			},
+		},
+	}
+	check := NoExtraSequenceArgsProvidedNodeCheck{specs}
+	sequence := "sequence" // Test expanded sequence node
+	node := Node{
+		Name:     nodeA,
+		Category: &sequence,
+		NodeType: &seqA,
+		Each: []string{
+			fmt.Sprintf("%ss:%s", argA, argA),
+		},
+		Args: []*NodeArg{
+			&NodeArg{Expected: &argB, Given: &argB},
+		},
+	}
+
+	err := check.CheckNode(seqA, node)
+	if err != nil {
+		t.Errorf("NoExtraSequenceArgsProvidedNodeCheck failed, expected pass")
+	}
+}
+
 func TestFailNoExtraSequenceArgsProvidedNodeCheck1(t *testing.T) {
 	argA := "arg-a"
 	argB := "arg-b"

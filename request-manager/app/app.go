@@ -155,7 +155,7 @@ func MakeIDGeneratorFactory(ctx Context) (id.GeneratorFactory, error) {
 
 // MakeCheckFactories is the default MakeCheckFactories factory.
 func MakeCheckFactories(ctx Context) ([]spec.CheckFactory, error) {
-	return []spec.CheckFactory{spec.DefaultCheckFactory{}}, nil
+	return []spec.CheckFactory{spec.DefaultCheckFactory{ctx.Specs}}, nil
 }
 
 // MakeJobRunnerClient is the default MakeJobRunnerClient factory.
