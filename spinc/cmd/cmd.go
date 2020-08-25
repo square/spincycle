@@ -35,6 +35,8 @@ func (f *DefaultFactory) Make(name string, ctx app.Context) (app.Command, error)
 		return NewPs(ctx), nil
 	case "running":
 		return NewRunning(ctx), nil
+	case "find":
+		return NewFind(ctx), nil
 	case "start":
 		return NewStart(ctx), nil
 	case "status":

@@ -86,6 +86,7 @@ func (c *Help) Usage() {
 		"  --timeout  API timeout, milliseconds (default: %d ms)\n"+
 		"  --version  Print version\n"+
 		"Commands:\n"+
+		"  find    [filters]  Print (optionally) filtered request history\n"+
 		"  help    <cmd|req>  Print command or request help\n"+
 		"  info    <ID>       Print complete request information\n"+
 		"  log     <ID>       Print job log (tip: pipe output to less)\n"+
