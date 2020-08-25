@@ -239,9 +239,9 @@ func TestFindRunUTC(t *testing.T) {
 		t.Fatalf("Unexpected error in 'Run': %s", err)
 	}
 
-	expectedOutput := fmt.Sprintf(`ID                   REQUEST                                  USER      STATE     CREATED                 STARTED                 FINISHED                JOBS
-b9uvdi8tk9kahl8ppvbg requestname                              owner     RUNNING   %s %s %s 68 / 304
-b9uvdi8tk9kahl8ppvbh requestname                              owner     RUNNING   %s N/A                     N/A                     68 / 304
+	expectedOutput := fmt.Sprintf(`ID                   REQUEST                                  USER             STATE     CREATED                 STARTED                 FINISHED                JOBS
+b9uvdi8tk9kahl8ppvbg requestname                              owner            RUNNING   %s %s %s 68 / 304
+b9uvdi8tk9kahl8ppvbh requestname                              owner            RUNNING   %s N/A                     N/A                     68 / 304
 `, tslocal, tslocal, tslocal, tslocal)
 
 	if output.String() != expectedOutput {
@@ -309,9 +309,9 @@ func TestFindRunLocal(t *testing.T) {
 		t.Fatalf("Unexpected error in 'Run': %s", err)
 	}
 
-	expectedOutput := fmt.Sprintf(`ID                   REQUEST                                  USER      STATE     CREATED                 STARTED                 FINISHED                JOBS
-b9uvdi8tk9kahl8ppvbg requestname                              owner     RUNNING   %s %s %s 68 / 304
-b9uvdi8tk9kahl8ppvbh requestname                              owner     RUNNING   %s N/A                     N/A                     68 / 304
+	expectedOutput := fmt.Sprintf(`ID                   REQUEST                                  USER             STATE     CREATED                 STARTED                 FINISHED                JOBS
+b9uvdi8tk9kahl8ppvbg requestname                              owner            RUNNING   %s %s %s 68 / 304
+b9uvdi8tk9kahl8ppvbh requestname                              owner            RUNNING   %s N/A                     N/A                     68 / 304
 `, tslocal, tslocal, tslocal, tslocal)
 
 	if output.String() != expectedOutput {

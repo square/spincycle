@@ -18,7 +18,7 @@ const (
 	// formatting for outputing request info
 	findReqColLen   = 40
 	findIdColLen    = 20
-	findUserColLen  = 9
+	findUserColLen  = 16
 	findStateColLen = 9
 
 	findTimeFmt    = "YYYY-MM-DD HH:MM:SS UTC" // expected time input format
@@ -33,7 +33,7 @@ var (
 type Find struct {
 	ctx app.Context
 
-	local  bool
+	local  bool // If true, output times in local time, else output times in UTC
 	filter proto.RequestFilter
 }
 
@@ -61,7 +61,7 @@ func (c *Find) Prepare() error {
 	for _, arg := range c.ctx.Command.Args {
 		split := strings.SplitN(arg, "=", 2)
 		if len(split) != 2 {
-			return fmt.Errorf("Invalid command arg: %s: split on = produced %d values, expected 2 (filter=value)", arg, len(split))
+			return fmt.Errorf("Invalid command arg %s: expected arg of form filter=value (should contain exactly one '=')", arg)
 		}
 		arg := split[0]
 		value := split[1]
@@ -83,7 +83,7 @@ func (c *Find) Prepare() error {
 	var err error
 
 	local := false
-	switch args["timezone"] {
+	switch strings.ToLower(args["timezone"]) {
 	case "":
 	case "utc":
 	case "local":
@@ -95,13 +95,9 @@ func (c *Find) Prepare() error {
 	states := []byte{}
 	if len(args["states"]) > 0 {
 		for _, state := range strings.Split(args["states"], ",") {
-			val, ok := proto.StateValue[state]
+			val, ok := proto.StateValue[strings.ToUpper(state)]
 			if !ok {
-				expected := make([]string, 0, len(proto.StateValue))
-				for k, _ := range proto.StateValue {
-					expected = append(expected, k)
-				}
-				return fmt.Errorf("Invalid state '%s', expected one of: %s", state, strings.Join(expected, ", "))
+				return fmt.Errorf("Invalid state '%s', expected one of: %s", state, strings.Join(getAllProtoStates(), ", "))
 			}
 			states = append(states, val)
 		}
@@ -110,7 +106,7 @@ func (c *Find) Prepare() error {
 	var since time.Time
 	if args["since"] != "" {
 		if strings.Index(args["since"], "UTC") != findUtcIndex {
-			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d", args["since"], findUtcIndex)
+			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d (format: %s)", args["since"], findUtcIndex, findTimeFmt)
 		}
 		since, err = time.Parse(findTimeFmtStr, args["since"])
 		if err != nil {
@@ -121,7 +117,7 @@ func (c *Find) Prepare() error {
 	var until time.Time
 	if args["until"] != "" {
 		if strings.Index(args["until"], "UTC") != findUtcIndex {
-			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d", args["until"], findUtcIndex)
+			return fmt.Errorf("Invalid time %s, expected string 'UTC' at index %d (format: %s)", args["until"], findUtcIndex, findTimeFmt)
 		}
 		until, err = time.Parse(findTimeFmtStr, args["until"])
 		if err != nil {
@@ -238,7 +234,19 @@ func (c *Find) Cmd() string {
 }
 
 func (c *Find) Help() string {
-	return fmt.Sprintf(`'spinc find [arg=value] [filter=value]' retrieves and filters requests.
+	return fmt.Sprintf(`'spinc find [arg=value] [filter=value]' retrieves and filters request history.
+All args and filters are optional. If none are used, command returns the %d most recent requests with times in UTC.
+
+Output columns:
+  ID:       Request ID
+  REQUEST:  Request name
+  USER:     User/owner who started the request
+  STATE:    Current state of job (%s)
+  CREATED:  Time at which job was created
+  STARTED:  Time at which job started running (N/A if job hasn't started)
+  FINISHED: Time at which job finished running (N/A if job hasn't finished)
+  JOBS:     [number of finished jobs] / [total number of jobs]
+Long column values are truncated in the middle with '..'. Times are formatted as '%s'.
 
 Args:
   timezone    timezone to use in output ('utc' | 'local')
@@ -251,7 +259,16 @@ Filters:
   until       return requests created or run before this time
   limit       limit response to this many requests (default: %d)
   offset      skip the first <offset> requests
-
 Times should be formated as '%s'. Time should be specified in UTC.
-`, findLimitDefault, findTimeFmt)
+`, findLimitDefault,
+		strings.Join(getAllProtoStates(), " | "), findTimeFmt,
+		findLimitDefault, findTimeFmt)
+}
+
+func getAllProtoStates() []string {
+	states := make([]string, 0, len(proto.StateValue))
+	for state, _ := range proto.StateValue {
+		states = append(states, state)
+	}
+	return states
 }
