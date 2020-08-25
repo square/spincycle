@@ -34,16 +34,15 @@ type ValidCategoryNodeCheck struct{}
 
 /* 'category: (job | sequence | conditional)' */
 func (check ValidCategoryNodeCheck) CheckNode(sequenceName string, node Node) error {
+	if node.Category == nil { // Another check's problem
+		return nil
+	}
 	if !node.IsJob() && !node.IsSequence() && !node.IsConditional() {
-		var category string
-		if node.Category != nil {
-			category = *node.Category
-		}
 		return InvalidValueError{
 			Sequence: sequenceName,
 			Node:     &node.Name,
 			Field:    "category",
-			Values:   []string{category},
+			Values:   []string{*node.Category},
 			Expected: "(job | sequence | conditional)",
 		}
 	}
@@ -143,12 +142,32 @@ func (check EachNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node No
 }
 
 /* ========================================================================== */
+type ArgsNotNilNodeCheck struct{}
+
+/* Node 'args' must not be nil. */
+func (check ArgsNotNilNodeCheck) CheckNode(sequenceName string, node Node) error {
+	for _, nodeArg := range node.Args {
+		if nodeArg == nil {
+			return InvalidValueError{
+				Sequence: sequenceName,
+				Node:     &node.Name,
+				Field:    "args",
+				Values:   []string{"nil"},
+				Expected: "non-nil",
+			}
+		}
+	}
+
+	return nil
+}
+
+/* ========================================================================== */
 type ArgsAreNamedNodeCheck struct{}
 
 /* Node 'args' must be named, i.e. include an 'expected' field. */
 func (check ArgsAreNamedNodeCheck) CheckNode(sequenceName string, node Node) error {
 	for _, nodeArg := range node.Args {
-		if nodeArg.Expected == nil {
+		if nodeArg != nil && nodeArg.Expected == nil {
 			return MissingValueError{
 				Sequence:    sequenceName,
 				Node:        &node.Name,
@@ -169,7 +188,7 @@ func (check ArgsExpectedUniqueNodeCheck) CheckNode(sequenceName string, node Nod
 	seen := map[string]bool{}
 	values := map[string]bool{}
 	for _, nodeArg := range node.Args {
-		if nodeArg.Expected == nil {
+		if nodeArg == nil || nodeArg.Expected == nil {
 			continue
 		}
 		if seen[*nodeArg.Expected] {
@@ -204,7 +223,7 @@ func (check ArgsNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node No
 	expected := map[string]string{}
 	values := map[string]bool{}
 	for _, nodeArg := range node.Args {
-		if nodeArg.Given == nil || nodeArg.Expected == nil {
+		if nodeArg == nil || nodeArg.Given == nil || nodeArg.Expected == nil {
 			continue
 		}
 		if element, ok := expected[*nodeArg.Given]; ok && element != *nodeArg.Expected {
@@ -233,7 +252,7 @@ type EachElementDoesNotDuplicateArgsExpectedNodeCheck struct{}
 func (check EachElementDoesNotDuplicateArgsExpectedNodeCheck) CheckNode(sequenceName string, node Node) error {
 	expected := map[string]bool{} // All expected args
 	for _, nodeArg := range node.Args {
-		if nodeArg.Expected == nil {
+		if nodeArg == nil || nodeArg.Expected == nil {
 			continue
 		}
 		expected[*nodeArg.Expected] = true
@@ -271,7 +290,7 @@ type EachListDoesNotDuplicateArgsGivenNodeCheck struct{}
 func (check EachListDoesNotDuplicateArgsGivenNodeCheck) CheckNode(sequenceName string, node Node) error {
 	given := map[string]bool{} // All given args
 	for _, nodeArg := range node.Args {
-		if nodeArg.Given == nil {
+		if nodeArg == nil || nodeArg.Given == nil {
 			continue
 		}
 		given[*nodeArg.Given] = true
@@ -303,12 +322,32 @@ func (check EachListDoesNotDuplicateArgsGivenNodeCheck) CheckNode(sequenceName s
 }
 
 /* ========================================================================== */
+type SetsNotNilNodeCheck struct{}
+
+/* Node 'sets' must not be nil. */
+func (check SetsNotNilNodeCheck) CheckNode(sequenceName string, node Node) error {
+	for _, nodeSet := range node.Sets {
+		if nodeSet == nil {
+			return InvalidValueError{
+				Sequence: sequenceName,
+				Node:     &node.Name,
+				Field:    "sets",
+				Values:   []string{"nil"},
+				Expected: "non-nil",
+			}
+		}
+	}
+
+	return nil
+}
+
+/* ========================================================================== */
 type SetsAreNamedNodeCheck struct{}
 
 /* Node 'sets' must be named, i.e. include an 'arg'field. */
 func (check SetsAreNamedNodeCheck) CheckNode(sequenceName string, node Node) error {
 	for _, nodeSet := range node.Sets {
-		if nodeSet.Arg == nil {
+		if nodeSet != nil && nodeSet.Arg == nil {
 			return MissingValueError{
 				Sequence:    sequenceName,
 				Node:        &node.Name,
@@ -329,7 +368,7 @@ func (check SetsAsUniqueNodeCheck) CheckNode(sequenceName string, node Node) err
 	seen := map[string]bool{}
 	values := map[string]bool{}
 	for _, nodeSet := range node.Sets {
-		if nodeSet.As == nil {
+		if nodeSet == nil || nodeSet.As == nil {
 			continue
 		}
 		if seen[*nodeSet.As] {
@@ -359,7 +398,7 @@ func (check SetsNotRenamedTwiceNodeCheck) CheckNode(sequenceName string, node No
 	as := map[string]string{}
 	values := map[string]bool{}
 	for _, nodeSet := range node.Sets {
-		if nodeSet.Arg == nil || nodeSet.As == nil {
+		if nodeSet == nil || nodeSet.Arg == nil || nodeSet.As == nil {
 			continue
 		}
 		if element, ok := as[*nodeSet.Arg]; ok && element != *nodeSet.As {
@@ -600,7 +639,7 @@ func (check RequiredArgsProvidedNodeCheck) CheckNode(sequenceName string, node N
 			continue
 		}
 		for _, reqArg := range seq.Args.Required {
-			if reqArg.Name == nil {
+			if reqArg == nil || reqArg.Name == nil {
 				continue
 			}
 			if _, ok = declaredArgs[*reqArg.Name]; !ok {
@@ -660,7 +699,7 @@ func (check NoExtraSequenceArgsProvidedNodeCheck) CheckNode(sequenceName string,
 		}
 		args := append(seq.Args.Required, seq.Args.Optional...)
 		for _, arg := range args {
-			if arg.Name != nil && excessArgs[*arg.Name] {
+			if arg != nil && arg.Name != nil && excessArgs[*arg.Name] {
 				delete(excessArgs, *arg.Name)
 			}
 		}
@@ -739,7 +778,7 @@ func (check SubsequencesExistNodeCheck) CheckNode(sequenceName string, node Node
 // Get list of all sequences called by node
 func getCalledSequences(node Node) []string {
 	var sequences []string
-	if node.IsSequence() {
+	if node.IsSequence() && node.NodeType != nil {
 		sequences = []string{*node.NodeType}
 	} else if node.IsConditional() {
 		for _, seq := range node.Eq {
@@ -753,7 +792,7 @@ func getCalledSequences(node Node) []string {
 func getInputArgs(node Node) map[string]bool {
 	var declaredArgs = map[string]bool{}
 	for _, nodeArg := range node.Args {
-		if nodeArg.Expected != nil {
+		if nodeArg != nil && nodeArg.Expected != nil {
 			declaredArgs[*nodeArg.Expected] = true
 		}
 	}

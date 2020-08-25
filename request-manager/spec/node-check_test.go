@@ -93,6 +93,23 @@ func TestFailEachNotRenamedTwiceNodeCheck(t *testing.T) {
 	compareError(t, err, expectedErr, "accepted duplicated each list, expected error")
 }
 
+func TestFailArgsNotNilNodeCheck(t *testing.T) {
+	check := ArgsNotNilNodeCheck{}
+	node := Node{
+		Name: nodeA,
+		Args: []*NodeArg{nil},
+	}
+	expectedErr := InvalidValueError{
+		Sequence: seqA,
+		Node:     &nodeA,
+		Field:    "args",
+		Values:   []string{"nil"},
+	}
+
+	err := check.CheckNode(seqA, node)
+	compareError(t, err, expectedErr, "accepted nil node args, expected error")
+}
+
 func TestFailArgsAreNamedNodeCheck(t *testing.T) {
 	check := ArgsAreNamedNodeCheck{}
 	node := Node{
@@ -306,6 +323,23 @@ func TestEachListDoesNotDuplicateArgsGivenNodeCheck(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %s", err.Error())
 	}
+}
+
+func TestFailSetsNotNilNodeCheck(t *testing.T) {
+	check := SetsNotNilNodeCheck{}
+	node := Node{
+		Name: nodeA,
+		Sets: []*NodeSet{nil},
+	}
+	expectedErr := InvalidValueError{
+		Sequence: seqA,
+		Node:     &nodeA,
+		Field:    "sets",
+		Values:   []string{"nil"},
+	}
+
+	err := check.CheckNode(seqA, node)
+	compareError(t, err, expectedErr, "accepted nil node sets, expected error")
 }
 
 func TestFailSetsAreNamedNodeCheck(t *testing.T) {

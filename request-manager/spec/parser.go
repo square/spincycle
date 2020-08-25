@@ -91,7 +91,7 @@ func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs
 
 // Specs require some processing after we've loaded them, but before we run the checker on them.
 // Function modifies specs passed in.
-func ProcessSpecs(specs *Specs) error {
+func ProcessSpecs(specs *Specs) {
 	for sequenceName, sequence := range specs.Sequences {
 		sequence.Name = sequenceName
 
@@ -100,12 +100,12 @@ func ProcessSpecs(specs *Specs) error {
 
 			// Set various optional fields if they were excluded.
 			for i, nodeSet := range node.Sets {
-				if nodeSet.As == nil {
+				if nodeSet != nil && nodeSet.As == nil {
 					node.Sets[i].As = node.Sets[i].Arg
 				}
 			}
 			for i, nodeArg := range node.Args {
-				if nodeArg.Given == nil {
+				if nodeArg != nil && nodeArg.Given == nil {
 					node.Args[i].Given = node.Args[i].Expected
 				}
 			}
@@ -114,6 +114,4 @@ func ProcessSpecs(specs *Specs) error {
 			}
 		}
 	}
-
-	return nil
 }

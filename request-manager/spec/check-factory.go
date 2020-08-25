@@ -53,7 +53,9 @@ func (c BaseCheckFactory) MakeNodeErrorChecks() ([]NodeCheck, error) {
 		SubsequencesExistNodeCheck{c.AllSpecs},
 
 		ValidEachNodeCheck{},
+		ArgsNotNilNodeCheck{},
 		ArgsAreNamedNodeCheck{},
+		SetsNotNilNodeCheck{},
 		SetsAreNamedNodeCheck{},
 
 		ValidParallelNodeCheck{},

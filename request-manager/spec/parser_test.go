@@ -195,10 +195,7 @@ func TestProcessSpecs(t *testing.T) {
 		},
 	}
 
-	err := ProcessSpecs(&specs)
-	if err != nil {
-		t.Fatalf("Error processing specs: %s", err)
-	}
+	ProcessSpecs(&specs)
 
 	expectedSpecs := Specs{
 		Sequences: map[string]*Sequence{
