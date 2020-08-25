@@ -47,6 +47,8 @@ func (f *DefaultFactory) Make(name string, ctx app.Context) (app.Command, error)
 		return NewHelp(ctx), nil
 	case "version":
 		return NewVersion(ctx), nil
+	case "visualize":
+		return NewVisualize(ctx), nil
 	case "info":
 		return NewInfo(ctx), nil
 	default:

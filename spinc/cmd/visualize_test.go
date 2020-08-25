@@ -44,7 +44,7 @@ func visualizeSetup() {
 	}
 }
 
-func TestVisualizeReqArgs(t *testing.T) {
+func testVisualizeReqArgs(t *testing.T) {
 	output := &bytes.Buffer{}
 	request := proto.Request{
 		Type:  "request-type",
@@ -101,7 +101,7 @@ func TestVisualizeReqArgs(t *testing.T) {
 	}
 }
 
-func TestVisualizeSimple(t *testing.T) {
+func testVisualizeSimple(t *testing.T) {
 	visualizeSetup()
 
 	output := &bytes.Buffer{}
@@ -153,7 +153,7 @@ func TestVisualizeSimple(t *testing.T) {
 	}
 }
 
-func TestVisualizeBranch(t *testing.T) {
+func testVisualizeBranch(t *testing.T) {
 	visualizeSetup()
 
 	output := &bytes.Buffer{}
@@ -276,7 +276,7 @@ func testVisualizeMerge(t *testing.T) {
 }
 
 // TODO: this shouldn't be pushed either (maybe?)
-func TestVisualize1(t *testing.T) {
+func testVisualize1(t *testing.T) {
 	visualizeSetup()
 
 	output := &bytes.Buffer{}

@@ -86,16 +86,17 @@ func (c *Help) Usage() {
 		"  --timeout  API timeout, milliseconds (default: %d ms)\n"+
 		"  --version  Print version\n"+
 		"Commands:\n"+
-		"  find    [filters]  Print (optionally) filtered request history\n"+
-		"  help    <cmd|req>  Print command or request help\n"+
-		"  info    <ID>       Print complete request information\n"+
-		"  log     <ID>       Print job log (tip: pipe output to less)\n"+
-		"  ps      [ID]       Show running requests and jobs (request ID optional)\n"+
-		"  running <ID>       Exit 0 if request is pending or running, else exit 1\n"+
-		"  start   <request>  Start new request\n"+
-		"  status  <ID>       Print request status and basic information\n"+
-		"  stop    <ID>       Stop request\n"+
-		"  version            Print Spin Cycle version\n",
+		"  find      [filters]  Print (optionally) filtered request history\n"+
+		"  help      <cmd|req>  Print command or request help\n"+
+		"  info      <ID>       Print complete request information\n"+
+		"  log       <ID>       Print job log (tip: pipe output to less)\n"+
+		"  ps        [ID]       Show running requests and jobs (request ID optional)\n"+
+		"  running   <ID>       Exit 0 if request is pending or running, else exit 1\n"+
+		"  start     <request>  Start new request\n"+
+		"  status    <ID>       Print request status and basic information\n"+
+		"  stop      <ID>       Stop request\n"+
+		"  version              Print Spin Cycle version\n"+
+		"  visualize <ID>       Print job chain to terminal\n",
 		config.DEFAULT_ADDR, config.DEFAULT_CONFIG_FILES, config.DEFAULT_TIMEOUT)
 	fmt.Fprintf(c.ctx.Out, "\nRun spinc (no command) to lists requests\n")
 }
