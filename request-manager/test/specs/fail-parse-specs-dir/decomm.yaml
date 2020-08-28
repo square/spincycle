@@ -1,6 +1,7 @@
 ---
 sequences:
   decommission-cluster:
+    request: true
     args:
       required:
         - name: cluster
@@ -28,9 +29,7 @@ sequences:
         type: prep-job-1
         args:
           - expected: cluster
-            given: cluster
           - expected: env
-            given: env
           - expected: instances
             given: instances
         sets: []
@@ -46,7 +45,8 @@ sequences:
           - expected: instances
             given: instances
         deps: [get-instances]
-        retryWait: 10s # specifies duration with retry: 0
+        retry: 3
+        retryWait: 10s # this should be ignored
       decommission-instances:
         category: sequence
         type: decommission-instance
@@ -114,7 +114,6 @@ sequences:
         sets: []
         deps: [check-ok]
   decommission-instance:
-    retry: 2 # this should do nothing
     args:
       required:
         - name: instance

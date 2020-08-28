@@ -27,6 +27,9 @@ sequences:
         type: cleanup
         deps: [pre-flight-checks]
   check-instance-is-ok:
+    args:
+      required:
+        - name: instance
     nodes:
       check-ok:
         category: job

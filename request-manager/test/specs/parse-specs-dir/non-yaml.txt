@@ -1,0 +1,9 @@
+Specs dir parse function should ignore non-yaml files (based on the filename extension).
+
+This is not a yaml file.
+
+Thus, the parse function should not attempt to parse it.
+
+If it does, it will error. Because this is not a yaml file.
+
+And, presumably, the yaml unmarshal function will error when it tries to unmarshal a non-yaml file.

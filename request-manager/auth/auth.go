@@ -67,7 +67,7 @@ func (a AllowAll) Authorize(c Caller, op string, req proto.Request) error {
 	return nil
 }
 
-// ACL represents one role-based ACL entry. This ACL is the same as grapher.ACL.
+// ACL represents one role-based ACL entry. This ACL is the same as spec.ACL.
 // The latter is mapped to the former in Server.Boot to keep the two packages
 // decoupled, i.e. decouple spec syntax from internal data structures.
 type ACL struct {

@@ -5,22 +5,19 @@ package app
 import (
 	"database/sql"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"path/filepath"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/square/spincycle/v2/config"
 	jr "github.com/square/spincycle/v2/job-runner"
-	"github.com/square/spincycle/v2/jobs"
 	"github.com/square/spincycle/v2/request-manager/auth"
-	"github.com/square/spincycle/v2/request-manager/grapher"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/joblog"
 	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/request-manager/status"
 )
 
@@ -30,7 +27,7 @@ import (
 type Context struct {
 	// User-provided config from config file
 	Config config.RequestManager
-	Specs  grapher.Config
+	Specs  spec.Specs
 
 	// Core service singletons, not user-configurable
 	RM     request.Manager
@@ -52,7 +49,17 @@ type Context struct {
 // are sufficient to run the Request Manager. Users can provide custom factories
 // to modify behavior. For example, make Job Runner clients with custom TLS certs.
 type Factories struct {
-	MakeGrapher         func(Context) (grapher.GrapherFactory, error) // @fixme
+	// MakeIDGeneratorFactory makes a factory of (U)ID generators for jobs within a
+	// request. Generators should be able to generate at least as many IDs as jobs
+	// in the largest possible request.
+	MakeIDGeneratorFactory func(Context) (id.GeneratorFactory, error)
+
+	// Makes list of check factories, which create checks run on request specs on
+	// startup. Checks may appear in multiple factories, since checks should not modify
+	// the specs at all.  spec.BaseCheckFactory is automatically included by caller
+	// (and does not need to be included here).
+	MakeCheckFactories func(Context) ([]spec.CheckFactory, error)
+
 	MakeJobRunnerClient func(Context) (jr.Client, error)
 	MakeDbConnPool      func(Context) (*sql.DB, error)
 }
@@ -68,7 +75,7 @@ type Hooks struct {
 
 	// LoadSpecs loads the request specification files (specs). This hook overrides
 	// the default function. Spin Cycle fails to start if it returns an error.
-	LoadSpecs func(Context) (grapher.Config, error)
+	LoadSpecs func(Context) (spec.Specs, error)
 
 	// SetUsername sets proto.Request.User. The auth.Plugin.Authenticate method is
 	// called first which sets the username to Caller.Name. This hook is called after
@@ -109,9 +116,10 @@ func Defaults() Context {
 	return Context{
 		ShutdownChan: make(chan struct{}),
 		Factories: Factories{
-			MakeGrapher:         MakeGrapher,
-			MakeJobRunnerClient: MakeJobRunnerClient,
-			MakeDbConnPool:      MakeDbConnPool,
+			MakeIDGeneratorFactory: MakeIDGeneratorFactory,
+			MakeCheckFactories:     MakeCheckFactories,
+			MakeJobRunnerClient:    MakeJobRunnerClient,
+			MakeDbConnPool:         MakeDbConnPool,
 		},
 		Hooks: Hooks{
 			LoadConfig: LoadConfig,
@@ -136,34 +144,18 @@ func LoadConfig(ctx Context) (config.RequestManager, error) {
 }
 
 // LoadSpecs is the default LoadSpecs hook.
-func LoadSpecs(ctx Context) (grapher.Config, error) {
-	specs := grapher.Config{
-		Sequences: map[string]*grapher.SequenceSpec{},
-	}
-	// For each config in the cfg.SpecFileDir directory, read the file and
-	// then aggregate all of the resulting configs into a single struct.
-	specsDir := ctx.Config.Specs.Dir
-	specFiles, err := ioutil.ReadDir(specsDir)
-	if err != nil {
-		return specs, err
-	}
-	for _, f := range specFiles {
-		spec, err := grapher.ReadConfig(filepath.Join(specsDir, f.Name()))
-		if err != nil {
-			return specs, fmt.Errorf("error reading spec file %s: %s", f.Name(), err)
-		}
-		for name, spec := range spec.Sequences {
-			specs.Sequences[name] = spec
-		}
-	}
-	return specs, nil
+func LoadSpecs(ctx Context) (spec.Specs, error) {
+	return spec.ParseSpecsDir(ctx.Config.Specs.Dir, log.Printf)
 }
 
-// MakeGrapher is the default MakeGrapher factory.
-func MakeGrapher(ctx Context) (grapher.GrapherFactory, error) {
-	idf := id.NewGeneratorFactory(4, 100) // generate 4-character ids for jobs
-	grf := grapher.NewGrapherFactory(jobs.Factory, ctx.Specs, idf)
-	return grf, nil
+// MakeIDGeneratorFactory is the default MakeIDGeneratorFactory factory.
+func MakeIDGeneratorFactory(ctx Context) (id.GeneratorFactory, error) {
+	return id.NewGeneratorFactory(4, 100), nil // generates 4-character ids for jobs
+}
+
+// MakeCheckFactories is the default MakeCheckFactories factory.
+func MakeCheckFactories(ctx Context) ([]spec.CheckFactory, error) {
+	return []spec.CheckFactory{spec.DefaultCheckFactory{ctx.Specs}}, nil
 }
 
 // MakeJobRunnerClient is the default MakeJobRunnerClient factory.

@@ -1,21 +1,14 @@
-// Copyright 2017-2018, Square, Inc.
+// Copyright 2017-2020, Square, Inc.
 
-package grapher
+package chain
 
 import (
 	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/proto"
 )
 
-// noop is the default node spec for sequence fan-out (source) and fan-in (sink) nodes.
-var noopSpec = &NodeSpec{
-	Name:     "noop",
-	Category: "job",
-	NodeType: "noop",
-}
-
-// noopJob is a no-op job that does nothing and always returns success. It's used
-// as the default for sequence start and end.
+// noopJob is a no-op job that does nothing and always returns success. It corresponds
+// to spec.NoopNode.
 type noopJob struct {
 	id job.Id
 }
@@ -44,7 +37,7 @@ func (j *noopJob) Run(jobData map[string]interface{}) (job.Return, error) {
 }
 
 func (j *noopJob) Status() string {
-	return "nop"
+	return "noop"
 }
 
 func (j *noopJob) Stop() error {

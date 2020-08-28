@@ -5,7 +5,9 @@ sequences:
         - name: cmd
           desc: Shell command name
       optional:
-        - name: args # this should fail because default isn't specified
+        - name: args
+          desc: Args to shell command
+          default: ""
     nodes:
       job1name:
         category: job

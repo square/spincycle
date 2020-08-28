@@ -1,6 +1,7 @@
 ---
 sequences:
   destroy-conditional:
+    request: true
     args:
       required:
         - name: container
@@ -264,45 +265,3 @@ sequences:
             given: container
         sets: []
         deps: [destroy-container]
-  bad-if-fail:
-    args:
-      required:
-        - name: container
-        - name: env
-      static:
-        - name: containerType
-          default: "docker"
-    nodes:
-      prep-1:
-        category: job
-        type: prep-job-2
-        args:
-          - expected: container
-            given: container
-          - expected: env
-            given: env
-        sets: []
-        deps: []
-      destroy-container:
-        category: conditional
-        args:
-          - expected: container
-            given: container
-          - expected: containerType
-            given: containerType
-        if: subnet
-        eq:
-          what: destroy-lxc
-        deps: [prep-1]
-      cleanup-job:
-        category: job
-        type: cleanup-job-2
-        args:
-          - expected: container
-            given: container
-        sets: []
-        deps: [destroy-container]
-
-
-
-

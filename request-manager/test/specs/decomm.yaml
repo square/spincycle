@@ -1,6 +1,7 @@
 ---
 sequences:
   decommission-cluster:
+    request: true
     args:
       required:
         - name: cluster
@@ -113,7 +114,6 @@ sequences:
         sets: []
         deps: [check-ok]
   decommission-instance:
-    retry: 2 # this should do nothing
     args:
       required:
         - name: instance

@@ -15,13 +15,16 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/square/spincycle/v2/config"
+	"github.com/square/spincycle/v2/jobs"
 	"github.com/square/spincycle/v2/request-manager/api"
 	"github.com/square/spincycle/v2/request-manager/app"
 	"github.com/square/spincycle/v2/request-manager/auth"
-	"github.com/square/spincycle/v2/request-manager/grapher"
+	"github.com/square/spincycle/v2/request-manager/chain"
 	"github.com/square/spincycle/v2/request-manager/joblog"
 	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/request-manager/status"
+	"github.com/square/spincycle/v2/request-manager/template"
 )
 
 var (
@@ -183,38 +186,61 @@ func (s *Server) Boot() error {
 	cfgstr, _ := json.MarshalIndent(cfg, "", "  ")
 	log.Printf("Config: %s", cfgstr)
 
-	// Load requests specification files (specs)
+	// Load and check requests specification files (specs)
 	specs, err := s.appCtx.Hooks.LoadSpecs(s.appCtx)
 	if err != nil {
-		return fmt.Errorf("error loading specs: %s", err)
+		return fmt.Errorf("LoadSpecs: %s", err)
 	}
+	spec.ProcessSpecs(&specs)
 	s.appCtx.Specs = specs
 
-	// Grapher: load, parse, and validate specs. Done only once on startup.
-	grf, err := s.appCtx.Factories.MakeGrapher(s.appCtx)
+	checkFactories, err := s.appCtx.Factories.MakeCheckFactories(s.appCtx)
 	if err != nil {
-		return fmt.Errorf("MakeGrapher: %s", err)
+		return fmt.Errorf("MakeCheckFactories: %s", err)
+	}
+	checkFactories = append(checkFactories, spec.BaseCheckFactory{specs})
+	checker, err := spec.NewChecker(checkFactories, log.Errorf)
+	ok := checker.RunChecks(specs)
+	if !ok {
+		return fmt.Errorf("Static check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 
+	// Generator factory used to generate IDs for jobs in template.Grapher and chain.Creator.
+	gf, err := s.appCtx.Factories.MakeIDGeneratorFactory(s.appCtx)
+	if err != nil {
+		return fmt.Errorf("MakeIDGeneratorFactory: %s", err)
+	}
+
+	// Build and check validity of sequence templates.
+	tg := template.NewGrapher(specs, gf, log.Errorf)
+	templates, ok := tg.CreateTemplates()
+	if !ok {
+		return fmt.Errorf("Graph check(s) on request specification files failed; see log or run spinc-linter for details")
+	}
+
+	// Chain Creator: creates job chains to be sent to Job Runners
+	jobChainCreatorFactory := chain.NewCreatorFactory(jobs.Factory, specs.Sequences, templates, gf)
+
 	// Job Runner Client: how the Request Manager talks to Job Runners
-	jrc, err := s.appCtx.Factories.MakeJobRunnerClient(s.appCtx)
+	jrClient, err := s.appCtx.Factories.MakeJobRunnerClient(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("MakeJobRunnerClient: %s", err)
 	}
 
 	// Db connection pool: for requests, job chains, etc. (pretty much everything)
-	dbc, err := s.appCtx.Factories.MakeDbConnPool(s.appCtx)
+	dbConnector, err := s.appCtx.Factories.MakeDbConnPool(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("MakeDbConnPool: %s", err)
 	}
 
 	// Request Manager: core logic and coordination
 	managerConfig := request.ManagerConfig{
-		GrapherFactory: grf,
-		DBConnector:    dbc,
-		JRClient:       jrc,
-		DefaultJRURL:   s.appCtx.Config.JRClient.ServerURL,
-		ShutdownChan:   s.shutdownChan,
+		ChainCreatorFactory: jobChainCreatorFactory,
+		Sequences:           specs.Sequences,
+		DBConnector:         dbConnector,
+		JRClient:            jrClient,
+		DefaultJRURL:        s.appCtx.Config.JRClient.ServerURL,
+		ShutdownChan:        s.shutdownChan,
 	}
 	s.appCtx.RM = request.NewManager(managerConfig)
 
@@ -225,8 +251,8 @@ func (s *Server) Boot() error {
 	}
 	resumerConfig := request.ResumerConfig{
 		RequestManager:       s.appCtx.RM,
-		DBConnector:          dbc,
-		JRClient:             jrc,
+		DBConnector:          dbConnector,
+		JRClient:             jrClient,
 		DefaultJRURL:         s.appCtx.Config.JRClient.ServerURL,
 		RMHost:               hostname,
 		ShutdownChan:         s.shutdownChan,
@@ -235,10 +261,10 @@ func (s *Server) Boot() error {
 	s.appCtx.RR = request.NewResumer(resumerConfig)
 
 	// Status: figure out request status using db and Job Runners (real-time)
-	s.appCtx.Status = status.NewManager(dbc, jrc)
+	s.appCtx.Status = status.NewManager(dbConnector, jrClient)
 
 	// Job log store: save job log entries (JLE) from Job Runners
-	s.appCtx.JLS = joblog.NewStore(dbc)
+	s.appCtx.JLS = joblog.NewStore(dbConnector)
 
 	// Auth Manager: request authorization (pre- (built-in) and post- using plugin)
 	s.appCtx.Auth = auth.NewManager(s.appCtx.Plugins.Auth, mapACL(specs), cfg.Auth.AdminRoles, cfg.Auth.Strict)
@@ -270,7 +296,7 @@ func (s *Server) waitForShutdown() {
 }
 
 // MapACL maps spec file ACL to auth.ACL structure.
-func mapACL(specs grapher.Config) map[string][]auth.ACL {
+func mapACL(specs spec.Specs) map[string][]auth.ACL {
 	acl := map[string][]auth.ACL{}
 	for name, spec := range specs.Sequences {
 		if len(spec.ACL) == 0 {

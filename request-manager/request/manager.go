@@ -21,7 +21,8 @@ import (
 	serr "github.com/square/spincycle/v2/errors"
 	jr "github.com/square/spincycle/v2/job-runner"
 	"github.com/square/spincycle/v2/proto"
-	"github.com/square/spincycle/v2/request-manager/grapher"
+	"github.com/square/spincycle/v2/request-manager/chain"
+	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/retry"
 )
 
@@ -74,30 +75,33 @@ type Manager interface {
 
 // manager implements the Manager interface.
 type manager struct {
-	grf          grapher.GrapherFactory
-	dbc          *sql.DB
-	jrc          jr.Client
-	defaultJRURL string
-	shutdownChan chan struct{}
+	jobChainCreatorFactory chain.CreatorFactory
+	sequences              map[string]*spec.Sequence
+	dbConnector            *sql.DB
+	jrClient               jr.Client
+	defaultJRURL           string
+	shutdownChan           chan struct{}
 	*sync.Mutex
 }
 
 type ManagerConfig struct {
-	GrapherFactory grapher.GrapherFactory
-	DBConnector    *sql.DB
-	JRClient       jr.Client
-	DefaultJRURL   string
-	ShutdownChan   chan struct{}
+	ChainCreatorFactory chain.CreatorFactory
+	Sequences           map[string]*spec.Sequence
+	DBConnector         *sql.DB
+	JRClient            jr.Client
+	DefaultJRURL        string
+	ShutdownChan        chan struct{}
 }
 
 func NewManager(config ManagerConfig) Manager {
 	return &manager{
-		grf:          config.GrapherFactory,
-		dbc:          config.DBConnector,
-		jrc:          config.JRClient,
-		defaultJRURL: config.DefaultJRURL,
-		shutdownChan: config.ShutdownChan,
-		Mutex:        &sync.Mutex{},
+		jobChainCreatorFactory: config.ChainCreatorFactory,
+		sequences:              config.Sequences,
+		dbConnector:            config.DBConnector,
+		jrClient:               config.JRClient,
+		defaultJRURL:           config.DefaultJRURL,
+		shutdownChan:           config.ShutdownChan,
+		Mutex:                  &sync.Mutex{},
 	}
 }
 
@@ -120,8 +124,8 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	// ----------------------------------------------------------------------
 	// Verify and finalize request args. The final request args are given
 	// (from caller) + optional + static.
-	gr := m.grf.Make(req)
-	reqArgs, err := gr.RequestArgs(req.Type, newReq.Args)
+	jobChainCreator := m.jobChainCreatorFactory.Make(req)
+	reqArgs, err := jobChainCreator.RequestArgs(newReq.Args)
 	if err != nil {
 		return req, err
 	}
@@ -129,7 +133,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 
 	// Copy requests args -> initial job args. We save the former as a record
 	// (request_archives.args) of every request arg that the request was started
-	// with. CreateGraph modifies and greatly expands the latter (job args).
+	// with. BuildJobChain modifies and greatly expands the latter (job args).
 	// Final job args are saved with each job because the same job arg can have
 	// different values for different jobs (especially true for each: expansions).
 	jobArgs := map[string]interface{}{}
@@ -138,44 +142,17 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	}
 
 	// ----------------------------------------------------------------------
-	// Create graph from request specs and jobs args. Then translate the
-	// generic graph into a job chain and save it with the request.
-	newGraph, err := gr.CreateGraph(req.Type, jobArgs)
+	// Build job chain with the given jobs args and save it with the request.
+	jobChain, err := jobChainCreator.BuildJobChain(jobArgs)
 	if err != nil {
 		return req, err
 	}
-	jc := &proto.JobChain{
-		AdjacencyList: newGraph.Edges,
-		RequestId:     reqId,
-		State:         proto.STATE_PENDING,
-		Jobs:          map[string]proto.Job{},
-	}
-	for jobId, node := range newGraph.Vertices {
-		bytes, err := node.Datum.Serialize()
-		if err != nil {
-			return req, err
-		}
-		job := proto.Job{
-			Type:              node.Datum.Id().Type,
-			Id:                node.Datum.Id().Id,
-			Name:              node.Datum.Id().Name,
-			Bytes:             bytes,
-			Args:              node.Args,
-			Retry:             node.Retry,
-			RetryWait:         node.RetryWait,
-			SequenceId:        node.SequenceId,
-			SequenceRetry:     node.SequenceRetry,
-			SequenceRetryWait: node.SequenceRetryWait,
-			State:             proto.STATE_PENDING,
-		}
-		jc.Jobs[jobId] = job
-	}
-	req.JobChain = jc
-	req.TotalJobs = uint(len(jc.Jobs))
+	req.JobChain = jobChain
+	req.TotalJobs = uint(len(jobChain.Jobs))
 
 	// ----------------------------------------------------------------------
 	// Serial data for request_archives
-	jcBytes, err := json.Marshal(req.JobChain)
+	jobChainBytes, err := json.Marshal(req.JobChain)
 	if err != nil {
 		return req, fmt.Errorf("cannot marshal job chain: %s", err)
 	}
@@ -194,7 +171,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	// highly mutable, especially requests.state and requests.finished_jobs.
 	ctx := context.TODO()
 	err = retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
-		txn, err := m.dbc.BeginTx(ctx, nil)
+		txn, err := m.dbConnector.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
@@ -205,7 +182,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 			reqIdBytes,
 			string(newReqBytes),
 			string(reqArgsBytes),
-			jcBytes,
+			jobChainBytes,
 		)
 		if err != nil {
 			return serr.NewDbError(err, "INSERT request_archives")
@@ -250,7 +227,7 @@ func (m *manager) Get(requestId string) (proto.Request, error) {
 		" WHERE request_id = ?"
 	notFound := false
 	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
-		err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(
+		err := m.dbConnector.QueryRowContext(ctx, q, requestId).Scan(
 			&req.Id,
 			&req.Type,
 			&req.State,
@@ -321,7 +298,7 @@ func (m *manager) Start(requestId string) error {
 		if i != 0 {
 			time.Sleep(JR_RETRY_WAIT)
 		}
-		chainURL, err = m.jrc.NewJobChain(m.defaultJRURL, *req.JobChain)
+		chainURL, err = m.jrClient.NewJobChain(m.defaultJRURL, *req.JobChain)
 		if err == nil {
 			break
 		}
@@ -364,7 +341,7 @@ func (m *manager) Stop(requestId string) error {
 	}
 
 	// Tell the JR to stop running the job chain for the request.
-	err = m.jrc.StopRequest(req.JobRunnerURL, requestId)
+	err = m.jrClient.StopRequest(req.JobRunnerURL, requestId)
 	if err != nil {
 		return fmt.Errorf("error stopping request in Job Runner: %s", err)
 	}
@@ -434,8 +411,7 @@ func (m *manager) Specs() []proto.RequestSpec {
 		return requestList
 	}
 
-	gr := m.grf.Make(proto.Request{})
-	req := gr.Sequences()
+	req := m.sequences
 	sortedReqNames := make([]string, 0, len(req))
 	for name := range req {
 		if req[name].Request {
@@ -452,7 +428,7 @@ func (m *manager) Specs() []proto.RequestSpec {
 		}
 		for _, arg := range req[name].Args.Required {
 			a := proto.RequestArg{
-				Name: arg.Name,
+				Name: *arg.Name,
 				Desc: arg.Desc,
 				Type: proto.ARG_TYPE_REQUIRED,
 			}
@@ -460,7 +436,7 @@ func (m *manager) Specs() []proto.RequestSpec {
 		}
 		for _, arg := range req[name].Args.Optional {
 			a := proto.RequestArg{
-				Name:    arg.Name,
+				Name:    *arg.Name,
 				Desc:    arg.Desc,
 				Type:    proto.ARG_TYPE_OPTIONAL,
 				Default: arg.Default,
@@ -474,28 +450,28 @@ func (m *manager) Specs() []proto.RequestSpec {
 }
 
 func (m *manager) JobChain(requestId string) (proto.JobChain, error) {
-	var jc proto.JobChain
-	var jcBytes []byte // raw job chains are stored as blobs in the db.
+	var jobChain proto.JobChain
+	var jobChainBytes []byte // raw job chains are stored as blobs in the db.
 
 	ctx := context.TODO()
 
 	// Get the job chain from the request_archives table.
 	q := "SELECT job_chain FROM request_archives WHERE request_id = ?"
-	if err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes); err != nil {
+	if err := m.dbConnector.QueryRowContext(ctx, q, requestId).Scan(&jobChainBytes); err != nil {
 		switch err {
 		case sql.ErrNoRows:
-			return jc, serr.RequestNotFound{requestId}
+			return jobChain, serr.RequestNotFound{requestId}
 		default:
-			return jc, serr.NewDbError(err, "SELECT request_archives")
+			return jobChain, serr.NewDbError(err, "SELECT request_archives")
 		}
 	}
 
 	// Unmarshal the job chain into a proto.JobChain.
-	if err := json.Unmarshal(jcBytes, &jc); err != nil {
-		return jc, fmt.Errorf("cannot unmarshal job chain: %s", err)
+	if err := json.Unmarshal(jobChainBytes, &jobChain); err != nil {
+		return jobChain, fmt.Errorf("cannot unmarshal job chain: %s", err)
 	}
 
-	return jc, nil
+	return jobChain, nil
 }
 
 // Get a request with proto.Request.JobChain and proto.Request.Params set
@@ -507,11 +483,11 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 
 	ctx := context.TODO()
 
-	var jcBytes []byte
+	var jobChainBytes []byte
 	q := "SELECT job_chain FROM request_archives WHERE request_id = ?"
 	notFound := false
 	err = retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
-		err := m.dbc.QueryRowContext(ctx, q, requestId).Scan(&jcBytes)
+		err := m.dbConnector.QueryRowContext(ctx, q, requestId).Scan(&jobChainBytes)
 		if err != nil {
 			switch err {
 			case sql.ErrNoRows:
@@ -530,11 +506,11 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 		return req, serr.RequestNotFound{requestId}
 	}
 
-	var jc proto.JobChain
-	if err := json.Unmarshal(jcBytes, &jc); err != nil {
+	var jobChain proto.JobChain
+	if err := json.Unmarshal(jobChainBytes, &jobChain); err != nil {
 		return req, fmt.Errorf("cannot unmarshal job chain: %s", err)
 	}
-	req.JobChain = &jc
+	req.JobChain = &jobChain
 
 	return req, nil
 }
@@ -588,7 +564,7 @@ func (m *manager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
 	var rows *sql.Rows
 	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
 		var err error
-		rows, err = m.dbc.QueryContext(ctx, query, values...)
+		rows, err = m.dbConnector.QueryContext(ctx, query, values...)
 		if err != nil {
 			return err
 		}
@@ -665,7 +641,7 @@ func (m *manager) updateRequest(req proto.Request, curState byte) error {
 	var res sql.Result
 	err := retry.Do(DB_TRIES, DB_RETRY_WAIT, func() error {
 		var err error
-		res, err = m.dbc.ExecContext(ctx, q,
+		res, err = m.dbConnector.ExecContext(ctx, q,
 			req.State,
 			req.StartedAt,
 			req.FinishedAt,

@@ -58,7 +58,7 @@ sequences:
           - expected: instances
             given: instances
         deps: [prep-1]
-        parallel: 0 # should be non-zero and positive--at least one sequence needs to be able to run
+        parallel: 2
       first-cleanup-job:
         category: job
         type: cleanup-job
@@ -117,7 +117,6 @@ sequences:
         sets: []
         deps: [check-ok]
   decommission-instance:
-    retry: 2 # this should do nothing
     args:
       required:
         - name: instance
