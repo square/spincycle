@@ -19,30 +19,41 @@ type Context struct {
 }
 
 type Factories struct {
-	GeneratorFactory id.GeneratorFactory
+	// MakeIDGeneratorFactory makes a factory of (U)ID generators for nodes within a
+	// sequence. Generators should be able to generate at least as many IDs as nodes
+	// in the largest sequence.
+	MakeIDGeneratorFactory func() (id.GeneratorFactory, error)
+
+	// Makes list of check factories, which create checks run on request specs in
+	// linter. Checks may appear in multiple factories, since checks should not modify
+	// the specs at all.  spec.BaseCheckFactory is automatically included by caller
+	// (and does not need to be included here).
+	MakeCheckFactories func(allSpecs spec.Specs) ([]spec.CheckFactory, error)
 }
 
 type Hooks struct {
 	// Parse specs
 	LoadSpecs func(specsDir string, logFunc func(string, ...interface{})) (spec.Specs, error)
-
-	// Get additional checks to run
-	GetCheckFactories func(specs spec.Specs) []spec.CheckFactory
 }
 
 func Defaults() Context {
 	return Context{
 		Factories: Factories{
-			GeneratorFactory: id.NewGeneratorFactory(4, 100),
+			MakeIDGeneratorFactory: MakeIDGeneratorFactory,
+			MakeCheckFactories:     MakeCheckFactories,
 		},
 		Hooks: Hooks{
-			LoadSpecs:         spec.ParseSpecsDir,
-			GetCheckFactories: GetCheckFactories,
+			LoadSpecs: spec.ParseSpecsDir,
 		},
 	}
 }
 
-// Default GetCheckFactories function
-func GetCheckFactories(allSpecs spec.Specs) []spec.CheckFactory {
-	return []spec.CheckFactory{spec.DefaultCheckFactory{allSpecs}}
+// MakeIDGeneratorFactory is the default MakeIDGeneratorFactory factory.
+func MakeIDGeneratorFactory() (id.GeneratorFactory, error) {
+	return id.NewGeneratorFactory(4, 100), nil // generates 4-character ids for jobs
+}
+
+// MakeCheckFactories is the default MakeCheckFactories factory.
+func MakeCheckFactories(allSpecs spec.Specs) ([]spec.CheckFactory, error) {
+	return []spec.CheckFactory{spec.DefaultCheckFactory{allSpecs}}, nil
 }

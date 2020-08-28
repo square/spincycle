@@ -28,7 +28,10 @@ func Run(ctx app.Context) error {
 	}
 	spec.ProcessSpecs(&allSpecs)
 
-	checkFactories := ctx.Hooks.GetCheckFactories(allSpecs)
+	checkFactories, err := ctx.Factories.MakeCheckFactories(allSpecs)
+	if err != nil {
+		return fmt.Errorf("MakeCheckFactories: %s", err)
+	}
 	checkFactories = append(checkFactories, spec.BaseCheckFactory{allSpecs})
 	checker, err := spec.NewChecker(checkFactories, printf)
 	if err != nil {
@@ -40,7 +43,11 @@ func Run(ctx app.Context) error {
 	}
 
 	/* Graph checks. */
-	templateG := template.NewGrapher(allSpecs, ctx.Factories.GeneratorFactory, printf)
+	idgen, err := ctx.Factories.MakeIDGeneratorFactory()
+	if err != nil {
+		return fmt.Errorf("MakeIDGeneratorFactory: %s", err)
+	}
+	templateG := template.NewGrapher(allSpecs, idgen, printf)
 	_, ok = templateG.CreateTemplates()
 	if !ok {
 		return fmt.Errorf("graph check failed") // grapher prints details for us
