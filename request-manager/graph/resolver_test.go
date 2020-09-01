@@ -1,6 +1,6 @@
 // Copyright 2017-2018, Square, Inc.
 
-package graph
+package graph_test
 
 import (
 	"fmt"
@@ -10,10 +10,10 @@ import (
 	"github.com/go-test/deep"
 	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/proto"
+	. "github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
-	test "github.com/square/spincycle/v2/test"
 	"github.com/square/spincycle/v2/test/mock"
 )
 
@@ -80,18 +80,18 @@ func (tj testJob) Run(map[string]interface{}) (job.Return, error) {
 }
 
 func createGraph(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}) (*Graph, error) {
-	return createGraph0(t, sequencesFile, requestName, jobArgs, &testFactory{}, id.NewGenerator(4, 100))
+	return createGraph0(t, sequencesFile, requestName, jobArgs, &testFactory{}, id.NewGeneratorFactory(4, 100))
 }
 
 func createGraph1(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory) (*Graph, error) {
-	return createGraph0(t, sequencesFile, requestName, jobArgs, tf, id.NewGenerator(4, 100))
+	return createGraph0(t, sequencesFile, requestName, jobArgs, tf, id.NewGeneratorFactory(4, 100))
 }
 
-func createGraph2(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, idgen id.Generator) (*Graph, error) {
-	return createGraph0(t, sequencesFile, requestName, jobArgs, &testFactory{}, idgen)
+func createGraph2(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, idgenFactory id.GeneratorFactory) (*Graph, error) {
+	return createGraph0(t, sequencesFile, requestName, jobArgs, &testFactory{}, idgenFactory)
 }
 
-func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory, idgen id.Generator) (*Graph, error) {
+func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[string]interface{}, tf job.Factory, idgenFactory id.GeneratorFactory) (*Graph, error) {
 	req := proto.Request{
 		Id:   "reqABC",
 		Type: requestName,
@@ -103,252 +103,32 @@ func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[s
 	}
 	spec.ProcessSpecs(&specs)
 
+	// Add optional+static args to job args map
+	seqSpec, ok := specs.Sequences[requestName]
+	if !ok {
+		t.Fatalf("request %s not found in specs", requestName)
+	}
+	for _, arg := range seqSpec.Args.Optional {
+		if _, ok := jobArgs[*arg.Name]; !ok {
+			jobArgs[*arg.Name] = *arg.Default
+		}
+	}
+	for _, arg := range seqSpec.Args.Static {
+		if _, ok := jobArgs[*arg.Name]; !ok {
+			jobArgs[*arg.Name] = *arg.Default
+		}
+	}
+
 	gr := NewGrapher(specs, id.NewGeneratorFactory(4, 100))
 	seqGraphs, seqErrors := gr.DoChecks()
 	if len(seqErrors) != 0 {
 		t.Fatalf("failed to create sequence graphs: %v", seqErrors)
 	}
 
-	resolver := resolver{
-		Request:           req,
-		JobFactory:        tf,
-		AllSequences:      specs.Sequences,
-		SequenceGraphs:    seqGraphs,
-		IdGen:             idgen,
-	}
-	cfg := buildSequenceConfig{
-		wrapperName:       "request_" + resolver.Request.Type,
-		sequenceName:      resolver.Request.Type,
-		jobArgs:           jobArgs,
-		sequenceRetry:     0,
-		sequenceRetryWait: "0s",
-	}
-	return resolver.buildSequence(cfg)
-}
+	rf := NewResolverFactory(tf, specs.Sequences, seqGraphs, idgenFactory)
+	r := rf.Make(req)
 
-func TestBuildJobChain(t *testing.T) {
-	/* Load templates. */
-	sequencesFile := "a-b-c.yaml"
-	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, t.Logf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec.ProcessSpecs(&specs)
-
-	gr := NewGrapher(specs, id.NewGeneratorFactory(4, 100))
-	seqGraphs, seqErrors := gr.DoChecks()
-	if len(seqErrors) != 0 {
-		t.Fatalf("failed to create templates")
-	}
-
-	/* Create test job factory. */
-	requestId := "reqABC"
-	tf := &mock.JobFactory{
-		MockJobs: map[string]*mock.Job{},
-	}
-	for i, c := range []string{"a", "b", "c"} {
-		jobType := c + "JobType"
-		tf.MockJobs[jobType] = &mock.Job{
-			IdResp: job.NewIdWithRequestId(jobType, c, fmt.Sprintf("id%d", i), requestId),
-		}
-	}
-	tf.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
-		"aArg": "aValue",
-	}
-
-	/* Create job chain. */
-	requestName := "three-nodes"
-	req := proto.Request{
-		Id:   requestId,
-		Type: requestName,
-	}
-	args := map[string]interface{}{
-		"foo": "foo-value",
-	}
-	resolver := resolver{
-		Request:           req,
-		JobFactory:        tf,
-		AllSequences:      specs.Sequences,
-		SequenceGraphs:    seqGraphs,
-		IdGen:             id.NewGenerator(4, 100),
-	}
-	actualJobChain, err := resolver.BuildJobChain(args)
-	if err != nil {
-		t.Fatalf("failed to build job chain: %s", err)
-	}
-
-	/* Check resulting job chain. */
-	if actualJobChain.RequestId != requestId {
-		t.Fatalf("expected job chain to have request ID %s, got %s", requestId, actualJobChain.RequestId)
-	}
-	if actualJobChain.State != proto.STATE_PENDING {
-		t.Fatalf("expected job chain to be in state %v, got %v", proto.STATE_PENDING, actualJobChain.State)
-	}
-	if actualJobChain.FinishedJobs != 0 {
-		t.Fatalf("expected job chain to have no finished jobs, got %d", actualJobChain.FinishedJobs)
-	}
-	// Job names in requests are non-deterministic because the nodes in a sequence
-	// are built from a map (i.e. hash order randomness). So sometimes we get a@3
-	// and other times a@4, etc. So we'll check some specific, deterministic stuff.
-	// But an example of a job chain is shown in the comment block below.
-	/*
-		expectedJc := proto.JobChain{
-			RequestId: actualReq.Id, // no other way of getting this from outside the package
-			State:     proto.STATE_PENDING,
-			Jobs: map[string]proto.Job{
-				"request_three-nodes_start@1": proto.Job{
-					Id:   "request_three-nodes_start@1",
-					Type: "no-op",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 2,
-				},
-				"three-nodes_start@2": proto.Job{
-					Id:   "three-nodes_start@2",
-					Type: "no-op",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 2,
-				},
-				"a@5": proto.Job{
-					Id:        "a@5",
-					Type:      "aJobType",
-					Retry:     1,
-					RetryWait: 500ms,
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-				"b@6": proto.Job{
-					Id:    "b@6",
-					Type:  "bJobType",
-					Retry: 3,
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-				"c@7": proto.Job{
-					Id:   "c@7",
-					Type: "cJobType",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-				"three-nodes_end@3": proto.Job{
-					Id:   "three-nodes_end@23,
-					Type: "no-op",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-				"request_three-nodes_end@4": proto.Job{
-					Id:   "sequence_three-nodes_end@2",
-					Type: "no-op",
-					SequenceId: "request_three-nodes_start@1",
-					SequenceRetry: 0,
-				},
-			},
-			AdjacencyList: map[string][]string{
-				"request_three-nodes_start@1": []string{"three-nodes_start@2"},
-				"three-nodes_start@2": []string{"a@5"},
-				"a@5": []string{"b@6"},
-				"b@6": []string{"c@7"},
-				"c@7": []string{"three-nodes_end@3"},
-				"three-nodes_end@3": []string{"request_three-nodes-end@4"},
-			},
-		}
-	*/
-
-	for _, job := range actualJobChain.Jobs {
-		if job.State != proto.STATE_PENDING {
-			t.Errorf("job %s has state %s, expected all jobs to be STATE_PENDING", job.Id, proto.StateName[job.State])
-		}
-		if job.Type == "aJobType" && job.RetryWait != "500ms" {
-			t.Errorf("job of type aJobType has RetryWait: %s, expected 500ms", job.RetryWait)
-		}
-	}
-	if len(actualJobChain.Jobs) != 7 {
-		test.Dump(actualJobChain.Jobs)
-		t.Errorf("job chain has %d jobs, expected 7", len(actualJobChain.Jobs))
-	}
-	if len(actualJobChain.AdjacencyList) != 6 {
-		test.Dump(actualJobChain.Jobs)
-		t.Errorf("job chain AdjacencyList len = %d, expected 6", len(actualJobChain.AdjacencyList))
-	}
-
-	jc := actualJobChain
-	fmt.Println("digraph G {")
-
-	for k, v := range jc.Jobs {
-		fmt.Printf("\t\"%s\" [label=\"%s\\njob: %s\"]\n", k, v.Name, v.Type)
-	}
-
-	for k, vs := range jc.AdjacencyList {
-		for _, v := range vs {
-			fmt.Printf("\t\"%s\" -> \"%s\";\n", k, v)
-		}
-	}
-
-	fmt.Println("}")
-}
-
-func TestBuildNestedSequenceJobChain(t *testing.T) {
-	sequencesFile := "a-b-c.yaml"
-	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, t.Logf)
-	if err != nil {
-		t.Fatal(err)
-	}
-	spec.ProcessSpecs(&specs)
-
-	gr := NewGrapher(specs, id.NewGeneratorFactory(4, 100))
-	seqGraphs, seqErrors := gr.DoChecks()
-	if len(seqErrors) != 0 {
-		t.Fatalf("failed to create templates")
-	}
-
-	/* Create test job factory. */
-	requestId := "reqABC"
-	tf := &mock.JobFactory{
-		MockJobs: map[string]*mock.Job{},
-	}
-	for i, c := range []string{"a", "b", "c"} {
-		jobType := c + "JobType"
-		tf.MockJobs[jobType] = &mock.Job{
-			IdResp: job.NewIdWithRequestId(jobType, c, fmt.Sprintf("id%d", i), requestId),
-		}
-	}
-	tf.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
-		"aArg": "aValue",
-	}
-
-	/* Create job chain. */
-	requestName := "retry-three-nodes"
-	req := proto.Request{
-		Id:   requestId,
-		Type: requestName,
-	}
-	args := map[string]interface{}{
-		"foo": "foo-value",
-	}
-	resolver := resolver{
-		Request:           req,
-		JobFactory:        tf,
-		AllSequences:      specs.Sequences,
-		SequenceGraphs:    seqGraphs,
-		IdGen:             id.NewGenerator(4, 100),
-	}
-	jobChain, err := resolver.BuildJobChain(args)
-	if err != nil {
-		t.Fatalf("failed to build job chain: %s", err)
-	}
-
-	/* We just want to check that sequence retries are set correctly. */
-	seen := false
-	for _, job := range jobChain.Jobs {
-		if job.SequenceRetry == 10 {
-			seen = true
-			if job.SequenceRetryWait != "500ms" {
-				t.Errorf("sequence three-nodes has retryWait: %s, expected retry: 500ms", job.SequenceRetryWait)
-			}
-		}
-	}
-	if !seen {
-		t.Errorf("no node with retry: 10, expected such a node")
-	}
+	return r.BuildRequestGraph(jobArgs)
 }
 
 func TestNodeArgs(t *testing.T) {
@@ -851,21 +631,7 @@ func TestCreateDefaultConditionalGraph(t *testing.T) {
 
 func TestFailCreateNoDefaultConditionalGraph(t *testing.T) {
 	sequencesFile := "destroy-conditional.yaml"
-	requestName := "conditional-no-default-fail"
-	args := map[string]interface{}{
-		"container": "test-container-001",
-		"env":       "testing",
-	}
-
-	_, err := createGraph(t, sequencesFile, requestName, args)
-	if err == nil {
-		t.Errorf("no error creating creator without default conditional, expected an error")
-	}
-}
-
-func TestFailCreateBadIfConditionalGraph(t *testing.T) {
-	sequencesFile := "destroy-conditional.yaml"
-	requestName := "bad-if-fail"
+	requestName := "no-default-fail"
 	args := map[string]interface{}{
 		"container": "test-container-001",
 		"env":       "testing",
@@ -1166,7 +932,12 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 			return fmt.Sprintf("id%d", idNo), nil
 		},
 	}
-	got, err := createGraph2(t, sequencesFile, requestName, args, idgen)
+	idgenFactory := mock.IDGeneratorFactory{
+		MakeFunc: func() id.Generator {
+			return idgen
+		},
+	}
+	got, err := createGraph2(t, sequencesFile, requestName, args, idgenFactory)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1175,39 +946,39 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 	// are what we expect, and the order expressed by Edges. This lets us see/verify
 	// that defaultSeq is created.
 	id1 := &Node{
-		Name:   "request_request-name_start",
+		Name:       "request_request-name_start",
 		SequenceId: "id1",
 	}
 	id3 := &Node{
-		Name:   "request-name_start",
+		Name:       "request-name_start",
 		SequenceId: "id1",
 	}
 	id4 := &Node{
-		Name:   "conditional_job1name_start",
+		Name:       "conditional_job1name_start",
 		SequenceId: "id4",
 	}
 	id6 := &Node{
-		Name:   "defaultSeq_start",
+		Name:       "defaultSeq_start",
 		SequenceId: "id4",
 	}
 	id7 := &Node{ // category: job, type: job1
-		Name:   "job1name",
+		Name:       "job1name",
 		SequenceId: "id4",
 	}
 	id8 := &Node{
-		Name:   "defaultSeq_end",
+		Name:       "defaultSeq_end",
 		SequenceId: "id4",
 	}
 	id5 := &Node{
-		Name:   "conditional_job1name_end",
+		Name:       "conditional_job1name_end",
 		SequenceId: "id4",
 	}
 	id9 := &Node{
-		Name:   "request-name_end",
+		Name:       "request-name_end",
 		SequenceId: "id1",
 	}
 	id2 := &Node{
-		Name:   "request_request-name_end",
+		Name:       "request_request-name_end",
 		SequenceId: "id1",
 	}
 	vertices := map[string]*Node{
@@ -1331,7 +1102,7 @@ func createPrepJob1(args map[string]interface{}) error {
 	}
 	expected := []string{"node1", "node2", "node3", "node4"}
 	instances, ok := i.([]string)
-	if !ok || !SlicesMatch(instances, expected) {
+	if !ok || !slicesMatch(instances, expected) {
 		return fmt.Errorf("job prep-job-1 given '%v' but wanted '%v'", i, expected)
 	}
 	return nil

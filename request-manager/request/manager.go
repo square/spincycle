@@ -75,33 +75,33 @@ type Manager interface {
 
 // manager implements the Manager interface.
 type manager struct {
-	jobChainCreatorFactory graph.ResolverFactory
-	sequences              map[string]*spec.Sequence
-	dbConnector            *sql.DB
-	jrClient               jr.Client
-	defaultJRURL           string
-	shutdownChan           chan struct{}
+	resolverFactory graph.ResolverFactory
+	sequences       map[string]*spec.Sequence
+	dbConnector     *sql.DB
+	jrClient        jr.Client
+	defaultJRURL    string
+	shutdownChan    chan struct{}
 	*sync.Mutex
 }
 
 type ManagerConfig struct {
-	ChainCreatorFactory graph.ResolverFactory
-	Sequences           map[string]*spec.Sequence
-	DBConnector         *sql.DB
-	JRClient            jr.Client
-	DefaultJRURL        string
-	ShutdownChan        chan struct{}
+	ResolverFactory graph.ResolverFactory
+	Sequences       map[string]*spec.Sequence
+	DBConnector     *sql.DB
+	JRClient        jr.Client
+	DefaultJRURL    string
+	ShutdownChan    chan struct{}
 }
 
 func NewManager(config ManagerConfig) Manager {
 	return &manager{
-		jobChainCreatorFactory: config.ChainCreatorFactory,
-		sequences:              config.Sequences,
-		dbConnector:            config.DBConnector,
-		jrClient:               config.JRClient,
-		defaultJRURL:           config.DefaultJRURL,
-		shutdownChan:           config.ShutdownChan,
-		Mutex:                  &sync.Mutex{},
+		resolverFactory: config.ResolverFactory,
+		sequences:       config.Sequences,
+		dbConnector:     config.DBConnector,
+		jrClient:        config.JRClient,
+		defaultJRURL:    config.DefaultJRURL,
+		shutdownChan:    config.ShutdownChan,
+		Mutex:           &sync.Mutex{},
 	}
 }
 
@@ -124,8 +124,8 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 	// ----------------------------------------------------------------------
 	// Verify and finalize request args. The final request args are given
 	// (from caller) + optional + static.
-	jobChainCreator := m.jobChainCreatorFactory.Make(req)
-	reqArgs, err := jobChainCreator.RequestArgs(newReq.Args)
+	resolver := m.resolverFactory.Make(req)
+	reqArgs, err := resolver.RequestArgs(newReq.Args)
 	if err != nil {
 		return req, err
 	}
@@ -133,7 +133,7 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 
 	// Copy requests args -> initial job args. We save the former as a record
 	// (request_archives.args) of every request arg that the request was started
-	// with. BuildJobChain modifies and greatly expands the latter (job args).
+	// with. BuildRequestGraph modifies and greatly expands the latter (job args).
 	// Final job args are saved with each job because the same job arg can have
 	// different values for different jobs (especially true for each: expansions).
 	jobArgs := map[string]interface{}{}
@@ -143,12 +143,39 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 
 	// ----------------------------------------------------------------------
 	// Build job chain with the given jobs args and save it with the request.
-	jobChain, err := jobChainCreator.BuildJobChain(jobArgs)
+	reqGraph, err := resolver.BuildRequestGraph(jobArgs)
 	if err != nil {
 		return req, err
 	}
-	req.JobChain = jobChain
-	req.TotalJobs = uint(len(jobChain.Jobs))
+	jc := &proto.JobChain{
+		AdjacencyList: reqGraph.Edges,
+		RequestId:     reqId,
+		State:         proto.STATE_PENDING,
+		Jobs:          map[string]proto.Job{},
+	}
+	for jobId, node := range reqGraph.Nodes {
+		bytes, err := node.Job.Serialize()
+		if err != nil {
+			return req, err
+		}
+		job := proto.Job{
+			Type:              node.Job.Id().Type,
+			Id:                node.Job.Id().Id,
+			Name:              node.Job.Id().Name,
+			Bytes:             bytes,
+			Args:              node.Args,
+			Retry:             node.Retry,
+			RetryWait:         node.RetryWait,
+			SequenceId:        node.SequenceId,
+			SequenceRetry:     node.SequenceRetry,
+			SequenceRetryWait: node.SequenceRetryWait,
+			State:             proto.STATE_PENDING,
+		}
+		jc.Jobs[jobId] = job
+	}
+
+	req.JobChain = jc
+	req.TotalJobs = uint(len(jc.Jobs))
 
 	// ----------------------------------------------------------------------
 	// Serial data for request_archives

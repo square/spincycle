@@ -14,7 +14,6 @@ import (
 
 	serr "github.com/square/spincycle/v2/errors"
 	"github.com/square/spincycle/v2/proto"
-	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/request"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
 	testdb "github.com/square/spincycle/v2/request-manager/test/db"
@@ -50,11 +49,11 @@ func setupResumer(t *testing.T, dataFile string) string {
 	shutdownChan = make(chan struct{})
 
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: &graph.MockResolverFactory{},
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: &mock.ResolverFactory{},
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	rm = request.NewManager(cfg)
 

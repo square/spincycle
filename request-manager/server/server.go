@@ -204,13 +204,13 @@ func (s *Server) Boot() error {
 		return fmt.Errorf("Static check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 
-	// Generator factory used to generate IDs for jobs in template.Grapher and chain.Creator.
+	// Generator factory used to generate IDs for nodes in sequence graphs and jobs in job chains
 	gf, err := s.appCtx.Factories.MakeIDGeneratorFactory(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("MakeIDGeneratorFactory: %s", err)
 	}
 
-	// Build and check validity of sequence templates.
+	// Do graph checks and get sequence graphs
 	tg := graph.NewGrapher(specs, gf)
 	seqGraphs, seqErrors := tg.DoChecks()
 	if len(seqErrors) != 0 {
@@ -220,8 +220,8 @@ func (s *Server) Boot() error {
 		return fmt.Errorf("Graph check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 
-	// Chain Creator: creates job chains to be sent to Job Runners
-	jobChainCreatorFactory := graph.NewResolverFactory(jobs.Factory, specs.Sequences, seqGraphs, gf)
+	// Resolver Factory: creates Resolvers, which resolve sequence graphs into request graphs
+	resolverFactory := graph.NewResolverFactory(jobs.Factory, specs.Sequences, seqGraphs, gf)
 
 	// Job Runner Client: how the Request Manager talks to Job Runners
 	jrClient, err := s.appCtx.Factories.MakeJobRunnerClient(s.appCtx)
@@ -237,12 +237,12 @@ func (s *Server) Boot() error {
 
 	// Request Manager: core logic and coordination
 	managerConfig := request.ManagerConfig{
-		ChainCreatorFactory: jobChainCreatorFactory,
-		Sequences:           specs.Sequences,
-		DBConnector:         dbConnector,
-		JRClient:            jrClient,
-		DefaultJRURL:        s.appCtx.Config.JRClient.ServerURL,
-		ShutdownChan:        s.shutdownChan,
+		ResolverFactory: resolverFactory,
+		Sequences:       specs.Sequences,
+		DBConnector:     dbConnector,
+		JRClient:        jrClient,
+		DefaultJRURL:    s.appCtx.Config.JRClient.ServerURL,
+		ShutdownChan:    s.shutdownChan,
 	}
 	s.appCtx.RM = request.NewManager(managerConfig)
 

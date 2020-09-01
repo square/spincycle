@@ -4,6 +4,7 @@ package request_test
 
 import (
 	"database/sql"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -11,9 +12,12 @@ import (
 	"github.com/go-test/deep"
 
 	serr "github.com/square/spincycle/v2/errors"
+	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/proto"
 	"github.com/square/spincycle/v2/request-manager/graph"
+	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/request"
+	"github.com/square/spincycle/v2/request-manager/spec"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
 	testdb "github.com/square/spincycle/v2/request-manager/test/db"
 	"github.com/square/spincycle/v2/test"
@@ -22,34 +26,10 @@ import (
 
 var dbm testdb.Manager
 var dbc *sql.DB
-var jccf *graph.MockResolverFactory
+var ref *mock.ResolverFactory
 var dbSuffix string
 var shutdownChan chan struct{}
 var req proto.Request
-
-var testReqArgs = []proto.RequestArg{
-	{
-		Name:  "foo",
-		Type:  proto.ARG_TYPE_REQUIRED,
-		Value: "foo-value",
-		Given: true,
-	},
-	{
-		Name:    "bar",
-		Type:    proto.ARG_TYPE_OPTIONAL,
-		Default: "175",
-		Value:   "175",
-		Given:   false,
-	},
-}
-var testJobChain = &proto.JobChain{
-	Jobs: map[string]proto.Job{
-		"job1": proto.Job{},
-		"job2": proto.Job{},
-		"job3": proto.Job{},
-		"job4": proto.Job{},
-	},
-}
 
 func setupManager(t *testing.T, dataFile string) string {
 	// Setup a db manager to handle databases for all tests.
@@ -74,17 +54,40 @@ func setupManager(t *testing.T, dataFile string) string {
 	dbc = db
 
 	// Create a mock creator factory.
-	if jccf == nil {
-		jccf = &graph.MockResolverFactory{
+	if ref == nil {
+		specs, err := spec.ParseSpec(rmtest.SpecPath+"/a-b-c.yaml", t.Errorf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec.ProcessSpecs(&specs)
+
+		gr := graph.NewGrapher(specs, id.NewGeneratorFactory(4, 100))
+		seqGraphs, seqErrors := gr.DoChecks()
+		if len(seqErrors) != 0 {
+			t.Fatal(seqErrors)
+		}
+
+		testJobFactory := &mock.JobFactory{
+			MockJobs: map[string]*mock.Job{},
+		}
+		req := proto.Request{
+			Id:   "reqId1",
+			Type: "three-nodes",
+		}
+		for i, c := range []string{"a", "b", "c"} {
+			jobType := c + "JobType"
+			testJobFactory.MockJobs[jobType] = &mock.Job{
+				IdResp: job.NewIdWithRequestId(jobType, c, fmt.Sprintf("id%d", i), req.Id),
+			}
+		}
+		testJobFactory.MockJobs["aJobType"].SetJobArgs = map[string]interface{}{
+			"aArg": "aValue",
+		}
+		reFactory := graph.NewResolverFactory(testJobFactory, specs.Sequences, seqGraphs, id.NewGeneratorFactory(4, 100))
+		re := reFactory.Make(req)
+		ref = &mock.ResolverFactory{
 			MakeFunc: func(req proto.Request) graph.Resolver {
-				return &graph.MockResolver{
-					RequestArgsFunc: func(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
-						return testReqArgs, nil
-					},
-					BuildJobChainFunc: func(jobArgs map[string]interface{}) (*proto.JobChain, error) {
-						return testJobChain, nil
-					},
-				}
+				return re
 			},
 		}
 	}
@@ -111,11 +114,11 @@ func teardownManager(t *testing.T, dbName string) {
 func TestCreateMissingType(t *testing.T) {
 	shutdownChan := make(chan struct{})
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	defer close(shutdownChan)
@@ -133,11 +136,11 @@ func TestCreate(t *testing.T) {
 	defer teardownManager(t, dbName)
 
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 
@@ -176,8 +179,22 @@ func TestCreate(t *testing.T) {
 		State:     proto.STATE_PENDING,
 		User:      reqParams.User,
 		JobChain:  nil,
-		TotalJobs: uint(len(testJobChain.Jobs)),
-		Args:      testReqArgs,
+		TotalJobs: 7,
+		Args: []proto.RequestArg{
+			{
+				Name:  "foo",
+				Type:  proto.ARG_TYPE_REQUIRED,
+				Value: "foo-value",
+				Given: true,
+			},
+			{
+				Name:    "bar",
+				Type:    proto.ARG_TYPE_OPTIONAL,
+				Default: "175",
+				Value:   "175",
+				Given:   false,
+			},
+		},
 	}
 	if diff := deep.Equal(actualReq, expectedReq); diff != nil {
 		test.Dump(actualReq)
@@ -191,11 +208,11 @@ func TestGetNotFound(t *testing.T) {
 
 	reqId := "invalid"
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	_, err := m.Get(reqId)
@@ -217,11 +234,11 @@ func TestGet(t *testing.T) {
 
 	reqId := "0874a524aa1edn3ysp00"
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	actual, err := m.Get(reqId)
@@ -242,11 +259,11 @@ func TestGetWithJC(t *testing.T) {
 
 	reqId := "0874a524aa1edn3ysp00"
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	actual, err := m.GetWithJC(reqId)
@@ -266,11 +283,11 @@ func TestStartNotPending(t *testing.T) {
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	err := m.Start(reqId)
@@ -296,11 +313,11 @@ func TestStart(t *testing.T) {
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            mockJRc,
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        mockJRc,
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	err := m.Start(reqId)
@@ -329,11 +346,11 @@ func TestStopNotRunning(t *testing.T) {
 
 	reqId := "0874a524aa1edn3ysp00" // request is pending
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	err := m.Stop(reqId)
@@ -365,11 +382,11 @@ func TestStopComplete(t *testing.T) {
 
 	reqId := "93ec156e204ety45sgf0" // request is complete
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            mockJRc,
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        mockJRc,
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	err := m.Stop(reqId)
@@ -400,11 +417,11 @@ func TestStop(t *testing.T) {
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            mockJRc,
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        mockJRc,
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	err := m.Stop(reqId)
@@ -430,11 +447,11 @@ func TestFinishNotRunning(t *testing.T) {
 		State: proto.STATE_COMPLETE,
 	}
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	err := m.Finish(reqId, params)
@@ -451,11 +468,11 @@ func TestFinish(t *testing.T) {
 	reqId := "454ae2f98a05cv16sdwt"
 
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 
@@ -508,11 +525,11 @@ func TestFailNotPending(t *testing.T) {
 
 	reqId := "454ae2f98a05cv16sdwt" // request is running
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	err := m.FailPending(reqId)
@@ -529,11 +546,11 @@ func TestFailPending(t *testing.T) {
 	reqId := "0874a524aa1edn3ysp00"
 
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 
@@ -580,11 +597,11 @@ func TestJobChainNotFound(t *testing.T) {
 
 	reqId := "invalid"
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	_, err := m.JobChain(reqId)
@@ -606,11 +623,11 @@ func TestJobChainInvalid(t *testing.T) {
 
 	reqId := "cd724fd12092"
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	_, err := m.JobChain(reqId)
@@ -625,11 +642,11 @@ func TestJobChain(t *testing.T) {
 
 	reqId := "8bff5def4f3fvh78skjy"
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	actual, err := m.JobChain(reqId)
@@ -654,11 +671,11 @@ func TestFind(t *testing.T) {
 		},
 	}
 	cfg := request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m := request.NewManager(cfg)
 	actual, err := m.Find(filter)
@@ -686,11 +703,11 @@ func TestFind(t *testing.T) {
 		User: "finch",
 	}
 	cfg = request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m = request.NewManager(cfg)
 	actual, err = m.Find(filter)
@@ -716,11 +733,11 @@ func TestFind(t *testing.T) {
 		Type: "do-another-thing",
 	}
 	cfg = request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m = request.NewManager(cfg)
 	actual, err = m.Find(filter)
@@ -753,11 +770,11 @@ func TestFind(t *testing.T) {
 		Until: time.Date(2017, 9, 13, 2, 45, 00, 00, time.UTC),
 	}
 	cfg = request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m = request.NewManager(cfg)
 	actual, err = m.Find(filter)
@@ -788,11 +805,11 @@ func TestFind(t *testing.T) {
 		Offset: 2,
 	}
 	cfg = request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m = request.NewManager(cfg)
 	actual, err = m.Find(filter)
@@ -822,11 +839,11 @@ func TestFind(t *testing.T) {
 	// 6. Empty filter
 	filter = proto.RequestFilter{}
 	cfg = request.ManagerConfig{
-		ChainCreatorFactory: jccf,
-		DBConnector:         dbc,
-		JRClient:            &mock.JRClient{},
-		ShutdownChan:        shutdownChan,
-		DefaultJRURL:        "http://defaulturl:1111",
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
 	}
 	m = request.NewManager(cfg)
 	actual, err = m.Find(filter)

@@ -1,11 +1,12 @@
 // Copyright 2017-2020, Square, Inc.
 
-package graph
+package graph_test
 
 import (
 	"fmt"
 	"testing"
 
+	. "github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
