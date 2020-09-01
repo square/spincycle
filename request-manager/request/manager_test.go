@@ -12,7 +12,7 @@ import (
 
 	serr "github.com/square/spincycle/v2/errors"
 	"github.com/square/spincycle/v2/proto"
-	"github.com/square/spincycle/v2/request-manager/chain"
+	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/request"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
 	testdb "github.com/square/spincycle/v2/request-manager/test/db"
@@ -22,7 +22,7 @@ import (
 
 var dbm testdb.Manager
 var dbc *sql.DB
-var jccf *chain.MockCreatorFactory
+var jccf *graph.MockResolverFactory
 var dbSuffix string
 var shutdownChan chan struct{}
 var req proto.Request
@@ -75,9 +75,9 @@ func setupManager(t *testing.T, dataFile string) string {
 
 	// Create a mock creator factory.
 	if jccf == nil {
-		jccf = &chain.MockCreatorFactory{
-			MakeFunc: func(req proto.Request) chain.Creator {
-				return &chain.MockCreator{
+		jccf = &graph.MockResolverFactory{
+			MakeFunc: func(req proto.Request) graph.Resolver {
+				return &graph.MockResolver{
 					RequestArgsFunc: func(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
 						return testReqArgs, nil
 					},

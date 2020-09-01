@@ -21,7 +21,7 @@ import (
 	serr "github.com/square/spincycle/v2/errors"
 	jr "github.com/square/spincycle/v2/job-runner"
 	"github.com/square/spincycle/v2/proto"
-	"github.com/square/spincycle/v2/request-manager/chain"
+	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/retry"
 )
@@ -75,7 +75,7 @@ type Manager interface {
 
 // manager implements the Manager interface.
 type manager struct {
-	jobChainCreatorFactory chain.CreatorFactory
+	jobChainCreatorFactory graph.ResolverFactory
 	sequences              map[string]*spec.Sequence
 	dbConnector            *sql.DB
 	jrClient               jr.Client
@@ -85,7 +85,7 @@ type manager struct {
 }
 
 type ManagerConfig struct {
-	ChainCreatorFactory chain.CreatorFactory
+	ChainCreatorFactory graph.ResolverFactory
 	Sequences           map[string]*spec.Sequence
 	DBConnector         *sql.DB
 	JRClient            jr.Client

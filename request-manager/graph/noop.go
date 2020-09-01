@@ -1,6 +1,6 @@
 // Copyright 2017-2020, Square, Inc.
 
-package chain
+package graph
 
 import (
 	"github.com/square/spincycle/v2/job"

@@ -51,6 +51,7 @@ github.com/rs/xid v0.0.0-20170604230408-02dd45c33376/go.mod h1:+uKXf+4Djp6Md1KOD
 github.com/sirupsen/logrus v1.0.6 h1:hcP1GmhGigz/O7h1WVUM5KklBp1JoNS9FggWKdj/j3s=
 github.com/sirupsen/logrus v1.0.6/go.mod h1:pMByvHTf9Beacp5x1UXfOR9xyW/9antXMhjMPG0dEzc=
 github.com/square/spincycle v1.0.12 h1:7q+9zrD04Mdaq+5ckHD8oMGrlwNDDqNwkXwJbqIaKRc=
+github.com/square/spincycle v1.0.12/go.mod h1:1si3IokDQZBHo1YRR5oMoQwDhZ6nu4N5cMk4wPUDYow=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2 h1:bSDNvY7ZPG5RlJ8otE/7V6gMiyenm9RtJ7IUVIAoJ1w=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=

@@ -19,12 +19,11 @@ import (
 	"github.com/square/spincycle/v2/request-manager/api"
 	"github.com/square/spincycle/v2/request-manager/app"
 	"github.com/square/spincycle/v2/request-manager/auth"
-	"github.com/square/spincycle/v2/request-manager/chain"
+	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/joblog"
 	"github.com/square/spincycle/v2/request-manager/request"
 	"github.com/square/spincycle/v2/request-manager/spec"
 	"github.com/square/spincycle/v2/request-manager/status"
-	"github.com/square/spincycle/v2/request-manager/template"
 )
 
 var (
@@ -212,14 +211,17 @@ func (s *Server) Boot() error {
 	}
 
 	// Build and check validity of sequence templates.
-	tg := template.NewGrapher(specs, gf, log.Errorf)
-	templates, ok := tg.CreateTemplates()
-	if !ok {
+	tg := graph.NewGrapher(specs, gf)
+	seqGraphs, seqErrors := tg.DoChecks()
+	if len(seqErrors) != 0 {
+		for seqName, seqError := range seqErrors {
+			log.Errorf("%s: %s", seqName, seqError)
+		}
 		return fmt.Errorf("Graph check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 
 	// Chain Creator: creates job chains to be sent to Job Runners
-	jobChainCreatorFactory := chain.NewCreatorFactory(jobs.Factory, specs.Sequences, templates, gf)
+	jobChainCreatorFactory := graph.NewResolverFactory(jobs.Factory, specs.Sequences, seqGraphs, gf)
 
 	// Job Runner Client: how the Request Manager talks to Job Runners
 	jrClient, err := s.appCtx.Factories.MakeJobRunnerClient(s.appCtx)

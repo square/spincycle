@@ -5,54 +5,19 @@ package graph
 import (
 	"fmt"
 	"testing"
-
-	"github.com/go-test/deep"
 )
-
-type mockNode struct {
-	NodeId string
-	Next   map[string]Node
-	Prev   map[string]Node
-}
-
-func (n *mockNode) Id() string {
-	return n.NodeId
-}
-
-func (n *mockNode) Name() string {
-	return n.NodeId
-}
-
-func (n *mockNode) String() string {
-	return n.NodeId
-}
-
-func newMockNode(id string) *mockNode {
-	return &mockNode{
-		NodeId: id,
-		Next:   map[string]Node{},
-		Prev:   map[string]Node{},
-	}
-}
 
 // three nodes in a straight line
 func g1() *Graph {
-	g1n1 := newMockNode("g1n1")
-	g1n2 := newMockNode("g1n2")
-	g1n3 := newMockNode("g1n3")
-
-	g1n1.Prev = map[string]Node{}
-	g1n1.Next = map[string]Node{"g1n2": g1n2}
-	g1n2.Next = map[string]Node{"g1n3": g1n3}
-	g1n2.Prev = map[string]Node{"g1n1": g1n1}
-	g1n3.Prev = map[string]Node{"g1n2": g1n2}
-	g1n3.Next = map[string]Node{}
+	g1n1 := &Node{Id: "g1n1"}
+	g1n2 := &Node{Id: "g1n2"}
+	g1n3 := &Node{Id: "g1n3"}
 
 	return &Graph{
-		Name:  "test1",
-		First: g1n1,
-		Last:  g1n3,
-		Vertices: map[string]Node{
+		Name:   "test1",
+		Source: g1n1,
+		Sink:   g1n3,
+		Nodes: map[string]*Node{
 			"g1n1": g1n1,
 			"g1n2": g1n2,
 			"g1n3": g1n3,
@@ -70,67 +35,17 @@ func g1() *Graph {
 
 // 18 node graph of something
 func g2() *Graph {
-	n := [20]*mockNode{}
+	n := [20]*Node{}
 	for i := 0; i < 20; i++ {
 		m := fmt.Sprintf("g2n%d", i)
-		n[i] = newMockNode(m)
+		n[i] = &Node{Id: m}
 	}
 
-	// yeah good luck following this
-	n[0].Next["g2n1"] = n[1]
-	n[1].Next["g2n2"] = n[2]
-	n[1].Next["g2n5"] = n[5]
-	n[1].Next["g2n6"] = n[6]
-	n[2].Next["g2n3"] = n[3]
-	n[2].Next["g2n4"] = n[4]
-	n[3].Next["g2n7"] = n[7]
-	n[4].Next["g2n8"] = n[8]
-	n[7].Next["g2n8"] = n[8]
-	n[8].Next["g2n13"] = n[13]
-	n[13].Next["g2n14"] = n[14]
-	n[5].Next["g2n9"] = n[9]
-	n[9].Next["g2n12"] = n[12]
-	n[12].Next["g2n14"] = n[14]
-	n[6].Next["g2n10"] = n[10]
-	n[10].Next["g2n11"] = n[11]
-	n[10].Next["g2n19"] = n[19]
-	n[11].Next["g2n12"] = n[12]
-	n[19].Next["g2n16"] = n[16]
-	n[16].Next["g2n15"] = n[15]
-	n[16].Next["g2n17"] = n[17]
-	n[15].Next["g2n18"] = n[18]
-	n[17].Next["g2n18"] = n[18]
-	n[18].Next["g2n14"] = n[14]
-	n[1].Prev["g2n0"] = n[0]
-	n[2].Prev["g2n1"] = n[1]
-	n[3].Prev["g2n2"] = n[2]
-	n[4].Prev["g2n2"] = n[2]
-	n[5].Prev["g2n1"] = n[1]
-	n[6].Prev["g2n1"] = n[1]
-	n[7].Prev["g2n3"] = n[3]
-	n[8].Prev["g2n4"] = n[4]
-	n[8].Prev["g2n7"] = n[7]
-	n[9].Prev["g2n5"] = n[5]
-	n[10].Prev["g2n6"] = n[6]
-	n[11].Prev["g2n10"] = n[10]
-	n[12].Prev["g2n9"] = n[9]
-	n[12].Prev["g2n11"] = n[11]
-	n[13].Prev["g2n8"] = n[8]
-	n[14].Prev["g2n12"] = n[12]
-	n[14].Prev["g2n13"] = n[13]
-	n[14].Prev["g2n18"] = n[18]
-	n[15].Prev["g2n16"] = n[16]
-	n[16].Prev["g2n19"] = n[19]
-	n[17].Prev["g2n16"] = n[16]
-	n[18].Prev["g2n15"] = n[15]
-	n[18].Prev["g2n17"] = n[17]
-	n[19].Prev["g2n10"] = n[10]
-
 	return &Graph{
-		Name:  "g2",
-		First: n[0],
-		Last:  n[14],
-		Vertices: map[string]Node{
+		Name:   "g2",
+		Source: n[0],
+		Sink:   n[14],
+		Nodes: map[string]*Node{
 			"g2n0":  n[0],
 			"g2n1":  n[1],
 			"g2n2":  n[2],
@@ -206,25 +121,16 @@ func g2() *Graph {
 //
 //
 func g3() *Graph {
-	g3n1 := newMockNode("g3n1")
-	g3n2 := newMockNode("g3n2")
-	g3n3 := newMockNode("g3n3")
-	g3n4 := newMockNode("g3n4")
-
-	g3n1.Prev = map[string]Node{}
-	g3n1.Next = map[string]Node{"g3n2": g3n2, "g3n3": g3n3}
-	g3n2.Next = map[string]Node{"g3n4": g3n4}
-	g3n3.Next = map[string]Node{"g3n4": g3n4}
-	g3n4.Prev = map[string]Node{"g3n2": g3n2, "g3n3": g3n3}
-	g3n2.Prev = map[string]Node{"g3n1": g3n1}
-	g3n3.Prev = map[string]Node{"g3n1": g3n1}
-	g3n4.Next = map[string]Node{}
+	g3n1 := &Node{Id: "g3n1"}
+	g3n2 := &Node{Id: "g3n2"}
+	g3n3 := &Node{Id: "g3n3"}
+	g3n4 := &Node{Id: "g3n4"}
 
 	return &Graph{
-		Name:  "test1",
-		First: g3n1,
-		Last:  g3n4,
-		Vertices: map[string]Node{
+		Name:   "test1",
+		Source: g3n1,
+		Sink:   g3n4,
+		Nodes: map[string]*Node{
 			"g3n1": g3n1,
 			"g3n2": g3n2,
 			"g3n3": g3n3,
@@ -265,10 +171,10 @@ func TestEdgesMatchesRevEdges(t *testing.T) {
 }
 
 func TestHasCycles(t *testing.T) {
-	g0n1 := newMockNode("g0n1")
-	g0n2 := newMockNode("g0n2")
-	g0n3 := newMockNode("g0n3")
-	g0n4 := newMockNode("g0n4")
+	g0n1 := &Node{Id: "g0n1"}
+	g0n2 := &Node{Id: "g0n2"}
+	g0n3 := &Node{Id: "g0n3"}
+	g0n4 := &Node{Id: "g0n4"}
 
 	// .---- 3
 	// |     ^
@@ -277,10 +183,10 @@ func TestHasCycles(t *testing.T) {
 	//
 	//
 	g0 := &Graph{
-		Name:  "g0",
-		First: g0n1,
-		Last:  g0n4,
-		Vertices: map[string]Node{
+		Name:   "g0",
+		Source: g0n1,
+		Sink:   g0n4,
+		Nodes: map[string]*Node{
 			"g0n1": g0n1,
 			"g0n2": g0n2,
 			"g0n3": g0n3,
@@ -305,18 +211,18 @@ func TestHasCycles(t *testing.T) {
 }
 
 func TestFailIsConnected(t *testing.T) {
-	g0n1 := newMockNode("g0n1")
-	g0n2 := newMockNode("g0n2")
-	g0n3 := newMockNode("g0n3")
+	g0n1 := &Node{Id: "g0n1"}
+	g0n2 := &Node{Id: "g0n2"}
+	g0n3 := &Node{Id: "g0n3"}
 
 	//    -> 3
 	//   /
 	// 1 --> 2 (Last)
 	g0 := &Graph{
-		Name:  "g0",
-		First: g0n1,
-		Last:  g0n2,
-		Vertices: map[string]Node{
+		Name:   "g0",
+		Source: g0n1,
+		Sink:   g0n2,
+		Nodes: map[string]*Node{
 			"g0n1": g0n1,
 			"g0n2": g0n2,
 			"g0n3": g0n3,
@@ -344,83 +250,23 @@ func TestFailEdgesMatchesRevEdges(t *testing.T) {
 	}
 }
 
-func testGetNext(t *testing.T, g *Graph) {
-	for _, n := range g.Vertices {
-		node, ok := n.(*mockNode)
-		if !ok {
-			t.Fatalf("Expected *mockNode, got %T", n)
-		}
-
-		next := g.GetNext(node)
-		actualNext := node.Next
-		if diff := deep.Equal(next, actualNext); diff != nil {
-			t.Error(diff)
-		}
-	}
-}
-
-func TestGetNext1(t *testing.T) {
-	g := g1()
-	testGetNext(t, g)
-}
-
-func TestGetNext2(t *testing.T) {
-	g := g2()
-	testGetNext(t, g)
-}
-
-func TestGetNext3(t *testing.T) {
-	g := g3()
-	testGetNext(t, g)
-}
-
-func testGetPrev(t *testing.T, g *Graph) {
-	for _, n := range g.Vertices {
-		node, ok := n.(*mockNode)
-		if !ok {
-			t.Fatalf("Expected *mockNode, got %T", n)
-		}
-
-		prev := g.GetPrev(node)
-		actualPrev := node.Prev
-		if diff := deep.Equal(prev, actualPrev); diff != nil {
-			t.Error(diff)
-		}
-	}
-}
-
-func TestGetPrev1(t *testing.T) {
-	g := g1()
-	testGetPrev(t, g)
-}
-
-func TestGetPrev2(t *testing.T) {
-	g := g2()
-	testGetPrev(t, g)
-}
-
-func TestGetPrev3(t *testing.T) {
-	g := g3()
-	testGetPrev(t, g)
-}
-
 func TestInsertComponentBetween1(t *testing.T) {
 	g1 := g1()
 	g3 := g3()
 	// insert g1 into g3 between nodes 2 -> 4
-	err := g3.InsertComponentBetween(g1, g3.Vertices["g3n2"], g3.Vertices["g3n4"])
+	err := g3.InsertComponentBetween(g1, g3.Nodes["g3n2"], g3.Nodes["g3n4"])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectedVertices := map[string]Node{
-		"g1n1": g1.Vertices["g1n1"],
-		"g1n2": g1.Vertices["g1n2"],
-		"g1n3": g1.Vertices["g1n3"],
-		"g3n1": g3.Vertices["g3n1"],
-		"g3n2": g3.Vertices["g3n2"],
-		"g3n3": g3.Vertices["g3n3"],
-		"g3n4": g3.Vertices["g3n4"],
+	expectedVertices := map[string]*Node{
+		"g1n1": g1.Nodes["g1n1"],
+		"g1n2": g1.Nodes["g1n2"],
+		"g1n3": g1.Nodes["g1n3"],
+		"g3n1": g3.Nodes["g3n1"],
+		"g3n2": g3.Nodes["g3n2"],
+		"g3n3": g3.Nodes["g3n3"],
+		"g3n4": g3.Nodes["g3n4"],
 	}
 	expectedEdges := map[string][]string{
 		"g1n1": []string{"g1n2"},
@@ -433,7 +279,7 @@ func TestInsertComponentBetween1(t *testing.T) {
 	}
 
 	actualEdges := g3.Edges
-	actualVertices := g3.Vertices
+	actualVertices := g3.Nodes
 	for vertexName, node := range actualVertices {
 		if n, ok := expectedVertices[vertexName]; !ok || n != node {
 			t.Fatalf("missing1 %v", n)
@@ -460,19 +306,19 @@ func TestInsertComponentBetween2(t *testing.T) {
 	g1 := g1()
 	g3 := g3()
 	// insert g1 into g3 between nodes 3 -> 4
-	err := g3.InsertComponentBetween(g1, g3.Vertices["g3n3"], g3.Vertices["g3n4"])
+	err := g3.InsertComponentBetween(g1, g3.Nodes["g3n3"], g3.Nodes["g3n4"])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectedVertices := map[string]Node{
-		"g1n1": g1.Vertices["g1n1"],
-		"g1n2": g1.Vertices["g1n2"],
-		"g1n3": g1.Vertices["g1n3"],
-		"g3n1": g3.Vertices["g3n1"],
-		"g3n2": g3.Vertices["g3n2"],
-		"g3n3": g3.Vertices["g3n3"],
-		"g3n4": g3.Vertices["g3n4"],
+	expectedVertices := map[string]*Node{
+		"g1n1": g1.Nodes["g1n1"],
+		"g1n2": g1.Nodes["g1n2"],
+		"g1n3": g1.Nodes["g1n3"],
+		"g3n1": g3.Nodes["g3n1"],
+		"g3n2": g3.Nodes["g3n2"],
+		"g3n3": g3.Nodes["g3n3"],
+		"g3n4": g3.Nodes["g3n4"],
 	}
 	expectedEdges := map[string][]string{
 		"g1n1": []string{"g1n2"},
@@ -485,7 +331,7 @@ func TestInsertComponentBetween2(t *testing.T) {
 	}
 
 	actualEdges := g3.Edges
-	actualVertices := g3.Vertices
+	actualVertices := g3.Nodes
 	for vertexName, node := range actualVertices {
 		if n, ok := expectedVertices[vertexName]; !ok || n != node {
 			t.Fatalf("missing1 %v", n)
@@ -512,19 +358,19 @@ func TestInsertComponentBetween3(t *testing.T) {
 	g1 := g1()
 	g3 := g3()
 	// insert g1 into g3 between nodes 1 -> 2
-	err := g3.InsertComponentBetween(g1, g3.Vertices["g3n1"], g3.Vertices["g3n2"])
+	err := g3.InsertComponentBetween(g1, g3.Nodes["g3n1"], g3.Nodes["g3n2"])
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectedVertices := map[string]Node{
-		"g1n1": g1.Vertices["g1n1"],
-		"g1n2": g1.Vertices["g1n2"],
-		"g1n3": g1.Vertices["g1n3"],
-		"g3n1": g3.Vertices["g3n1"],
-		"g3n2": g3.Vertices["g3n2"],
-		"g3n3": g3.Vertices["g3n3"],
-		"g3n4": g3.Vertices["g3n4"],
+	expectedVertices := map[string]*Node{
+		"g1n1": g1.Nodes["g1n1"],
+		"g1n2": g1.Nodes["g1n2"],
+		"g1n3": g1.Nodes["g1n3"],
+		"g3n1": g3.Nodes["g3n1"],
+		"g3n2": g3.Nodes["g3n2"],
+		"g3n3": g3.Nodes["g3n3"],
+		"g3n4": g3.Nodes["g3n4"],
 	}
 	expectedEdges := map[string][]string{
 		"g1n1": []string{"g1n2"},
@@ -537,7 +383,7 @@ func TestInsertComponentBetween3(t *testing.T) {
 	}
 
 	actualEdges := g3.Edges
-	actualVertices := g3.Vertices
+	actualVertices := g3.Nodes
 	for vertexName, node := range actualVertices {
 		if n, ok := expectedVertices[vertexName]; !ok || n != node {
 			t.Fatalf("missing1 %v", n)

@@ -8,8 +8,8 @@ import (
 	"github.com/alexflint/go-arg"
 
 	"github.com/square/spincycle/v2/linter/app"
+	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/spec"
-	"github.com/square/spincycle/v2/request-manager/template"
 )
 
 var cmd struct {
@@ -47,9 +47,12 @@ func Run(ctx app.Context) error {
 	if err != nil {
 		return fmt.Errorf("MakeIDGeneratorFactory: %s", err)
 	}
-	templateG := template.NewGrapher(allSpecs, idgen, printf)
-	_, ok = templateG.CreateTemplates()
-	if !ok {
+	gr := graph.NewGrapher(allSpecs, idgen)
+	_, errs := gr.DoChecks()
+	if len(errs) != 0 {
+		for seq, err := range errs {
+			fmt.Printf("%s: %s\n", seq, err)
+		}
 		return fmt.Errorf("graph check failed") // grapher prints details for us
 	}
 

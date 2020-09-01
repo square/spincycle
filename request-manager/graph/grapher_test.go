@@ -1,12 +1,11 @@
 // Copyright 2017-2020, Square, Inc.
 
-package template
+package graph
 
 import (
 	"fmt"
 	"testing"
 
-	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
@@ -23,25 +22,23 @@ func MakeGrapher(t *testing.T, sequencesFile string, logFunc func(string, ...int
 	}
 	spec.ProcessSpecs(&specs)
 
-	return NewGrapher(specs, id.NewGeneratorFactory(4, 100), logFunc)
+	return NewGrapher(specs, id.NewGeneratorFactory(4, 100))
 }
 
-func verifyDecomGraph(t *testing.T, grapher *Grapher) {
-	var g *graph.Graph
-	var template *Graph
+func verifyDecomGraph(t *testing.T, seqGraphs map[string]*Graph) {
+	var g *Graph
 	var ok bool
 	var sequence, startNode string
 	var currentStep []string
 
 	/* Verify sequence: `decommission-cluster`. */
 	sequence = "decommission-cluster"
-	template, ok = grapher.sequenceTemplates[sequence]
+	g, ok = seqGraphs[sequence]
 	if !ok {
-		t.Fatalf("could not find template for sequence %s", sequence)
+		t.Fatalf("could not find sequence graph for sequence %s", sequence)
 	}
-	g = &template.graph
 
-	startNode = g.First.Id()
+	startNode = g.Source.Id
 	currentStep = g.Edges[startNode]
 	verifyStep(t, g, currentStep, []string{"get-instances"})
 
@@ -68,13 +65,12 @@ func verifyDecomGraph(t *testing.T, grapher *Grapher) {
 
 	/* Verify sequence: `check-instance-is-ok`. */
 	sequence = "check-instance-is-ok"
-	template, ok = grapher.sequenceTemplates[sequence]
+	g, ok = seqGraphs[sequence]
 	if !ok {
-		t.Fatalf("could not find template for sequence %s", sequence)
+		t.Fatalf("could not find sequence graph for sequence %s", sequence)
 	}
-	g = &template.graph
 
-	startNode = g.First.Id()
+	startNode = g.Source.Id
 	currentStep = g.Edges[startNode]
 	verifyStep(t, g, currentStep, []string{"check-ok"})
 
@@ -86,13 +82,12 @@ func verifyDecomGraph(t *testing.T, grapher *Grapher) {
 
 	/* Verify sequence: `decommission-instance`. */
 	sequence = "decommission-instance"
-	template, ok = grapher.sequenceTemplates[sequence]
+	g, ok = seqGraphs[sequence]
 	if !ok {
-		t.Fatalf("could not find template for sequence %s", sequence)
+		t.Fatalf("could not find sequence graph for sequence %s", sequence)
 	}
-	g = &template.graph
 
-	startNode = g.First.Id()
+	startNode = g.Source.Id
 	currentStep = g.Edges[startNode]
 	verifyStep(t, g, currentStep, []string{"decom-1"})
 
@@ -109,63 +104,66 @@ func verifyDecomGraph(t *testing.T, grapher *Grapher) {
 func TestCreateDecomGraph(t *testing.T) {
 	sequenceFile := "decomm.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if !ok {
-		t.Fatal("unexpected error creating templates")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) != 0 {
+		t.Fatal("unexpected errors creating sequence graphs")
 	}
 
-	verifyDecomGraph(t, grapher)
+	verifyDecomGraph(t, seqGraphs)
 }
 
 // Try to create twice with same grapher
 func TestCreateDecomGraphTwice(t *testing.T) {
 	sequenceFile := "decomm.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if !ok {
-		t.Fatal("unexpected error creating templates")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) != 0 {
+		t.Fatal("unexpected error creating sequence graphs")
 	}
 
-	verifyDecomGraph(t, grapher)
+	verifyDecomGraph(t, seqGraphs)
+
+	verifyDecomGraph(t, seqGraphs)
+	seqGraphs, seqErrors = grapher.DoChecks()
+	if len(seqErrors) != 0 {
+		t.Fatal("unexpected error creating sequence graphs")
+	}
+
+	verifyDecomGraph(t, seqGraphs)
 }
 
 func TestCreateDecomSetsGraph(t *testing.T) {
-	sequenceFile := "decomm.yaml"
+	sequenceFile := "decomm-sets.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if !ok {
-		t.Fatal("unexpected error creating templates")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) != 0 {
+		t.Fatal("unexpected error creating sequence graphs")
 	}
-	verifyDecomGraph(t, grapher)
-	_, ok = grapher.CreateTemplates()
-	if !ok {
-		t.Fatal("unexpected error creating templates")
-	}
-	verifyDecomGraph(t, grapher)
+
+	verifyDecomGraph(t, seqGraphs)
 }
 
 func TestCreateDestroyConditionalGraph(t *testing.T) {
 	sequenceFile := "destroy-conditional.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if !ok {
-		t.Fatal("unexpected error creating templates")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) != 0 {
+		t.Log(seqErrors)
+		t.Fatal("unexpected error creating sequence graphs")
 	}
 
-	var g *graph.Graph
-	var template *Graph
+	var g *Graph
 	var sequence, startNode string
 	var currentStep []string
 
 	/* Verify sequence: `destroy-conditional`. */
 	sequence = "destroy-conditional"
-	template, ok = grapher.sequenceTemplates[sequence]
+	g, ok := seqGraphs[sequence]
 	if !ok {
-		t.Fatalf("could not find template for sequence %s", sequence)
+		t.Fatalf("could not find sequence graph for sequence %s", sequence)
 	}
-	g = &template.graph
 
-	startNode = g.First.Id()
+	startNode = g.Source.Id
 	currentStep = g.Edges[startNode]
 	verifyStep(t, g, currentStep, []string{"prep-1"})
 
@@ -180,152 +178,152 @@ func TestCreateDestroyConditionalGraph(t *testing.T) {
 func TestFailMissingSetsGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if ok {
-		t.Fatal("no error creating template with incorrectly specified `sets`, expected error")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) == 0 {
+		t.Fatal("no error creating subsequence graph with incorrectly specified `sets`, expected error")
 	}
 
 	var subsequence string
 
 	// verify that error occurred in expected subsequence
 	subsequence = "missing-sets-subsequence-1"
-	if err := getTemplateError(subsequence, grapher); err != nil {
-		t.Fatalf("error creating template for sequence %s, expected no error: %s", subsequence, err)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err != nil {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
 	}
 	subsequence = "missing-sets"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailMissingSetsConditionalGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if ok {
-		t.Fatal("no error creating template with incorrectly specified `sets`, expected error")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) == 0 {
+		t.Fatal("no error creating subsequence graph with incorrectly specified `sets`, expected error")
 	}
 
 	var subsequence string
 
 	// verify that error occurred in expected subsequence
 	subsequence = "missing-sets-subsequence-1"
-	if err := getTemplateError(subsequence, grapher); err != nil {
-		t.Fatalf("error creating template for sequence %s, expected no error: %s", subsequence, err)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err != nil {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
 	}
 	subsequence = "missing-sets-subsequence-2"
-	if err := getTemplateError(subsequence, grapher); err != nil {
-		t.Fatalf("error creating template for sequence %s, expected no error: %s", subsequence, err)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err != nil {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
 	}
 	subsequence = "missing-sets-subsequence-3"
-	if err := getTemplateError(subsequence, grapher); err != nil {
-		t.Fatalf("error creating template for sequence %s, expected no error: %s", subsequence, err)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err != nil {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
 	}
 	subsequence = "missing-sets-conditional"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailMissingJobArgsGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if ok {
-		t.Fatal("no error creating template with missing job args, expected error")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) == 0 {
+		t.Fatal("no error creating subsequence graph with missing job args, expected error")
 	}
 
 	var subsequence string
 
 	// verify that error occurred in expected subsequence
 	subsequence = "missing-job-args-subsequence"
-	if err := getTemplateError(subsequence, grapher); err != nil {
-		t.Fatalf("error creating template for sequence %s, expected no error: %s", subsequence, err)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err != nil {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
 	}
 	subsequence = "missing-job-args"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailCircularDependenciesGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if ok {
-		t.Fatal("no error creating template with circular dependencies, expected error")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) == 0 {
+		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
 
 	var subsequence string
 
 	// verify that error occurred in expected subsequence
 	subsequence = "circular-dependencies"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailPropagate(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if ok {
-		t.Fatal("no error creating template with circular dependencies, expected error")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) == 0 {
+		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
 
 	var subsequence string
 
 	// verify that error occurred in expected subsequence
 	subsequence = "propagate-subsequence-1"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 	subsequence = "propagate"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailPropagateConditional(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, ok := grapher.CreateTemplates()
-	if ok {
-		t.Fatal("no error creating template with circular dependencies, expected error")
+	seqGraphs, seqErrors := grapher.DoChecks()
+	if len(seqErrors) == 0 {
+		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
 
 	var subsequence string
 
 	// verify that error occurred in expected subsequence
 	subsequence = "propagate-subsequence-1"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 	subsequence = "propagate-subsequence-2"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 	subsequence = "propagate-subsequence-3"
-	if err := getTemplateError(subsequence, grapher); err != nil {
-		t.Fatalf("error creating template for sequence %s, expected no error: %s", subsequence, err)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err != nil {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
 	}
 	subsequence = "propagate-conditional"
-	if err := getTemplateError(subsequence, grapher); err == nil {
-		t.Fatalf("no error creating template for sequence %s, expected error", subsequence)
+	if err := getSeqError(subsequence, seqGraphs, seqErrors); err == nil {
+		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
-func getTemplateError(sequenceName string, grapher *Grapher) error {
-	if _, ok := grapher.sequenceTemplates[sequenceName]; ok {
+func getSeqError(sequenceName string, seqGraphs map[string]*Graph, seqErrors map[string]error) error {
+	if _, ok := seqGraphs[sequenceName]; ok {
 		return nil
 	}
-	if err, ok := grapher.sequenceErrors[sequenceName]; ok {
+	if err, ok := seqErrors[sequenceName]; ok {
 		return err
 	}
 	return SequenceNotFoundError
 }
 
-func getNextStep(g *graph.Graph, nodes []string) []string {
+func getNextStep(g *Graph, nodes []string) []string {
 	seen := map[string]bool{}
 	nextStep := []string{}
 	for _, n := range nodes {
@@ -340,14 +338,14 @@ func getNextStep(g *graph.Graph, nodes []string) []string {
 	return nextStep
 }
 
-func verifyStep(t *testing.T, g *graph.Graph, nodeIds, expectedNodeNames []string) {
+func verifyStep(t *testing.T, g *Graph, nodeIds, expectedNodeNames []string) {
 	expected := map[string]int{}
 	for _, name := range expectedNodeNames {
 		expected[name]++
 	}
 	actual := []string{}
 	for _, id := range nodeIds {
-		name := g.Vertices[id].Name()
+		name := g.Nodes[id].Name
 		expected[name]--
 		actual = append(actual, name)
 	}
