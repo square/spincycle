@@ -169,9 +169,9 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 		return nil, err
 	}
 
-	// Traverse sequence graph in topological order. Each sequence graph node corresponds to either a single
-	// job node, or an entire subgraph of nodes. Build the subgraph and insert it into the larger sequence
-	// graph.
+	// Traverse sequence graph in topological order. Each sequence graph node
+	// corresponds to either a single job node, or an entire subgraph of nodes.
+	// Build the subgraph and insert it into the larger sequence graph.
 	idMap := map[string]*Graph{} // sequence graph node id --> corresponding subgraph
 	for _, seqGraphNode := range seqGraph.Order {
 		nodeSpec := seqGraphNode.Spec
@@ -201,7 +201,8 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 				return nil, err
 			}
 
-			// Add elements to the node args unless there are none for this node
+			// Add elements to the node args unless there are none
+			// for this node
 			for j, elt := range elements {
 				if elt != "" {
 					// This won't panic because we have earlier asserted that
@@ -220,8 +221,8 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 			// Resolve node into a request subgraph
 			var reqSubgraph *Graph
 			if nodeSpec.IsConditional() {
-				// Node is a conditional: choose which path to take, and
-				// recursively build the subgraph
+				// Node is a conditional: choose which path to
+				// take, and recursively build the subgraph
 				conditional, err := chooseConditional(nodeSpec, jobArgsCopy)
 				if err != nil {
 					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, nodeSpec.Name, err)
@@ -251,7 +252,8 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, nodeSpec.Name, err)
 				}
 			} else {
-				// Node is a job: create the proto.Job and put it in a graph
+				// Node is a job: create the proto.Job and put
+				// it in a graph
 				reqSubgraph, err = o.buildSingleVertexGraph(nodeSpec, jobArgsCopy)
 				if err != nil {
 					return nil, fmt.Errorf("in seq %s, node %s: cannot build job: %s", sequenceName, nodeSpec.Name, err)
@@ -318,8 +320,8 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 		} else if len(components) == 1 {
 			wrappedReqSubgraph = components[0]
 		} else if len(components) == 0 {
-			// TODO: L doesn't think this case actually ever happens, but
-			// is scared of removing it during a big refactor.
+			// TODO: L doesn't think this case actually ever happens,
+			// but is scared of removing it during a big refactor.
 			// Even if there are no lists, we still need to add
 			// the node to the graph in order to fulfill dependencies
 			// for later nodes.
@@ -329,8 +331,9 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 			}
 		}
 
-		// 3. `wrappedReqSubgraph` is the request subgraph corresponding directly to this
-		// sequence graph node. Insert it between its dependencies and the last node.
+		// 3. `wrappedReqSubgraph` is the request subgraph corresponding
+		// directly to this sequence graph node. Insert it between its
+		// dependencies and the last node.
 		idMap[seqGraphNode.Id] = wrappedReqSubgraph
 		prevs := seqGraph.GetPrev(seqGraphNode)
 		if len(prevs) == 0 {

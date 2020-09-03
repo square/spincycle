@@ -98,8 +98,8 @@ func (gr *Grapher) DoChecks() (seqGraphs map[string]*Graph, seqErrors map[string
 			}
 		}
 
-		// If any node failed the `sets` check, log it in seqErrors and remove the graph
-		// from seqGraphs so the caller can't use it
+		// If any node failed the `sets` check, log it in seqErrors and
+		// remove the graph from seqGraphs so the caller can't use it
 		if len(missingSets) > 0 {
 			msg := []string{}
 			for nodeName, missing := range missingSets {
@@ -148,11 +148,14 @@ func getFailedSubsequences(subsequences []string, seqGraphs map[string]*Graph) [
 	return failed
 }
 
-// getDeclaredSets gets all job args that the node described by `nodeSpec` is guaranteed to set.
+// getDeclaredSets gets all job args that the node described by `nodeSpec` is
+// guaranteed to set.
 // `seqSets` is a map of sequence name -> set of job args it sets.
-// For a sequence node, this computation of is straightforward--it's just the args it sets.
-// For a conditional node, this is the intersection of the args set by the possible
-// subsequences: all job args must be set no matter which conditional path was taken.
+// For a sequence node, this computation of is straightforward--it's just the
+// args it sets.
+// For a conditional node, this is the intersection of the args set by the
+// possible subsequences: all job args must be set no matter which conditional
+// path was taken.
 func getDeclaredSets(subseqs []string, seqSets map[string]map[string]bool) map[string]bool {
 	setsCount := map[string]int{} // output job arg --> # of subsequences that output it
 	for _, seq := range subseqs {
@@ -173,7 +176,8 @@ func getDeclaredSets(subseqs []string, seqSets map[string]map[string]bool) map[s
 	return setsIntersection
 }
 
-// getMissingSets returns a list of job args that are present in `declared` but not in `actual`.
+// getMissingSets returns a list of job args that are present in `declared` but
+// not in `actual`.
 // These are job args that were supposed to have been set, but were not.
 func getMissingSets(actual map[string]bool, declared []*spec.NodeSet) []string {
 	missing := []string{}
@@ -188,7 +192,8 @@ func getMissingSets(actual map[string]bool, declared []*spec.NodeSet) []string {
 // buildSeqGraph builds a sequence graph and performs checks on that sequence.
 // It does not analyze any subsequences. As such, it can't e.g. check validity
 // of `sets` declarations in sequence and conditional nodes.
-// Returns the graph, the set of job args its component nodes set, and an error if any should occur.
+// Returns the graph, the set of job args its component nodes set, and an error
+// if any should occur.
 func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph, sets map[string]bool, err error) {
 	// The graph we'll be filling in
 	seqGraph, err = newSeqGraph(seqSpec.Name, idgen)
@@ -199,16 +204,17 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 	// We have to maintain `Order` ourselves
 	seqGraph.Order = append(seqGraph.Order, seqGraph.Source)
 
-	// Set of job args available, i.e. sequence args + args set by nodes in graph so far
-	// We start out with just the sequence args
+	// Set of job args available, i.e. sequence args + args set by nodes in
+	// graph so far.
+	// We start out with just the sequence args.
 	jobArgs := getAllSequenceArgs(seqSpec)
 
 	// Create a graph consisting of a single node for every node in the spec.
-	// There's a function to insert a subgraph into a graph, but not to insert a
-	// node into a graph. Creating these as single-node graphs upfront rather than
-	// nodes makes the code more readable later.
-	// Key on node names; they should be unique within a sequence (otherwise, dependencies
-	// are ill-defined).
+	// There's a function to insert a subgraph into a graph, but not to insert
+	// a node into a graph. Creating these as single-node graphs upfront rather
+	// than nodes makes the code more readable later.
+	// Key on node names; they should be unique within a sequence (otherwise,
+	// dependencies are ill-defined).
 	nodes := map[string]*Graph{}
 	for _, nodeSpec := range seqSpec.Nodes {
 		id, err := idgen.UID()
@@ -239,7 +245,8 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 
 	// Build graph by adding nodes, starting from the source node, and then
 	// adding all adjacent nodes to the source node, and so on
-	// We cannot add nodes in any order because we do not know the reverse dependencies
+	// We cannot add nodes in any order because we do not know the reverse
+	// dependencies
 	for len(nodesToAdd) > 0 {
 
 		nodeAdded := false
@@ -247,8 +254,9 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 		for nodeName, node := range nodesToAdd {
 			nodeSpec := seqSpec.Nodes[nodeName]
 			if dependenciesSatisfied(nodesAdded, nodeSpec.Dependencies) {
-				// Dependencies for node have been satisfied; presumably, all input job args are
-				// present in job args map. If not, it's an error.
+				// Dependencies for node have been satisfied;
+				// presumably, all input job args are present in
+				// job args map. If not, it's an error.
 				missingArgs, err := getMissingArgs(nodeSpec, jobArgs)
 				if err != nil {
 					return nil, nil, err
@@ -265,7 +273,8 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 						return nil, nil, err
 					}
 				} else {
-					// Case: dependencies exist; insert between all its dependencies and the end node
+					// Case: dependencies exist; insert between all its
+					// dependencies and the end node
 					for _, dependencyName := range nodeSpec.Dependencies {
 						prevComponent := nodes[dependencyName]
 						err := seqGraph.InsertComponentBetween(node, prevComponent.Sink, seqGraph.Sink)
@@ -290,7 +299,8 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 
 		}
 
-		// If we were unable to add nodes, there must be a cyclical dependency, which is an error
+		// If we were unable to add nodes, there must be a cyclical
+		// dependency, which is an error
 		if !nodeAdded {
 			ns := []string{}
 			for n, _ := range nodesToAdd {
@@ -346,9 +356,11 @@ func newNoopSeqNode(name, id string) *Node {
 	}
 }
 
-// getAllSequenceArgs returns the minimal set of job args that the sequence starts with.
-// In the context of a wider request of which this sequence is a part, there may be more job
-// args available, but this sequence should not access them, so they are irrelevant for our purposes.
+// getAllSequenceArgs returns the minimal set of job args that the sequence
+// starts with.
+// In the context of a wider request of which this sequence is a part, there may
+// be more job args available, but this sequence should not access them, so they
+// are irrelevant for our purposes.
 func getAllSequenceArgs(seq *spec.Sequence) map[string]bool {
 	jobArgs := map[string]bool{}
 	for _, arg := range seq.Args.Required {

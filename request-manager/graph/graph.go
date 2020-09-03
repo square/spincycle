@@ -70,7 +70,8 @@ func (g *Graph) GetPrev(n *Node) map[string]*Node {
 	return prev
 }
 
-// InsertComponentBetween takes a Graph as input and inserts it between the given prev and next nodes.
+// InsertComponentBetween takes a Graph as input and inserts it between the given
+// prev and next nodes.
 // Preconditions:
 //      component and g are connected and acyclic
 //      prev and next both are present in g
@@ -165,8 +166,8 @@ func (g *Graph) hasCycles() bool {
 	return g.hasCyclesDFS(seen, g.Source)
 }
 
-// isConnected returns true iff every node is reachable from the start node, and every path
-// terminates at the end node.
+// isConnected returns true iff every node is reachable from the start node, and
+// every path terminates at the end node.
 func (g *Graph) isConnected() bool {
 	// Check forwards connectivity and backwards connectivity
 	return g.connectedToLastNodeDFS(g.Source) && g.connectedToFirstNodeDFS(g.Sink)

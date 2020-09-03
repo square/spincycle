@@ -195,7 +195,8 @@ func TestNodeRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify that the retries are set correctly on all nodes. Only the "get-instances" node should have retries.
+	// Verify that the retries are set correctly on all nodes.
+	// Only the "get-instances" node should have retries.
 	found := false
 	for _, node := range reqGraph.Nodes {
 		if node.Name == "get-instances" {
@@ -233,7 +234,8 @@ func TestSequenceRetry(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Verify that the sequence retries are set correctly on all nodes. Only the "sequence_decommission-cluster_start" node should have retries.
+	// Verify that the sequence retries are set correctly on all nodes.
+	// Only the "sequence_decommission-cluster_start" node should have retries.
 	found := false
 	sequenceStartNodeName := "sequence_pre-flight-checks_start"
 	for _, node := range reqGraph.Nodes {
