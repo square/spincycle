@@ -60,7 +60,7 @@ func (g *Graph) IsValidGraph() error {
 	return nil
 }
 
-// GetNext returns the out edges of a node (node id --> Node)
+// GetNext returns the out edges of a node
 func (g *Graph) GetNext(n *Node) []*Node {
 	next := make([]*Node, len(g.Edges[n.Id]))
 	for i, nextId := range g.Edges[n.Id] {
@@ -69,7 +69,7 @@ func (g *Graph) GetNext(n *Node) []*Node {
 	return next
 }
 
-// GetPrev returns the in edges of a node (node id --> Node)
+// GetPrev returns the in edges of a node
 func (g *Graph) GetPrev(n *Node) []*Node {
 	prev := make([]*Node, len(g.RevEdges[n.Id]))
 	for i, prevId := range g.RevEdges[n.Id] {
