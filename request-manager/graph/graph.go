@@ -5,7 +5,6 @@ package graph
 import (
 	"fmt"
 
-	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/request-manager/spec"
 )
 
@@ -36,7 +35,7 @@ type Node struct {
 	Spec *spec.Node // Node spec that this graph node represents
 
 	// Used when node represents a job
-	Job               job.Job                // Job that this graph node represents
+	JobBytes          []byte                 // return value of Job.Serialize method
 	Args              map[string]interface{} // The args the node was created with
 	Retry             uint                   // The number of times to retry a node
 	RetryWait         string                 // The time to sleep between retries
@@ -48,24 +47,33 @@ type Node struct {
 // IsValidGraph asserts that g is a valid graph by ensuring that
 // g is acyclic and connected (not fully connected), and that the edge
 // map matches the reverse edge map.
-func (g *Graph) IsValidGraph() bool {
-	return !g.hasCycles() && g.isConnected() && g.edgesMatchesRevEdges()
+func (g *Graph) IsValidGraph() error {
+	if g.hasCycles() {
+		return fmt.Errorf("cycles found in graph")
+	}
+	if !g.isConnected() {
+		return fmt.Errorf("graph not connected")
+	}
+	if !g.edgesMatchesRevEdges() {
+		return fmt.Errorf("adjacency list does not match reverse adjacency list")
+	}
+	return nil
 }
 
 // GetNext returns the out edges of a node (node id --> Node)
-func (g *Graph) GetNext(n *Node) map[string]*Node {
-	next := map[string]*Node{}
-	for _, nextId := range g.Edges[n.Id] {
-		next[nextId] = g.Nodes[nextId]
+func (g *Graph) GetNext(n *Node) []*Node {
+	next := make([]*Node, len(g.Edges[n.Id]))
+	for i, nextId := range g.Edges[n.Id] {
+		next[i] = g.Nodes[nextId]
 	}
 	return next
 }
 
 // GetPrev returns the in edges of a node (node id --> Node)
-func (g *Graph) GetPrev(n *Node) map[string]*Node {
-	prev := map[string]*Node{}
-	for _, prevId := range g.RevEdges[n.Id] {
-		prev[prevId] = g.Nodes[prevId]
+func (g *Graph) GetPrev(n *Node) []*Node {
+	prev := make([]*Node, len(g.RevEdges[n.Id]))
+	for i, prevId := range g.RevEdges[n.Id] {
+		prev[i] = g.Nodes[prevId]
 	}
 	return prev
 }
@@ -77,8 +85,11 @@ func (g *Graph) GetPrev(n *Node) map[string]*Node {
 //      prev and next both are present in g
 //      next "comes after" prev in the graph, when traversing from the source node
 func (g *Graph) InsertComponentBetween(component *Graph, prev *Node, next *Node) error {
-	if !g.IsValidGraph() || !component.IsValidGraph() {
-		return fmt.Errorf("Graph not valid!")
+	if err := g.IsValidGraph(); err != nil {
+		return fmt.Errorf("graph to insert component into: %s", err)
+	}
+	if err := component.IsValidGraph(); err != nil {
+		return fmt.Errorf("component to be inserted: %s", err)
 	}
 
 	var source, sink string
@@ -129,8 +140,8 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev *Node, next *Node)
 	}
 
 	// Verify resulting graph is ok
-	if !g.IsValidGraph() {
-		return fmt.Errorf("graph not valid after insert")
+	if err := g.IsValidGraph(); err != nil {
+		return fmt.Errorf("graph not valid after insert: %s", err)
 	}
 	return nil
 }
@@ -163,18 +174,18 @@ func (g *Graph) PrintDot() {
 // hasCycles returns true iff the graph has at least one cycle in it.
 func (g *Graph) hasCycles() bool {
 	seen := map[string]*Node{g.Source.Id: g.Source}
-	return g.hasCyclesDFS(seen, g.Source)
+	return g.hasCyclesHelper(seen, g.Source)
 }
 
 // isConnected returns true iff every node is reachable from the start node, and
 // every path terminates at the end node.
 func (g *Graph) isConnected() bool {
 	// Check forwards connectivity and backwards connectivity
-	return g.connectedToLastNodeDFS(g.Source) && g.connectedToFirstNodeDFS(g.Sink)
+	return g.connectedToLastNode(g.Source) && g.connectedToFirstNode(g.Sink)
 }
 
-// connectedToLastNodeDFS returns true iff the last node in g is reachable from n.
-func (g *Graph) connectedToLastNodeDFS(n *Node) bool {
+// connectedToLastNode returns true iff the last node in g is reachable from n.
+func (g *Graph) connectedToLastNode(n *Node) bool {
 	if n == nil {
 		return false
 	}
@@ -187,7 +198,7 @@ func (g *Graph) connectedToLastNodeDFS(n *Node) bool {
 	for _, next := range g.GetNext(n) {
 
 		// Every node after n must also be connected to the last node
-		connected := g.connectedToLastNodeDFS(next)
+		connected := g.connectedToLastNode(next)
 		if !connected {
 			return false
 		}
@@ -195,8 +206,8 @@ func (g *Graph) connectedToLastNodeDFS(n *Node) bool {
 	return true
 }
 
-// connectedToFirstNodeDFS returns true if n is reachable from the first node in g.
-func (g *Graph) connectedToFirstNodeDFS(n *Node) bool {
+// connectedToFirstNode returns true if n is reachable from the first node in g.
+func (g *Graph) connectedToFirstNode(n *Node) bool {
 	if n == nil {
 		return false
 	}
@@ -209,7 +220,7 @@ func (g *Graph) connectedToFirstNodeDFS(n *Node) bool {
 	for _, prev := range g.GetPrev(n) {
 
 		// Every node before n must also be connected to the first node
-		connected := g.connectedToFirstNodeDFS(prev)
+		connected := g.connectedToFirstNode(prev)
 		if !connected {
 			return false
 		}
@@ -239,9 +250,9 @@ func (g *Graph) edgesMatchesRevEdges() bool {
 	return true
 }
 
-// hasCyclesDFS determines if a graph has cycles, using DFS.
+// hasCyclesHelper determines if a graph has cycles, using DFS.
 // Precondition: start node is already in seen list.
-func (g *Graph) hasCyclesDFS(seen map[string]*Node, start *Node) bool {
+func (g *Graph) hasCyclesHelper(seen map[string]*Node, start *Node) bool {
 	for _, next := range g.GetNext(start) {
 
 		// If the next node has already been seen, return true
@@ -253,7 +264,7 @@ func (g *Graph) hasCyclesDFS(seen map[string]*Node, start *Node) bool {
 		seen[next.Id] = next
 
 		// Continue searching after next node
-		if g.hasCyclesDFS(seen, next) {
+		if g.hasCyclesHelper(seen, next) {
 			return true
 		}
 

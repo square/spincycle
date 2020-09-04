@@ -212,7 +212,7 @@ func (s *Server) Boot() error {
 
 	// Do graph checks and get sequence graphs
 	tg := graph.NewGrapher(specs, gf)
-	seqGraphs, seqErrors := tg.DoChecks()
+	seqGraphs, seqErrors := tg.CheckSequences()
 	if len(seqErrors) != 0 {
 		for seqName, seqError := range seqErrors {
 			log.Errorf("%s: %s", seqName, seqError)

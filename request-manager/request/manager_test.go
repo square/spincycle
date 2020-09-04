@@ -62,7 +62,7 @@ func setupManager(t *testing.T, dataFile string) string {
 		spec.ProcessSpecs(&specs)
 
 		gr := graph.NewGrapher(specs, id.NewGeneratorFactory(4, 100))
-		seqGraphs, seqErrors := gr.DoChecks()
+		seqGraphs, seqErrors := gr.CheckSequences()
 		if len(seqErrors) != 0 {
 			t.Fatal(seqErrors)
 		}

@@ -48,7 +48,7 @@ func Run(ctx app.Context) error {
 		return fmt.Errorf("MakeIDGeneratorFactory: %s", err)
 	}
 	gr := graph.NewGrapher(allSpecs, idgen)
-	_, errs := gr.DoChecks()
+	_, errs := gr.CheckSequences()
 	if len(errs) != 0 {
 		for seq, err := range errs {
 			fmt.Printf("%s: %s\n", seq, err)

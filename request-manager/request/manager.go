@@ -154,15 +154,11 @@ func (m *manager) Create(newReq proto.CreateRequest) (proto.Request, error) {
 		Jobs:          map[string]proto.Job{},
 	}
 	for jobId, node := range reqGraph.Nodes {
-		bytes, err := node.Job.Serialize()
-		if err != nil {
-			return req, err
-		}
 		job := proto.Job{
-			Type:              node.Job.Id().Type,
-			Id:                node.Job.Id().Id,
-			Name:              node.Job.Id().Name,
-			Bytes:             bytes,
+			Type:              *node.Spec.NodeType,
+			Id:                node.Id,
+			Name:              node.Name,
+			Bytes:             node.JobBytes,
 			Args:              node.Args,
 			Retry:             node.Retry,
 			RetryWait:         node.RetryWait,

@@ -151,24 +151,24 @@ func g3() *Graph {
 	}
 }
 
-func TestFailIsValidGraph1(t *testing.T) {
+func TestIsValidGraph1(t *testing.T) {
 	g1 := g1()
-	if !g1.IsValidGraph() {
-		t.Fatalf("g1.IsValidGraph() = false, expected true")
+	if err := g1.IsValidGraph(); err != nil {
+		t.Fatalf("g1.IsValidGraph() returned error '%s', expected no error", err)
 	}
 }
 
-func TestFailIsValidGraph2(t *testing.T) {
+func TestIsValidGraph2(t *testing.T) {
 	g2 := g2()
-	if !g2.IsValidGraph() {
-		t.Fatalf("g2.IsValidGraph() = false, expected true")
+	if err := g2.IsValidGraph(); err != nil {
+		t.Fatalf("g2.IsValidGraph() returned error '%s', expected no error", err)
 	}
 }
 
-func TestFailIsValidGraph3(t *testing.T) {
+func TestIsValidGraph3(t *testing.T) {
 	g3 := g3()
-	if !g3.IsValidGraph() {
-		t.Fatalf("g3.IsValidGraph() = false, expected true")
+	if err := g3.IsValidGraph(); err != nil {
+		t.Fatalf("g3.IsValidGraph() returned error '%s', expected no error", err)
 	}
 }
 
@@ -207,8 +207,8 @@ func TestHasCycles(t *testing.T) {
 		},
 	}
 
-	if g0.IsValidGraph() {
-		t.Fatalf("IsValidGraph() = true for graph with cycles, expected false")
+	if err := g0.IsValidGraph(); err == nil {
+		t.Fatalf("IsValidGraph() returned no error for graph with cycles, expected error")
 	}
 }
 
@@ -238,8 +238,8 @@ func TestFailNotConnected(t *testing.T) {
 		},
 	}
 
-	if g0.IsValidGraph() {
-		t.Fatalf("IsValidGraph() = true for unconnected graph, expected false")
+	if err := g0.IsValidGraph(); err == nil {
+		t.Fatalf("IsValidGraph() returned no error for unconnected graph, expected error")
 	}
 }
 
@@ -247,8 +247,8 @@ func TestFailBadRevEdges(t *testing.T) {
 	g2 := g2()
 	g2.RevEdges = map[string][]string{}
 
-	if g2.IsValidGraph() {
-		t.Fatalf("IsValidGraph() = true for graph with incorrect RevEdges, expected false")
+	if err := g2.IsValidGraph(); err == nil {
+		t.Fatalf("IsValidGraph() returned no error for graph with incorrect RevEdges, expected error")
 	}
 }
 

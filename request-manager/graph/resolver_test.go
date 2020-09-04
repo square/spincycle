@@ -120,7 +120,7 @@ func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[s
 	}
 
 	gr := NewGrapher(specs, id.NewGeneratorFactory(4, 100))
-	seqGraphs, seqErrors := gr.DoChecks()
+	seqGraphs, seqErrors := gr.CheckSequences()
 	if len(seqErrors) != 0 {
 		t.Fatalf("failed to create sequence graphs: %v", seqErrors)
 	}
@@ -235,9 +235,9 @@ func TestSequenceRetry(t *testing.T) {
 	}
 
 	// Verify that the sequence retries are set correctly on all nodes.
-	// Only the "sequence_decommission-cluster_start" node should have retries.
+	// Only the "sequence_decommission-cluster_begin" node should have retries.
 	found := false
-	sequenceStartNodeName := "sequence_pre-flight-checks_start"
+	sequenceStartNodeName := "sequence_pre-flight-checks_begin"
 	for _, node := range reqGraph.Nodes {
 		if node.Name == sequenceStartNodeName {
 			found = true
@@ -288,22 +288,22 @@ func TestCreateDecomSetsRequestGraph(t *testing.T) {
 func reqVerifyDecomGraph(t *testing.T, g *Graph) {
 	startNode := g.Source.Id
 	currentStep := g.Edges[startNode]
-	reqVerifyStep(g, currentStep, 1, "decommission-cluster_start", t)
+	reqVerifyStep(g, currentStep, 1, "decommission-cluster_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "get-instances", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 4, "sequence_pre-flight-checks_start", t)
+	reqVerifyStep(g, currentStep, 4, "sequence_pre-flight-checks_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 4, "check-instance-is-ok_start", t)
+	reqVerifyStep(g, currentStep, 4, "check-instance-is-ok_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 4, "check-ok", t)
@@ -327,16 +327,16 @@ func reqVerifyDecomGraph(t *testing.T, g *Graph) {
 	reqVerifyStep(g, currentStep, 1, "prep-1", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 4, "sequence_decommission-instances_start", t)
+	reqVerifyStep(g, currentStep, 4, "sequence_decommission-instances_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 4, "decommission-instance_start", t)
+	reqVerifyStep(g, currentStep, 4, "decommission-instance_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 4, "decom-1", t)
@@ -418,16 +418,16 @@ func TestCreateDestroyConditionalRequestGraph(t *testing.T) {
 	// validate the adjacency list
 	startNode := g.Source.Id
 	currentStep := g.Edges[startNode]
-	reqVerifyStep(g, currentStep, 1, "destroy-conditional_start", t)
+	reqVerifyStep(g, currentStep, 1, "destroy-conditional_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "prep-1", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "conditional_destroy-container_start", t)
+	reqVerifyStep(g, currentStep, 1, "conditional_destroy-container_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "destroy-lxc_start", t)
+	reqVerifyStep(g, currentStep, 1, "destroy-lxc_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "destroy-1", t)
@@ -467,16 +467,16 @@ func TestCreateDoubleConditionalGraph(t *testing.T) {
 	// validate the adjacency list
 	startNode := g.Source.Id
 	currentStep := g.Edges[startNode]
-	reqVerifyStep(g, currentStep, 1, "double-conditional_start", t)
+	reqVerifyStep(g, currentStep, 1, "double-conditional_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "prep-1", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "conditional_archive-container_start", t)
+	reqVerifyStep(g, currentStep, 1, "conditional_archive-container_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "archive_start", t)
+	reqVerifyStep(g, currentStep, 1, "archive_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "archive-1", t)
@@ -491,10 +491,10 @@ func TestCreateDoubleConditionalGraph(t *testing.T) {
 	reqVerifyStep(g, currentStep, 1, "conditional_archive-container_end", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "conditional_destroy-container_start", t)
+	reqVerifyStep(g, currentStep, 1, "conditional_destroy-container_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "destroy-lxc_start", t)
+	reqVerifyStep(g, currentStep, 1, "destroy-lxc_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "destroy-1", t)
@@ -534,25 +534,25 @@ func TestCreateNestedConditionalGraph(t *testing.T) {
 	// validate the adjacency list
 	startNode := g.Source.Id
 	currentStep := g.Edges[startNode]
-	reqVerifyStep(g, currentStep, 1, "conditional-in-conditional_start", t)
+	reqVerifyStep(g, currentStep, 1, "conditional-in-conditional_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "prep-outer", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "conditional_handle-container_start", t)
+	reqVerifyStep(g, currentStep, 1, "conditional_handle-container_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "destroy-conditional_start", t)
+	reqVerifyStep(g, currentStep, 1, "destroy-conditional_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "prep-1", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "conditional_destroy-container_start", t)
+	reqVerifyStep(g, currentStep, 1, "conditional_destroy-container_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "destroy-lxc_start", t)
+	reqVerifyStep(g, currentStep, 1, "destroy-lxc_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "destroy-1", t)
@@ -601,16 +601,16 @@ func TestCreateDefaultConditionalGraph(t *testing.T) {
 	// validate the adjacency list
 	startNode := g.Source.Id
 	currentStep := g.Edges[startNode]
-	reqVerifyStep(g, currentStep, 1, "conditional-default_start", t)
+	reqVerifyStep(g, currentStep, 1, "conditional-default_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "prep-1", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "conditional_destroy-container_start", t)
+	reqVerifyStep(g, currentStep, 1, "conditional_destroy-container_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "destroy-docker_start", t)
+	reqVerifyStep(g, currentStep, 1, "destroy-docker_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "destroy-1", t)
@@ -661,22 +661,22 @@ func TestCreateLimitParallel(t *testing.T) {
 	// validate the adjacency list
 	startNode := g.Source.Id
 	currentStep := g.Edges[startNode]
-	reqVerifyStep(g, currentStep, 1, "decommission-cluster_start", t)
+	reqVerifyStep(g, currentStep, 1, "decommission-cluster_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "get-instances", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 3, "sequence_pre-flight-checks_start", t)
+	reqVerifyStep(g, currentStep, 3, "sequence_pre-flight-checks_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 3, "check-instance-is-ok_start", t)
+	reqVerifyStep(g, currentStep, 3, "check-instance-is-ok_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 3, "check-ok", t)
@@ -694,13 +694,13 @@ func TestCreateLimitParallel(t *testing.T) {
 	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_end", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_pre-flight-checks_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "sequence_pre-flight-checks_start", t)
+	reqVerifyStep(g, currentStep, 1, "sequence_pre-flight-checks_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "check-instance-is-ok_start", t)
+	reqVerifyStep(g, currentStep, 1, "check-instance-is-ok_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 1, "check-ok", t)
@@ -724,16 +724,16 @@ func TestCreateLimitParallel(t *testing.T) {
 	reqVerifyStep(g, currentStep, 1, "prep-1", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 2, "sequence_decommission-instances_start", t)
+	reqVerifyStep(g, currentStep, 2, "sequence_decommission-instances_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 2, "decommission-instance_start", t)
+	reqVerifyStep(g, currentStep, 2, "decommission-instance_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 2, "decom-1", t)
@@ -754,13 +754,13 @@ func TestCreateLimitParallel(t *testing.T) {
 	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_end", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_start", t)
+	reqVerifyStep(g, currentStep, 1, "repeat_decommission-instances_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 2, "sequence_decommission-instances_start", t)
+	reqVerifyStep(g, currentStep, 2, "sequence_decommission-instances_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
-	reqVerifyStep(g, currentStep, 2, "decommission-instance_start", t)
+	reqVerifyStep(g, currentStep, 2, "decommission-instance_begin", t)
 
 	currentStep = reqGetNextStep(g.Edges, currentStep)
 	reqVerifyStep(g, currentStep, 2, "decom-1", t)
@@ -919,7 +919,7 @@ func TestBadEach001(t *testing.T) {
 func TestConditionalIfOptionalArg(t *testing.T) {
 	// This spec has "if: foo" where "foo" is an optional arg with no value,
 	// so creator should use "default: defaultSeq", which we can see below in
-	// "sequence_defaultSeq_start/end" nodes.
+	// "sequence_defaultSeq_begin/end" nodes.
 	sequencesFile := "cond-args.yaml"
 	requestName := "request-name"
 	args := map[string]interface{}{
@@ -948,19 +948,19 @@ func TestConditionalIfOptionalArg(t *testing.T) {
 	// are what we expect, and the order expressed by Edges. This lets us see/verify
 	// that defaultSeq is created.
 	id1 := &Node{
-		Name:       "request_request-name_start",
+		Name:       "request_request-name_begin",
 		SequenceId: "id1",
 	}
 	id3 := &Node{
-		Name:       "request-name_start",
+		Name:       "request-name_begin",
 		SequenceId: "id1",
 	}
 	id4 := &Node{
-		Name:       "conditional_job1name_start",
+		Name:       "conditional_job1name_begin",
 		SequenceId: "id4",
 	}
 	id6 := &Node{
-		Name:       "defaultSeq_start",
+		Name:       "defaultSeq_begin",
 		SequenceId: "id4",
 	}
 	id7 := &Node{ // category: job, type: job1

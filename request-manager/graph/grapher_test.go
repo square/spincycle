@@ -3,17 +3,12 @@
 package graph_test
 
 import (
-	"fmt"
 	"testing"
 
 	. "github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
-)
-
-var (
-	SequenceNotFoundError = fmt.Errorf("sequence not found in SequenceTemplates or SequenceErrors")
 )
 
 func MakeGrapher(t *testing.T, sequencesFile string, logFunc func(string, ...interface{})) *Grapher {
@@ -105,7 +100,7 @@ func verifyDecomGraph(t *testing.T, seqGraphs map[string]*Graph) {
 func TestCreateDecomGraph(t *testing.T) {
 	sequenceFile := "decomm.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) != 0 {
 		t.Fatal("unexpected errors creating sequence graphs")
 	}
@@ -117,7 +112,7 @@ func TestCreateDecomGraph(t *testing.T) {
 func TestCreateDecomGraphTwice(t *testing.T) {
 	sequenceFile := "decomm.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) != 0 {
 		t.Fatal("unexpected error creating sequence graphs")
 	}
@@ -125,7 +120,7 @@ func TestCreateDecomGraphTwice(t *testing.T) {
 	verifyDecomGraph(t, seqGraphs)
 
 	verifyDecomGraph(t, seqGraphs)
-	seqGraphs, seqErrors = grapher.DoChecks()
+	seqGraphs, seqErrors = grapher.CheckSequences()
 	if len(seqErrors) != 0 {
 		t.Fatal("unexpected error creating sequence graphs")
 	}
@@ -136,7 +131,7 @@ func TestCreateDecomGraphTwice(t *testing.T) {
 func TestCreateDecomSetsGraph(t *testing.T) {
 	sequenceFile := "decomm-sets.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) != 0 {
 		t.Fatal("unexpected error creating sequence graphs")
 	}
@@ -147,7 +142,7 @@ func TestCreateDecomSetsGraph(t *testing.T) {
 func TestCreateDestroyConditionalGraph(t *testing.T) {
 	sequenceFile := "destroy-conditional.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) != 0 {
 		t.Log(seqErrors)
 		t.Fatal("unexpected error creating sequence graphs")
@@ -179,7 +174,7 @@ func TestCreateDestroyConditionalGraph(t *testing.T) {
 func TestFailMissingSetsGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) == 0 {
 		t.Fatal("no error creating subsequence graph with incorrectly specified `sets`, expected error")
 	}
@@ -200,7 +195,7 @@ func TestFailMissingSetsGraphCheck(t *testing.T) {
 func TestFailMissingSetsConditionalGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) == 0 {
 		t.Fatal("no error creating subsequence graph with incorrectly specified `sets`, expected error")
 	}
@@ -229,7 +224,7 @@ func TestFailMissingSetsConditionalGraphCheck(t *testing.T) {
 func TestFailMissingJobArgsGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) == 0 {
 		t.Fatal("no error creating subsequence graph with missing job args, expected error")
 	}
@@ -250,7 +245,7 @@ func TestFailMissingJobArgsGraphCheck(t *testing.T) {
 func TestFailCircularDependenciesGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) == 0 {
 		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
@@ -267,7 +262,7 @@ func TestFailCircularDependenciesGraphCheck(t *testing.T) {
 func TestFailPropagate(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) == 0 {
 		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
@@ -288,7 +283,7 @@ func TestFailPropagate(t *testing.T) {
 func TestFailPropagateConditional(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
 	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.DoChecks()
+	seqGraphs, seqErrors := grapher.CheckSequences()
 	if len(seqErrors) == 0 {
 		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
@@ -315,13 +310,10 @@ func TestFailPropagateConditional(t *testing.T) {
 }
 
 func getSeqError(sequenceName string, seqGraphs map[string]*Graph, seqErrors map[string]error) error {
-	if _, ok := seqGraphs[sequenceName]; ok {
-		return nil
-	}
 	if err, ok := seqErrors[sequenceName]; ok {
 		return err
 	}
-	return SequenceNotFoundError
+	return nil
 }
 
 func getNextStep(g *Graph, nodes []string) []string {

@@ -69,15 +69,15 @@ type resolver struct {
 // RequestArgs takes user input args and returns them as a job args map, the form
 // expected by the Resolver later when building the request graph. Optional and
 // static args are filled in with their default values.
-func (o *resolver) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
+func (r *resolver) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
 	reqArgs := []proto.RequestArg{}
 
-	seq, ok := o.allSequences[o.request.Type]
+	seq, ok := r.allSequences[r.request.Type]
 	if !ok {
-		return nil, fmt.Errorf("cannot find specs for request: %s", o.request.Type)
+		return nil, fmt.Errorf("cannot find specs for request: %s", r.request.Type)
 	}
 	if !seq.Request {
-		return nil, fmt.Errorf("%s is not a request", o.request.Type)
+		return nil, fmt.Errorf("%s is not a request", r.request.Type)
 	}
 
 	for i, arg := range seq.Args.Required {
@@ -131,20 +131,20 @@ type buildSequenceConfig struct {
 }
 
 // BuildRequestGraph returns a request graph with the given starting job args.
-func (o *resolver) BuildRequestGraph(jobArgs map[string]interface{}) (*Graph, error) {
+func (r *resolver) BuildRequestGraph(jobArgs map[string]interface{}) (*Graph, error) {
 	cfg := buildSequenceConfig{
-		graphName:         "request_" + o.request.Type,
-		sequenceName:      o.request.Type,
+		graphName:         "request_" + r.request.Type,
+		sequenceName:      r.request.Type,
 		jobArgs:           jobArgs,
 		sequenceRetry:     0,
 		sequenceRetryWait: "0s",
 	}
-	seqGraph, err := o.buildSequence(cfg)
+	reqGraph, err := r.buildSequence(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return seqGraph, nil
+	return reqGraph, nil
 }
 
 // buildSequence recursively builds a sequence. If a sequence graph node represents
@@ -152,19 +152,24 @@ func (o *resolver) BuildRequestGraph(jobArgs map[string]interface{}) (*Graph, er
 // to be expanded, i.e. it represents anything but a job, it is recursively expanded
 // with another call to buildSequence. buildSequence also chooses the correct path
 // for conditional nodes.
-func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
+func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 	sequenceName := cfg.sequenceName
 	jobArgs := cfg.jobArgs
 
-	// Build request graph based on sequence graph.
-	seqGraph, ok := o.sequenceGraphs[sequenceName]
+	// Build request graph based on sequence graph. We use the sequence graph
+	// as a template, traversing it in topological order and processing each
+	// of its nodes depending on what category it is (job, sequence, conditional).
+	// This sequence graph won't be mutated at all.
+	seqGraph, ok := r.sequenceGraphs[sequenceName]
 	if !ok {
 		// Graph checks should prevent this from happening.
 		// If this error is thrown, there's a bug in the code.
 		return nil, fmt.Errorf("cannot find sequence graph for sequence: %s", sequenceName)
 	}
 
-	reqGraph, err := o.newReqGraph(cfg.graphName, jobArgs)
+	// This is the graph we'll actually be filling out. It starts off empty,
+	// and we'll add nodes as we traverse the sequence graph.
+	reqGraph, err := r.newReqGraph(cfg.graphName, jobArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +187,7 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 		// elements[i] describe the ith `list:element`. Specifically,
 		// lists[i] is the actual list value, not just the name of the
 		// job arg.
-		elements, lists, err := o.getIterators(nodeSpec, jobArgs)
+		elements, lists, err := r.getIterators(nodeSpec, jobArgs)
 		if err != nil {
 			return nil, fmt.Errorf("in seq %s, node %s: invalid 'each:' %s", sequenceName, nodeSpec.Name, err)
 		}
@@ -192,7 +197,7 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 		components := []*Graph{}
 
 		// If no repetition is needed, this loop will only execute once
-		// with a dummy `each:` entry `[""]:""`.
+		// with a dummy `each:` entry `[""]:nil`.
 		for i, _ := range lists[0] {
 			// Copy the required args into a separate args map here
 			// and do the necessary remapping
@@ -201,18 +206,20 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 				return nil, err
 			}
 
-			// Add elements to the node args unless there are none
-			// for this node
+			// Given "each: foos:foo", we add jobArgs[foo] = jobArgs[foos][i],
+			// unless this is the dummy `each:` that ensures that we
+			// run this loop exactly once, in which case elt == nil.
 			for j, elt := range elements {
-				if elt != "" {
+				if elt != nil {
 					// This won't panic because we have earlier asserted that
 					// len(elements) == len(lists)
-					jobArgsCopy[elt] = lists[j][i]
+					jobArgsCopy[*elt] = lists[j][i]
 				}
 			}
 
-			// Add the "if" to the node args if it's present
-			if nodeSpec.If != nil {
+			// If this is a conditional node, add the "if" job arg.
+			// Static checks asserted if != nil for conditional nodes.
+			if nodeSpec.IsConditional() {
 				if ifArg, ok := jobArgs[*nodeSpec.If]; ok {
 					jobArgsCopy[*nodeSpec.If] = ifArg
 				}
@@ -234,7 +241,7 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 					sequenceRetry:     nodeSpec.Retry,
 					sequenceRetryWait: nodeSpec.RetryWait,
 				}
-				reqSubgraph, err = o.buildSequence(cfg)
+				reqSubgraph, err = r.buildSequence(cfg)
 				if err != nil {
 					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, nodeSpec.Name, err)
 				}
@@ -247,14 +254,14 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 					sequenceRetry:     nodeSpec.Retry,
 					sequenceRetryWait: nodeSpec.RetryWait,
 				}
-				reqSubgraph, err = o.buildSequence(cfg)
+				reqSubgraph, err = r.buildSequence(cfg)
 				if err != nil {
 					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, nodeSpec.Name, err)
 				}
 			} else {
 				// Node is a job: create the proto.Job and put
 				// it in a graph
-				reqSubgraph, err = o.buildSingleVertexGraph(nodeSpec, jobArgsCopy)
+				reqSubgraph, err = r.buildSingleVertexGraph(nodeSpec, jobArgsCopy)
 				if err != nil {
 					return nil, fmt.Errorf("in seq %s, node %s: cannot build job: %s", sequenceName, nodeSpec.Name, err)
 				}
@@ -277,7 +284,7 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 		var wrappedReqSubgraph *Graph
 		if len(components) > 1 {
 			// Create the start and end nodes
-			wrappedReqSubgraph, err = o.newReqGraph("repeat_"+nodeSpec.Name, jobArgs)
+			wrappedReqSubgraph, err = r.newReqGraph("repeat_"+nodeSpec.Name, jobArgs)
 			if err != nil {
 				return nil, err
 			}
@@ -294,7 +301,7 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 				parallel = *nodeSpec.Parallel
 			}
 
-			currG, err := o.newReqGraph("repeat_"+nodeSpec.Name, jobArgs)
+			currG, err := r.newReqGraph("repeat_"+nodeSpec.Name, jobArgs)
 			if err != nil {
 				return nil, err
 			}
@@ -307,7 +314,7 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 				if count == parallel {
 					wrappedReqSubgraph.InsertComponentBetween(currG, prev, wrappedReqSubgraph.Sink)
 					prev = currG.Sink
-					currG, err = o.newReqGraph("repeat_"+nodeSpec.Name, jobArgs)
+					currG, err = r.newReqGraph("repeat_"+nodeSpec.Name, jobArgs)
 					if err != nil {
 						return nil, err
 					}
@@ -325,7 +332,7 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 			// Even if there are no lists, we still need to add
 			// the node to the graph in order to fulfill dependencies
 			// for later nodes.
-			wrappedReqSubgraph, err = o.newReqGraph("noop_"+nodeSpec.Name, jobArgs)
+			wrappedReqSubgraph, err = r.newReqGraph("noop_"+nodeSpec.Name, jobArgs)
 			if err != nil {
 				return nil, err
 			}
@@ -342,16 +349,17 @@ func (o *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 		} else {
 			// Case: any other node; insert between sink node of previous node's
 			// subgraph, and the last node of the sequence graph
-			for id, _ := range prevs {
-				prev, ok := idMap[id]
+			for _, seqPrev := range prevs {
+				prev, ok := idMap[seqPrev.Id]
 				if !ok {
 					return nil, fmt.Errorf("could not find previous component of %s; components added out of order", seqGraphNode.Name)
 				}
 				reqGraph.InsertComponentBetween(wrappedReqSubgraph, prev.Sink, reqGraph.Sink)
 			}
 		}
-		if !reqGraph.IsValidGraph() {
-			return nil, fmt.Errorf("malformed request graph created after processing node %s", seqGraphNode.Name)
+		if err := reqGraph.IsValidGraph(); err != nil {
+			return nil, fmt.Errorf("request graph for request %s is not a valid directed acyclic graph after processing node %s: %s",
+				sequenceName, seqGraphNode.Name, err)
 		}
 	}
 
@@ -420,14 +428,14 @@ func chooseConditional(n *spec.Node, jobArgs map[string]interface{}) (string, er
 // and the singleton [""], to indicate that only one iteration is needed.
 //
 // Precondition: the list must already be present in args
-func (o *resolver) getIterators(n *spec.Node, args map[string]interface{}) ([]string, [][]interface{}, error) {
-	empty := []string{""}
+func (r *resolver) getIterators(n *spec.Node, args map[string]interface{}) ([]*string, [][]interface{}, error) {
+	empty := []*string{nil}
 	empties := [][]interface{}{[]interface{}{""}}
 	if len(n.Each) == 0 {
 		return empty, empties, nil
 	}
 
-	elements := []string{}
+	elements := []*string{}
 	lists := [][]interface{}{}
 
 	for _, each := range n.Each {
@@ -456,7 +464,7 @@ func (o *resolver) getIterators(n *spec.Node, args map[string]interface{}) ([]st
 			list = append(list, a.Index(i).Interface())
 		}
 
-		elements = append(elements, element)
+		elements = append(elements, &element)
 		lists = append(lists, list)
 	}
 
@@ -511,8 +519,8 @@ func setNodeArgs(n *spec.Node, argsTo, argsFrom map[string]interface{}) error {
 }
 
 // buildSingleVertexGraph builds a graph containing a single node.
-func (o *resolver) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]interface{}) (*Graph, error) {
-	n, err := o.newNode(nodeDef, jobArgs)
+func (r *resolver) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string]interface{}) (*Graph, error) {
+	n, err := r.newNode(nodeDef, jobArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -528,7 +536,7 @@ func (o *resolver) buildSingleVertexGraph(nodeDef *spec.Node, jobArgs map[string
 }
 
 // newReqGraph creates an "empty" graph. It contains two nodes: the noop source and sink nodes.
-func (o *resolver) newReqGraph(name string, jobArgs map[string]interface{}) (*Graph, error) {
+func (r *resolver) newReqGraph(name string, jobArgs map[string]interface{}) (*Graph, error) {
 	var err error
 
 	jobArgsCopy, err := remapNodeArgs(&spec.NoopNode, jobArgs)
@@ -536,12 +544,12 @@ func (o *resolver) newReqGraph(name string, jobArgs map[string]interface{}) (*Gr
 		return nil, err
 	}
 
-	source, err := o.newNoopNode(name+"_start", jobArgsCopy)
+	source, err := r.newNoopNode(name+"_begin", jobArgsCopy)
 	if err != nil {
 		return nil, err
 	}
 
-	sink, err := o.newNoopNode(name+"_end", jobArgsCopy)
+	sink, err := r.newNoopNode(name+"_end", jobArgsCopy)
 	if err != nil {
 		return nil, err
 	}
@@ -562,13 +570,13 @@ func (o *resolver) newReqGraph(name string, jobArgs map[string]interface{}) (*Gr
 }
 
 // newNoopNode creates a node witha noop job for use as the graph source and sink.
-func (o *resolver) newNoopNode(name string, jobArgs map[string]interface{}) (*Node, error) {
-	id, err := o.idGen.UID()
+func (r *resolver) newNoopNode(name string, jobArgs map[string]interface{}) (*Node, error) {
+	id, err := r.idGen.UID()
 	if err != nil {
-		return nil, fmt.Errorf("Error making id for no-op node %s: %s", name, err)
+		return nil, fmt.Errorf("Error making id for no-op job %s: %s", name, err)
 	}
-	jid := job.NewIdWithRequestId("noop", name, id, o.request.Id)
-	rj, err := o.jobFactory.Make(jid)
+	jid := job.NewIdWithRequestId("noop", name, id, r.request.Id)
+	rj, err := r.jobFactory.Make(jid)
 	if err != nil {
 		switch err {
 		case job.ErrUnknownJobType:
@@ -577,23 +585,28 @@ func (o *resolver) newNoopNode(name string, jobArgs map[string]interface{}) (*No
 				id: jid,
 			}
 		default:
-			return nil, fmt.Errorf("Error making no-op node %s: %s", name, err)
+			return nil, fmt.Errorf("Error making no-op job %s: %s", name, err)
 		}
 	}
 	err = rj.Create(jobArgs)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating no-op node %s: %s", name, err)
+		return nil, fmt.Errorf("Error creating no-op job %s: %s", name, err)
+	}
+	bytes, err := rj.Serialize()
+	if err != nil {
+		return nil, fmt.Errorf("Error serializing no-op job %s: %s", name, err)
 	}
 
 	return &Node{
-		Job:  rj,
-		Name: name,
-		Id:   id,
+		Name:     name,
+		Id:       id,
+		Spec:     &spec.NoopNode, // on the next refactor, we shouldn't need to set this ourselves
+		JobBytes: bytes,
 	}, nil
 }
 
 // newNode creates job described by node specs `j` and puts it in a node.
-func (o *resolver) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, error) {
+func (r *resolver) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node, error) {
 	// Make a copy of the jobArgs before this node gets created and potentially
 	// adds additional keys to the jobArgs. A shallow copy is sufficient because
 	// args values should never change.
@@ -603,13 +616,13 @@ func (o *resolver) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node,
 	}
 
 	// Make the name of this node unique within the request by assigning it an id.
-	id, err := o.idGen.UID()
+	id, err := r.idGen.UID()
 	if err != nil {
 		return nil, fmt.Errorf("Error making id for '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
 	// Create the job
-	rj, err := o.jobFactory.Make(job.NewIdWithRequestId(*j.NodeType, j.Name, id, o.request.Id))
+	rj, err := r.jobFactory.Make(job.NewIdWithRequestId(*j.NodeType, j.Name, id, r.request.Id))
 	if err != nil {
 		return nil, fmt.Errorf("Error making '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
@@ -619,10 +632,16 @@ func (o *resolver) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node,
 		return nil, fmt.Errorf("Error creating '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
+	bytes, err := rj.Serialize()
+	if err != nil {
+		return nil, fmt.Errorf("Error serializing '%s %s' job: %s", *j.NodeType, j.Name, err)
+	}
+
 	return &Node{
-		Job:       rj,
 		Name:      j.Name,
 		Id:        id,
+		Spec:      &spec.NoopNode, // on the next refactor, we shouldn't need to set this ourselves
+		JobBytes:  bytes,
 		Args:      originalArgs, // Args is the jobArgs map that this node was created with
 		Retry:     j.Retry,
 		RetryWait: j.RetryWait,
