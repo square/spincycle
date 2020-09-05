@@ -24,15 +24,15 @@ type ResolverFactory interface {
 // Implements ResolverFactory interface.
 type resolverFactory struct {
 	jf        job.Factory
-	seqs      map[string]*spec.Sequence
+	seqSpecs  map[string]*spec.Sequence
 	seqGraphs map[string]*Graph
 	idf       id.GeneratorFactory
 }
 
-func NewResolverFactory(jf job.Factory, specs map[string]*spec.Sequence, seqGraphs map[string]*Graph, idf id.GeneratorFactory) ResolverFactory {
+func NewResolverFactory(jf job.Factory, seqSpecs map[string]*spec.Sequence, seqGraphs map[string]*Graph, idf id.GeneratorFactory) ResolverFactory {
 	return &resolverFactory{
 		jf:        jf,
-		seqs:      specs,
+		seqSpecs:  seqSpecs,
 		seqGraphs: seqGraphs,
 		idf:       idf,
 	}
@@ -40,11 +40,11 @@ func NewResolverFactory(jf job.Factory, specs map[string]*spec.Sequence, seqGrap
 
 func (f *resolverFactory) Make(req proto.Request) Resolver {
 	return &resolver{
-		request:        req,
-		jobFactory:     f.jf,
-		allSequences:   f.seqs,
-		sequenceGraphs: f.seqGraphs,
-		idGen:          f.idf.Make(),
+		request:    req,
+		jobFactory: f.jf,
+		seqSpecs:   f.seqSpecs,
+		seqGraphs:  f.seqGraphs,
+		idGen:      f.idf.Make(),
 	}
 }
 
@@ -59,11 +59,11 @@ type Resolver interface {
 
 // resolver implements the Resolver interface.
 type resolver struct {
-	request        proto.Request             // the request spec this resolver can create job chain for
-	jobFactory     job.Factory               // factory to create nodes' jobs
-	allSequences   map[string]*spec.Sequence // sequence name --> sequence spec
-	sequenceGraphs map[string]*Graph         // sequence name --> sequence graph
-	idGen          id.Generator              // generates UIDs for jobs
+	request    proto.Request             // the request spec this resolver can create job chain for
+	jobFactory job.Factory               // factory to create nodes' jobs
+	seqSpecs   map[string]*spec.Sequence // sequence name --> sequence spec
+	seqGraphs  map[string]*Graph         // sequence name --> sequence graph
+	idGen      id.Generator              // generates UIDs for jobs
 }
 
 // RequestArgs takes user input args and returns them as a job args map, the form
@@ -72,7 +72,7 @@ type resolver struct {
 func (r *resolver) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestArg, error) {
 	reqArgs := []proto.RequestArg{}
 
-	seq, ok := r.allSequences[r.request.Type]
+	seq, ok := r.seqSpecs[r.request.Type]
 	if !ok {
 		return nil, fmt.Errorf("cannot find specs for request: %s", r.request.Type)
 	}
@@ -123,21 +123,21 @@ func (r *resolver) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestA
 
 // Parameters to buildSequence helper function.
 type buildSequenceConfig struct {
-	graphName         string                 // Name of graph and its source/sink nodes
-	sequenceName      string                 // Name of sequence to build
-	jobArgs           map[string]interface{} // Set of job args sequence is given
-	sequenceRetry     uint                   // Retry info for sequence
-	sequenceRetryWait string
+	graphName    string                 // Name of graph and its source/sink nodes
+	seqName      string                 // Name of sequence to build
+	jobArgs      map[string]interface{} // Set of job args sequence is given
+	seqRetry     uint                   // Retry info for sequence
+	seqRetryWait string
 }
 
 // BuildRequestGraph returns a request graph with the given starting job args.
 func (r *resolver) BuildRequestGraph(jobArgs map[string]interface{}) (*Graph, error) {
 	cfg := buildSequenceConfig{
-		graphName:         "request_" + r.request.Type,
-		sequenceName:      r.request.Type,
-		jobArgs:           jobArgs,
-		sequenceRetry:     0,
-		sequenceRetryWait: "0s",
+		graphName:    "request_" + r.request.Type,
+		seqName:      r.request.Type,
+		jobArgs:      jobArgs,
+		seqRetry:     0,
+		seqRetryWait: "0s",
 	}
 	reqGraph, err := r.buildSequence(cfg)
 	if err != nil {
@@ -153,18 +153,18 @@ func (r *resolver) BuildRequestGraph(jobArgs map[string]interface{}) (*Graph, er
 // with another call to buildSequence. buildSequence also chooses the correct path
 // for conditional nodes.
 func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
-	sequenceName := cfg.sequenceName
+	seqName := cfg.seqName
 	jobArgs := cfg.jobArgs
 
 	// Build request graph based on sequence graph. We use the sequence graph
 	// as a template, traversing it in topological order and processing each
 	// of its nodes depending on what category it is (job, sequence, conditional).
 	// This sequence graph won't be mutated at all.
-	seqGraph, ok := r.sequenceGraphs[sequenceName]
+	seqGraph, ok := r.seqGraphs[seqName]
 	if !ok {
 		// Graph checks should prevent this from happening.
 		// If this error is thrown, there's a bug in the code.
-		return nil, fmt.Errorf("cannot find sequence graph for sequence: %s", sequenceName)
+		return nil, fmt.Errorf("cannot find sequence graph for sequence: %s", seqName)
 	}
 
 	// This is the graph we'll actually be filling out. It starts off empty,
@@ -189,16 +189,25 @@ func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 		// job arg.
 		elements, lists, err := r.getIterators(nodeSpec, jobArgs)
 		if err != nil {
-			return nil, fmt.Errorf("in seq %s, node %s: invalid 'each:' %s", sequenceName, nodeSpec.Name, err)
+			return nil, fmt.Errorf("in seq %s, node %s: invalid 'each:' %s", seqName, nodeSpec.Name, err)
 		}
 
 		// All the graphs that make up this sequence graph node's subgraph,
 		// one for each time the node is repeated
-		components := []*Graph{}
+		// For example, with 3 sequences like S1->S2->S3, if we're currently
+		// in S1 (i.e. reqGraph=S1) and S2 is expanded ("each: foo:bar"),
+		// we'll build N-many parallel S2 and save them in seqExpansion.
+		// Then, after this `for` loop, we'll wrap all seqExpansion graphs
+		// in a new graph so they have a single source and sink node.
+		expandedSeqs := []*Graph{}
 
 		// If no repetition is needed, this loop will only execute once
 		// with a dummy `each:` entry `[""]:nil`.
 		for i, _ := range lists[0] {
+			// -----------------------------------------------------
+			// Copy and prepare job args for this expansion of the
+			// sequence node
+
 			// Copy the required args into a separate args map here
 			// and do the necessary remapping
 			jobArgsCopy, err := remapNodeArgs(nodeSpec, jobArgs)
@@ -225,78 +234,79 @@ func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 				}
 			}
 
-			// Resolve node into a request subgraph
+			// -----------------------------------------------------
+			// Resolve sequence node into a request subgraph and add
+			// to list of expansions
 			var reqSubgraph *Graph
 			if nodeSpec.IsConditional() {
 				// Node is a conditional: choose which path to
 				// take, and recursively build the subgraph
 				conditional, err := chooseConditional(nodeSpec, jobArgsCopy)
 				if err != nil {
-					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, nodeSpec.Name, err)
+					return nil, fmt.Errorf("in seq %s, node %s: %s", seqName, nodeSpec.Name, err)
 				}
 				cfg := buildSequenceConfig{
-					graphName:         "conditional_" + nodeSpec.Name,
-					sequenceName:      conditional,
-					jobArgs:           jobArgsCopy,
-					sequenceRetry:     nodeSpec.Retry,
-					sequenceRetryWait: nodeSpec.RetryWait,
+					graphName:    "conditional_" + nodeSpec.Name,
+					seqName:      conditional,
+					jobArgs:      jobArgsCopy,
+					seqRetry:     nodeSpec.Retry,
+					seqRetryWait: nodeSpec.RetryWait,
 				}
 				reqSubgraph, err = r.buildSequence(cfg)
 				if err != nil {
-					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, nodeSpec.Name, err)
+					return nil, fmt.Errorf("in seq %s, node %s: %s", seqName, nodeSpec.Name, err)
 				}
 			} else if nodeSpec.IsSequence() {
 				// Node is a sequence: recursively build the subgraph
 				cfg := buildSequenceConfig{
-					graphName:         "sequence_" + nodeSpec.Name,
-					sequenceName:      *nodeSpec.NodeType,
-					jobArgs:           jobArgsCopy,
-					sequenceRetry:     nodeSpec.Retry,
-					sequenceRetryWait: nodeSpec.RetryWait,
+					graphName:    "sequence_" + nodeSpec.Name,
+					seqName:      *nodeSpec.NodeType,
+					jobArgs:      jobArgsCopy,
+					seqRetry:     nodeSpec.Retry,
+					seqRetryWait: nodeSpec.RetryWait,
 				}
 				reqSubgraph, err = r.buildSequence(cfg)
 				if err != nil {
-					return nil, fmt.Errorf("in seq %s, node %s: %s", sequenceName, nodeSpec.Name, err)
+					return nil, fmt.Errorf("in seq %s, node %s: %s", seqName, nodeSpec.Name, err)
 				}
 			} else {
 				// Node is a job: create the proto.Job and put
 				// it in a graph
 				reqSubgraph, err = r.buildSingleVertexGraph(nodeSpec, jobArgsCopy)
 				if err != nil {
-					return nil, fmt.Errorf("in seq %s, node %s: cannot build job: %s", sequenceName, nodeSpec.Name, err)
+					return nil, fmt.Errorf("in seq %s, node %s: cannot build job: %s", seqName, nodeSpec.Name, err)
 				}
 			}
 
-			components = append(components, reqSubgraph)
+			expandedSeqs = append(expandedSeqs, reqSubgraph)
 
 			// If the node or sequence was determined to set any args
 			// copy them from jobArgsCopy into the main jobArgs
-			err = setNodeArgs(nodeSpec, jobArgs, jobArgsCopy)
-			if err != nil {
+			if err := setNodeArgs(nodeSpec, jobArgs, jobArgsCopy); err != nil {
 				return nil, err
 			}
 		} // End loop over lists
 
-		// 2. If sequence was expanded, wrap each component between a
-		// single dummy start and end vertices.
+		// 2. If sequence was expanded, wrap the expansion between a pair
+		// of source/sink nodes.
 		// This makes the resulting graph easier to reason about.
-		// If there are no components for the node, do nothing.
+		// If sequence was not expanded for the node, do nothing.
 		var wrappedReqSubgraph *Graph
-		if len(components) > 1 {
+		if len(expandedSeqs) > 1 {
 			// Create the start and end nodes
 			wrappedReqSubgraph, err = r.newReqGraph("repeat_"+nodeSpec.Name, jobArgs)
 			if err != nil {
 				return nil, err
 			}
 
-			// Insert all components between the start and end vertices.
-			// Place at most `parallel` components per parallel supercomponent.
-			// Serialize parallel supercomponents if number of components
-			// exceeds `parallel`.
-			// Each parallel supercomponent is wrapped between dummy nodes.
+			// Insert all sequences between the start and end vertices.
+			// Place at most `parallel` sequences per parallel expansion.
+			// Serialize parallel expansions if number of expanded
+			// sequences exceeds `parallel`.
+			// Each parallel expansion is wrapped between dummy nodes.
 			var parallel uint
 			if nodeSpec.Parallel == nil {
-				parallel = uint(len(components))
+				parallel = uint(len(expandedSeqs))
 			} else {
 				parallel = *nodeSpec.Parallel
 			}
@@ -308,7 +318,7 @@ func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 
 			prev := wrappedReqSubgraph.Source
 			var count uint = 0
-			for _, c := range components {
+			for _, c := range expandedSeqs {
 				currG.InsertComponentBetween(c, currG.Source, currG.Sink)
 				count++
 				if count == parallel {
@@ -324,9 +334,9 @@ func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 			if count != 0 {
 				wrappedReqSubgraph.InsertComponentBetween(currG, prev, wrappedReqSubgraph.Sink)
 			}
-		} else if len(components) == 1 {
-			wrappedReqSubgraph = components[0]
-		} else if len(components) == 0 {
+		} else if len(expandedSeqs) == 1 {
+			wrappedReqSubgraph = expandedSeqs[0]
+		} else if len(expandedSeqs) == 0 {
 			// TODO: L doesn't think this case actually ever happens,
 			// but is scared of removing it during a big refactor.
 			// Even if there are no lists, we still need to add
@@ -352,41 +362,37 @@ func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 			for _, seqPrev := range prevs {
 				prev, ok := idMap[seqPrev.Id]
 				if !ok {
-					return nil, fmt.Errorf("could not find previous component of %s; components added out of order", seqGraphNode.Name)
+					return nil, fmt.Errorf("could not find previous request subgraph of %s; sequence nodes resolved out of order", seqGraphNode.Name)
 				}
 				reqGraph.InsertComponentBetween(wrappedReqSubgraph, prev.Sink, reqGraph.Sink)
 			}
 		}
 		if err := reqGraph.IsValidGraph(); err != nil {
 			return nil, fmt.Errorf("request graph for request %s is not a valid directed acyclic graph after processing node %s: %s",
-				sequenceName, seqGraphNode.Name, err)
+				seqName, seqGraphNode.Name, err)
 		}
 	}
 
-	// Mark all vertices in sequence except start vertex start sequence id
-	// A graph is built by constructing its inner most components, which are
-	// sequences, and building its way out. When constructing the inner most
-	// sequence, we want to set SequenceId for all but the first vertex in the
-	// sequence. The SequenceId for the first vertex in the sequence will be set
-	// on a subsequent pass. Lastly, the first vertex in the completed graph will
-	// have no SequenceId set, as that vertex is part of a larger sequence.
-	sequenceId := reqGraph.Source.Id
+	// Sequence IDs of all nodes in this sequence are the UID of the source
+	// node.
+	// If a node's sequence ID has not been set, then it is a part of this
+	// sequence, and we set it.
+	// If a node's sequence ID has already been set, then it must've been set
+	// by a recursive call to buildSequence. That is, that node is part of a
+	// subsequence of this sequence. We don't want to overwrite that sequence
+	// ID.
+	seqId := reqGraph.Source.Id
 	for _, node := range reqGraph.Nodes {
-		// TODO(alyssa): Add `ParentSequenceId` to start vertex of each sequence.
-		// It's important to do this check before setting `SequenceId`
-		// if vertex.Id == vertex.SequenceId && vertex.ParentSequenceId == "" {
-		//   vertex.ParentSequenceId = sequenceId
-		// }
-
-		// Set SequenceId if it has not been set yet. This check also ensures that
-		// it is not overwritten on subsequent visits to this vertex.
+		// Don't overwrite subsequence's sequence IDs.
 		if node.SequenceId == "" {
-			node.SequenceId = sequenceId
+			node.SequenceId = seqId
 		}
 	}
-	// store configured retry from sequence spec on the first node in the sequence
-	reqGraph.Source.SequenceRetry = cfg.sequenceRetry
-	reqGraph.Source.SequenceRetryWait = cfg.sequenceRetryWait
+
+	// Store configured retry from sequence spec on the first node in the
+	// sequence.
+	reqGraph.Source.SequenceRetry = cfg.seqRetry
+	reqGraph.Source.SequenceRetryWait = cfg.seqRetryWait
 	return reqGraph, nil
 }
 
@@ -554,8 +560,7 @@ func (r *resolver) newReqGraph(name string, jobArgs map[string]interface{}) (*Gr
 		return nil, err
 	}
 
-	err = setNodeArgs(&spec.NoopNode, jobArgs, jobArgsCopy)
-	if err != nil {
+	if err := setNodeArgs(&spec.NoopNode, jobArgs, jobArgsCopy); err != nil {
 		return nil, err
 	}
 
@@ -588,8 +593,7 @@ func (r *resolver) newNoopNode(name string, jobArgs map[string]interface{}) (*No
 			return nil, fmt.Errorf("Error making no-op job %s: %s", name, err)
 		}
 	}
-	err = rj.Create(jobArgs)
-	if err != nil {
+	if err := rj.Create(jobArgs); err != nil {
 		return nil, fmt.Errorf("Error creating no-op job %s: %s", name, err)
 	}
 	bytes, err := rj.Serialize()
@@ -627,8 +631,7 @@ func (r *resolver) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node,
 		return nil, fmt.Errorf("Error making '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
-	err = rj.Create(jobArgs)
-	if err != nil {
+	if err := rj.Create(jobArgs); err != nil {
 		return nil, fmt.Errorf("Error creating '%s %s' job: %s", *j.NodeType, j.Name, err)
 	}
 
@@ -640,7 +643,7 @@ func (r *resolver) newNode(j *spec.Node, jobArgs map[string]interface{}) (*Node,
 	return &Node{
 		Name:      j.Name,
 		Id:        id,
-		Spec:      &spec.NoopNode, // on the next refactor, we shouldn't need to set this ourselves
+		Spec:      j, // on the next refactor, we shouldn't need to set this ourselves
 		JobBytes:  bytes,
 		Args:      originalArgs, // Args is the jobArgs map that this node was created with
 		Retry:     j.Retry,

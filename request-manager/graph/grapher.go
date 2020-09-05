@@ -274,7 +274,7 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 		// after this loop.
 		for nodeName, node := range nodesToAdd {
 			nodeSpec := seqSpec.Nodes[nodeName]
-			if !dependenciesSatisfied(nodesAdded, nodeSpec.Dependencies) {
+			if !haveAllDeps(nodesAdded, nodeSpec.Dependencies) {
 				continue
 			}
 
@@ -399,9 +399,9 @@ func getAllSequenceArgs(seq *spec.Sequence) map[string]bool {
 	return jobArgs
 }
 
-// dependenciesSatifised checks whether the set of nodes in a graph
+// haveAllDeps checks whether the set of nodes in a graph
 // satisfies all dependencies.
-func dependenciesSatisfied(inGraph map[string]bool, dependencies []string) bool {
+func haveAllDeps(inGraph map[string]bool, dependencies []string) bool {
 	for _, dep := range dependencies {
 		if _, ok := inGraph[dep]; !ok {
 			return false
@@ -412,6 +412,15 @@ func dependenciesSatisfied(inGraph map[string]bool, dependencies []string) bool 
 
 // checkNodeArgs checks whether all node args are present in the job args map.
 func checkNodeArgs(n *spec.Node, jobArgs map[string]bool) error {
+	// If this is a conditional node, assert that the "if" job arg is present
+	// in the job args map.
+	// Static checks assert that for conditional nodes, if != nil.
+	if n.IsConditional() {
+		if !jobArgs[*n.If] {
+			return fmt.Errorf("in node %s: 'if: %s': job arg %s is not set", n.Name, *n.If, *n.If)
+		}
+	}
+
 	missing := []string{}
 
 	// Assert that the iterable variable is present
@@ -419,21 +428,12 @@ func checkNodeArgs(n *spec.Node, jobArgs map[string]bool) error {
 		if each == "" {
 			continue
 		}
-		if len(strings.Split(each, ":")) != 2 { // this is malformed input
-			return fmt.Errorf("in node %s: malformed input to `each:`", n.Name)
+		if len(strings.Split(each, ":")) != 2 {
+			return fmt.Errorf("in node %s: input to 'each:' %s; expected format 'list:element'", n.Name, each)
 		}
 		iterateSet := strings.Split(each, ":")[0]
 		if !jobArgs[iterateSet] {
 			missing = append(missing, iterateSet)
-		}
-	}
-
-	// If this is a conditional node, assert that the "if" job arg is present
-	// in the job args map.
-	// Static checks assert that for conditional nodes, if != nil.
-	if n.IsConditional() {
-		if !jobArgs[*n.If] {
-			missing = append(missing, *n.If)
 		}
 	}
 
@@ -445,7 +445,7 @@ func checkNodeArgs(n *spec.Node, jobArgs map[string]bool) error {
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("node %s missing job args: %s", n.Name, strings.Join(missing, ", "))
+		return fmt.Errorf("node %s: expected job args to be set by some previous node: %s", n.Name, strings.Join(missing, ", "))
 	}
 
 	return nil
