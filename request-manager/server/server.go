@@ -215,7 +215,7 @@ func (s *Server) Boot() error {
 	seqGraphs, seqErrors := tg.CheckSequences()
 	if len(seqErrors) != 0 {
 		for seqName, seqError := range seqErrors {
-			log.Errorf("%s: %s", seqName, seqError)
+			log.Errorf("Error: %s: %s", seqName, seqError)
 		}
 		return fmt.Errorf("Graph check(s) on request specification files failed; see log or run spinc-linter for details")
 	}

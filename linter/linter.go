@@ -51,7 +51,7 @@ func Run(ctx app.Context) error {
 	_, errs := gr.CheckSequences()
 	if len(errs) != 0 {
 		for seq, err := range errs {
-			fmt.Printf("%s: %s\n", seq, err)
+			fmt.Printf("Error: %s: %s\n", seq, err)
 		}
 		return fmt.Errorf("graph check failed") // grapher prints details for us
 	}
