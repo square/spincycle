@@ -5,18 +5,18 @@ package graph
 import (
 	"fmt"
 
-	"github.com/square/spincycle/v2/job"
 	"github.com/square/spincycle/v2/request-manager/spec"
 )
 
 // Graph is a DAG where nodes are node specs (if a sequence graph) or jobs (if a
 // request graph), and a directed edge (u, v) exists iff u is a dependency of v.
+// It has one source and one sink node.
 type Graph struct {
-	Name   string // Name of the Graph
+	Name   string // Name of the graph
 	Source *Node  // The single source node of the graph
 	Sink   *Node  // The single sink node of the graph
 
-	// Nodes are keyed on their node id, which is a string
+	// Nodes are keyed on node id, which is a string
 	Nodes    map[string]*Node    // All nodes
 	Edges    map[string][]string // All edges
 	RevEdges map[string][]string // All reverse edges (sink -> source)
@@ -29,13 +29,13 @@ type Graph struct {
 type Node struct {
 	// Always valid
 	Id   string // UID within graph
-	Name string // Descriptive name for debugging graph or job chain
+	Name string // Descriptive name for debugging and visualizing graph
 
 	// Used when node represents a node spec
 	Spec *spec.Node // Node spec that this graph node represents
 
 	// Used when node represents a job
-	Job               job.Job                // Job that this graph node represents
+	JobBytes          []byte                 // return value of Job.Serialize method
 	Args              map[string]interface{} // The args the node was created with
 	Retry             uint                   // The number of times to retry a node
 	RetryWait         string                 // The time to sleep between retries
@@ -44,39 +44,52 @@ type Node struct {
 	SequenceRetryWait string                 // The time to sleep between sequence retries
 }
 
-// Asserts that g is a valid graph (according to Grapher's use case).
-// Ensures that g is acyclic, is connected (not fully connected),
-// and edge map matches reverse edge map.
-func (g *Graph) IsValidGraph() bool {
-	return !g.hasCycles() && g.isConnected() && g.edgesMatchesRevEdges()
+// IsValidGraph asserts that g is a valid graph by ensuring that
+// g is acyclic and connected (not fully connected), and that the edge
+// map matches the reverse edge map.
+func (g *Graph) IsValidGraph() error {
+	if g.hasCycles() {
+		return fmt.Errorf("cycles found in graph")
+	}
+	if !g.isConnected() {
+		return fmt.Errorf("graph not connected")
+	}
+	if !g.edgesMatchesRevEdges() {
+		return fmt.Errorf("adjacency list does not match reverse adjacency list")
+	}
+	return nil
 }
 
-// Get out edges of node (node id --> Node)
-func (g *Graph) GetNext(n *Node) map[string]*Node {
-	next := map[string]*Node{}
-	for _, nextId := range g.Edges[n.Id] {
-		next[nextId] = g.Nodes[nextId]
+// GetNext returns the out edges of a node
+func (g *Graph) GetNext(n *Node) []*Node {
+	next := make([]*Node, len(g.Edges[n.Id]))
+	for i, nextId := range g.Edges[n.Id] {
+		next[i] = g.Nodes[nextId]
 	}
 	return next
 }
 
-// Get in edges of node (node id --> Node)
-func (g *Graph) GetPrev(n *Node) map[string]*Node {
-	prev := map[string]*Node{}
-	for _, prevId := range g.RevEdges[n.Id] {
-		prev[prevId] = g.Nodes[prevId]
+// GetPrev returns the in edges of a node
+func (g *Graph) GetPrev(n *Node) []*Node {
+	prev := make([]*Node, len(g.RevEdges[n.Id]))
+	for i, prevId := range g.RevEdges[n.Id] {
+		prev[i] = g.Nodes[prevId]
 	}
 	return prev
 }
 
-// InsertComponentBetween will take a Graph as input, and insert it between the given prev and next nodes.
+// InsertComponentBetween takes a Graph as input and inserts it between the given
+// prev and next nodes.
 // Preconditions:
 //      component and g are connected and acyclic
 //      prev and next both are present in g
 //      next "comes after" prev in the graph, when traversing from the source node
 func (g *Graph) InsertComponentBetween(component *Graph, prev *Node, next *Node) error {
-	if !g.IsValidGraph() || !component.IsValidGraph() {
-		return fmt.Errorf("Graph not valid!")
+	if err := g.IsValidGraph(); err != nil {
+		return fmt.Errorf("graph to insert component into: %s", err)
+	}
+	if err := component.IsValidGraph(); err != nil {
+		return fmt.Errorf("component to be inserted: %s", err)
 	}
 
 	var source, sink string
@@ -86,7 +99,7 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev *Node, next *Node)
 		g.Nodes[k] = v
 	}
 
-	// update adjacency lists
+	// Update adjacency lists
 	for k, v := range component.Edges {
 		g.Edges[k] = v
 	}
@@ -94,7 +107,7 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev *Node, next *Node)
 		g.RevEdges[k] = v
 	}
 
-	// connect previous node and start node of component
+	// Connect previous node and start node of component
 	source = prev.Id
 	sink = component.Source.Id
 	if find(g.Edges[source], sink) < 0 {
@@ -102,7 +115,7 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev *Node, next *Node)
 		g.RevEdges[sink] = append(g.RevEdges[sink], source)
 	}
 
-	// connect last node of component and next node
+	// Connect last node of component and next node
 	source = component.Sink.Id
 	sink = next.Id
 	if find(g.Edges[source], sink) < 0 {
@@ -110,7 +123,7 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev *Node, next *Node)
 		g.RevEdges[sink] = append(g.RevEdges[sink], source)
 	}
 
-	// remove all connections between prev and next
+	// Remove all connections between prev and next
 	source = prev.Id
 	sink = next.Id
 	i := find(g.Edges[source], sink)
@@ -126,15 +139,16 @@ func (g *Graph) InsertComponentBetween(component *Graph, prev *Node, next *Node)
 		i = find(g.Edges[sink], source)
 	}
 
-	// verify resulting graph is ok
-	if !g.IsValidGraph() {
-		return fmt.Errorf("graph not valid after insert")
+	// Verify resulting graph is ok
+	if err := g.IsValidGraph(); err != nil {
+		return fmt.Errorf("graph not valid after insert: %s", err)
 	}
 	return nil
 }
 
-// Prints out g in DOT graph format.
+// PrintDot prints out g in DOT graph format.
 // Copy and paste output into http://www.webgraphviz.com/
+// It's not used anywhere in the code, but it is a very useful debugging tool.
 func (g *Graph) PrintDot() {
 	fmt.Printf("digraph {\n")
 	fmt.Printf("\trankdir=UD;\n")
@@ -155,52 +169,23 @@ func (g *Graph) PrintDot() {
 	fmt.Println("}")
 }
 
-// Returns true if a matches b, regardless of ordering
-func SlicesMatch(a, b []string) bool {
-	if a == nil && b == nil {
-		return true
-	}
-
-	if a == nil || b == nil {
-		return false
-	}
-
-	if len(a) != len(b) {
-		return false
-	}
-
-	for i, _ := range a {
-		ok := false
-		for j, _ := range b {
-			if a[i] == b[j] {
-				ok = true
-			}
-		}
-		if !ok {
-			return false
-		}
-	}
-
-	return true
-}
-
 // --------------------------------------------------------------------------
 
-// returns true iff the graph has at least one cycle in it
+// hasCycles returns true iff the graph has at least one cycle in it.
 func (g *Graph) hasCycles() bool {
 	seen := map[string]*Node{g.Source.Id: g.Source}
-	return g.hasCyclesDFS(seen, g.Source)
+	return g.hasCyclesHelper(seen, g.Source)
 }
 
-// returns true iff every node is reachable from the start node, and every path
-// terminates at the end node
+// isConnected returns true iff every node is reachable from the start node, and
+// every path terminates at the end node.
 func (g *Graph) isConnected() bool {
 	// Check forwards connectivity and backwards connectivity
-	return g.connectedToLastNodeDFS(g.Source) && g.connectedToFirstNodeDFS(g.Sink)
+	return g.connectedToLastNode(g.Source) && g.connectedToFirstNode(g.Sink)
 }
 
-// Returns true if the last node in g is reachable from n
-func (g *Graph) connectedToLastNodeDFS(n *Node) bool {
+// connectedToLastNode returns true iff the last node in g is reachable from n.
+func (g *Graph) connectedToLastNode(n *Node) bool {
 	if n == nil {
 		return false
 	}
@@ -213,7 +198,7 @@ func (g *Graph) connectedToLastNodeDFS(n *Node) bool {
 	for _, next := range g.GetNext(n) {
 
 		// Every node after n must also be connected to the last node
-		connected := g.connectedToLastNodeDFS(next)
+		connected := g.connectedToLastNode(next)
 		if !connected {
 			return false
 		}
@@ -221,8 +206,8 @@ func (g *Graph) connectedToLastNodeDFS(n *Node) bool {
 	return true
 }
 
-// Returns true if n is reachable from the first node in g
-func (g *Graph) connectedToFirstNodeDFS(n *Node) bool {
+// connectedToFirstNode returns true if n is reachable from the first node in g.
+func (g *Graph) connectedToFirstNode(n *Node) bool {
 	if n == nil {
 		return false
 	}
@@ -235,7 +220,7 @@ func (g *Graph) connectedToFirstNodeDFS(n *Node) bool {
 	for _, prev := range g.GetPrev(n) {
 
 		// Every node before n must also be connected to the first node
-		connected := g.connectedToFirstNodeDFS(prev)
+		connected := g.connectedToFirstNode(prev)
 		if !connected {
 			return false
 		}
@@ -243,7 +228,8 @@ func (g *Graph) connectedToFirstNodeDFS(n *Node) bool {
 	return true
 }
 
-// Returns true iff `Edges` represents exactly the same set of edges as `RevEdges`.
+// edgesMatchesRevEdges returns true iff `Edges` represents exactly the same set
+// of edges as `RevEdges`.
 func (g *Graph) edgesMatchesRevEdges() bool {
 	for source, sinks := range g.Edges {
 		for _, sink := range sinks {
@@ -264,9 +250,9 @@ func (g *Graph) edgesMatchesRevEdges() bool {
 	return true
 }
 
-// Determines if a graph has cycles, using dfs
-// precondition: start node is already in seen list
-func (g *Graph) hasCyclesDFS(seen map[string]*Node, start *Node) bool {
+// hasCyclesHelper determines if a graph has cycles, using DFS.
+// Precondition: start node is already in seen list.
+func (g *Graph) hasCyclesHelper(seen map[string]*Node, start *Node) bool {
 	for _, next := range g.GetNext(start) {
 
 		// If the next node has already been seen, return true
@@ -278,7 +264,7 @@ func (g *Graph) hasCyclesDFS(seen map[string]*Node, start *Node) bool {
 		seen[next.Id] = next
 
 		// Continue searching after next node
-		if g.hasCyclesDFS(seen, next) {
+		if g.hasCyclesHelper(seen, next) {
 			return true
 		}
 
@@ -288,7 +274,7 @@ func (g *Graph) hasCyclesDFS(seen map[string]*Node, start *Node) bool {
 	return false
 }
 
-// returns the index of s in ss, returns -1 if s is not found in ss
+// find returns the index of s in ss, returns -1 if s is not found in ss.
 func find(ss []string, s string) int {
 	for i, j := range ss {
 		if j == s {

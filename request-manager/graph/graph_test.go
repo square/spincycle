@@ -1,10 +1,12 @@
 // Copyright 2017-2020, Square, Inc.
 
-package graph
+package graph_test
 
 import (
 	"fmt"
 	"testing"
+
+	. "github.com/square/spincycle/v2/request-manager/graph"
 )
 
 // three nodes in a straight line
@@ -149,24 +151,24 @@ func g3() *Graph {
 	}
 }
 
-func TestFailHasCycles(t *testing.T) {
-	g2 := g2()
-	if g2.hasCycles() {
-		t.Fatalf("g2.hasCycles() = true, expected false")
+func TestIsValidGraph1(t *testing.T) {
+	g1 := g1()
+	if err := g1.IsValidGraph(); err != nil {
+		t.Fatalf("g1.IsValidGraph() returned error '%s', expected no error", err)
 	}
 }
 
-func TestIsConnected(t *testing.T) {
+func TestIsValidGraph2(t *testing.T) {
 	g2 := g2()
-	if !g2.isConnected() {
-		t.Fatalf("g2.isConnected() = false, expected true")
+	if err := g2.IsValidGraph(); err != nil {
+		t.Fatalf("g2.IsValidGraph() returned error '%s', expected no error", err)
 	}
 }
 
-func TestEdgesMatchesRevEdges(t *testing.T) {
-	g2 := g2()
-	if !g2.edgesMatchesRevEdges() {
-		t.Fatalf("g2.edgesMatchesRevEdges() = false, expected true")
+func TestIsValidGraph3(t *testing.T) {
+	g3 := g3()
+	if err := g3.IsValidGraph(); err != nil {
+		t.Fatalf("g3.IsValidGraph() returned error '%s', expected no error", err)
 	}
 }
 
@@ -205,12 +207,12 @@ func TestHasCycles(t *testing.T) {
 		},
 	}
 
-	if !g0.hasCycles() {
-		t.Fatalf("g0.hasCycles() = false, expected true")
+	if err := g0.IsValidGraph(); err == nil {
+		t.Fatalf("IsValidGraph() returned no error for graph with cycles, expected error")
 	}
 }
 
-func TestFailIsConnected(t *testing.T) {
+func TestFailNotConnected(t *testing.T) {
 	g0n1 := &Node{Id: "g0n1"}
 	g0n2 := &Node{Id: "g0n2"}
 	g0n3 := &Node{Id: "g0n3"}
@@ -236,17 +238,17 @@ func TestFailIsConnected(t *testing.T) {
 		},
 	}
 
-	if g0.isConnected() {
-		t.Fatalf("g0.isConnected() = true, expected false")
+	if err := g0.IsValidGraph(); err == nil {
+		t.Fatalf("IsValidGraph() returned no error for unconnected graph, expected error")
 	}
 }
 
-func TestFailEdgesMatchesRevEdges(t *testing.T) {
+func TestFailBadRevEdges(t *testing.T) {
 	g2 := g2()
 	g2.RevEdges = map[string][]string{}
 
-	if g2.edgesMatchesRevEdges() {
-		t.Fatalf("g0.edgesMatchesRevEdges() = true, expected false")
+	if err := g2.IsValidGraph(); err == nil {
+		t.Fatalf("IsValidGraph() returned no error for graph with incorrect RevEdges, expected error")
 	}
 }
 
@@ -291,12 +293,12 @@ func TestInsertComponentBetween1(t *testing.T) {
 		}
 	}
 	for source, sinks := range actualEdges {
-		if e := expectedEdges[source]; !SlicesMatch(e, sinks) {
+		if e := expectedEdges[source]; !slicesMatch(e, sinks) {
 			t.Fatalf("missing3 %s -> %v", source, sinks)
 		}
 	}
 	for source, sinks := range expectedEdges {
-		if e := actualEdges[source]; !SlicesMatch(e, sinks) {
+		if e := actualEdges[source]; !slicesMatch(e, sinks) {
 			t.Fatalf("missing4 %s -> %v", source, sinks)
 		}
 	}
@@ -343,12 +345,12 @@ func TestInsertComponentBetween2(t *testing.T) {
 		}
 	}
 	for source, sinks := range actualEdges {
-		if e := expectedEdges[source]; !SlicesMatch(e, sinks) {
+		if e := expectedEdges[source]; !slicesMatch(e, sinks) {
 			t.Fatalf("missing3 %s -> %v", source, sinks)
 		}
 	}
 	for source, sinks := range expectedEdges {
-		if e := actualEdges[source]; !SlicesMatch(e, sinks) {
+		if e := actualEdges[source]; !slicesMatch(e, sinks) {
 			t.Fatalf("missing4 %s -> %v", source, sinks)
 		}
 	}
@@ -395,13 +397,44 @@ func TestInsertComponentBetween3(t *testing.T) {
 		}
 	}
 	for source, sinks := range actualEdges {
-		if e := expectedEdges[source]; !SlicesMatch(e, sinks) {
+		if e := expectedEdges[source]; !slicesMatch(e, sinks) {
 			t.Fatalf("missing3 %s -> %v", source, sinks)
 		}
 	}
 	for source, sinks := range expectedEdges {
-		if e := actualEdges[source]; !SlicesMatch(e, sinks) {
+		if e := actualEdges[source]; !slicesMatch(e, sinks) {
 			t.Fatalf("missing4 %s -> %v", source, sinks)
 		}
 	}
+}
+
+// =============================================================================
+
+// slicesMatch returns true if a matches b, regardless of ordering.
+func slicesMatch(a, b []string) bool {
+	if a == nil && b == nil {
+		return true
+	}
+
+	if a == nil || b == nil {
+		return false
+	}
+
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i, _ := range a {
+		ok := false
+		for j, _ := range b {
+			if a[i] == b[j] {
+				ok = true
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+
+	return true
 }

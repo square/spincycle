@@ -7,8 +7,8 @@ import (
 	"github.com/square/spincycle/v2/proto"
 )
 
-// noopJob is a no-op job that does nothing and always returns success. It corresponds
-// to spec.NoopNode.
+// noopJob is a no-op job that does nothing and always returns success. It
+// corresponds to spec.NoopNode.
 type noopJob struct {
 	id job.Id
 }
