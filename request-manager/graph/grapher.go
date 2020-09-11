@@ -61,58 +61,108 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 	}
 
 	// Now check that a sequence/conditional node's `sets` field only lists
-	// job args that the subsequence(s) actually sets.
-	// Only check graphs that built properly. If a graph failed to build,
-	// we prioritize the build error, not this sets error: a build error
-	// might very well introduce a sets error, but not the other way around.
+	// job args that the subsequence(s) actually sets and that there are no
+	// circular dependencies among sequences.
+	// We need to do these in order, starting from sequences that don't call
+	// any subsequences, then sequences that call only subsequences we've
+	// already examined, etc.
+	// We use the same algorithm as we do for building sequence graphs node
+	// by node, except we don't actually build a graph.
+
+	// Get "dependencies" for all sequences that built successfully.
+	subsequences := map[string][]string{}
 	for seqName, _ := range seqGraphs {
-		// seqName guaranteed to be in sequenceSpecs; if not, we never
-		// would've built that graph
 		seqSpec := gr.sequenceSpecs[seqName]
+		subseqMap := map[string]bool{}
 
-		missingSets := map[string][]string{} // node name -> list of missing `sets` args
-
-		for nodeName, nodeSpec := range seqSpec.Nodes {
+		for _, nodeSpec := range seqSpec.Nodes {
 			if nodeSpec.IsJob() {
 				continue
 			}
-
-			// Check that subsequences actually built
-			// If any subsequence failed, we don't know what
-			// args it sets, so we mark this sequence as having
-			// failed as well.
-			subsequences := getAllSubsequences(nodeSpec, gr.sequenceSpecs)
-			failed := getFailedSubsequences(subsequences, seqGraphs)
-			if len(failed) != 0 {
-				multiple := ""
-				if len(failed) > 1 {
-					multiple = "s"
-				}
-				seqErrors[seqName] = fmt.Errorf("subsequence%s failed to build: %s", multiple, strings.Join(failed, ", "))
-				delete(seqGraphs, seqName)
-				continue
+			subseqs := getNodeSubsequences(nodeSpec, gr.sequenceSpecs)
+			for _, s := range subseqs {
+				subseqMap[s] = true
 			}
+		}
+		for s, _ := range subseqMap {
+			subsequences[seqName] = append(subsequences[seqName], s)
+		}
+	}
 
-			// Compare declared `sets` with what the node
-			// actually sets
-			sets := getDeclaredSets(subsequences, seqSets)
-			missing := getMissingSets(sets, nodeSpec.Sets)
-			if len(missing) != 0 {
-				missingSets[nodeName] = missing
+	// Keep checking sequences whose dependencies are satisfied until we can't
+	// anymore, either because we've checked them all, or because impossible
+	// dependencies exist.
+	seqsChecked := map[string]bool{}
+	seqsToCheck := map[string]*spec.Sequence{}
+	for k, v := range gr.sequenceSpecs {
+		seqsToCheck[k] = v
+	}
+
+	for len(seqsToCheck) != 0 {
+		newSeqChecked := false
+
+		for seqName, seqSpec := range seqsToCheck {
+			if haveAllDeps(seqsChecked, subsequences[seqName]) {
+				newSeqChecked = true
+				delete(seqsToCheck, seqName)
+				seqsChecked[seqName] = true
+
+				// Only perform sets check if this sequence built
+				// and all its subsequences have passed all checks.
+				if _, ok := seqErrors[seqName]; ok {
+					continue
+				}
+				failed := getFailedSubsequences(subsequences[seqName], seqErrors)
+				if len(failed) != 0 {
+					multiple := ""
+					if len(failed) > 1 {
+						multiple = "s"
+					}
+					seqErrors[seqName] = fmt.Errorf("subsequence%s failed checks: %s", multiple, strings.Join(failed, ", "))
+					continue
+				}
+
+				// Do sets check.
+				missingSets := map[string][]string{} // node name -> list of missing `sets` args
+				for nodeName, nodeSpec := range seqSpec.Nodes {
+					if nodeSpec.IsJob() {
+						continue
+					}
+					// Compare declared `sets` with what the node
+					// actually sets
+					subseqs := getNodeSubsequences(nodeSpec, gr.sequenceSpecs)
+					sets := getActualSets(subseqs, seqSets)
+					missing := getMissingSets(sets, nodeSpec.Sets)
+					if len(missing) != 0 {
+						missingSets[nodeName] = missing
+					}
+				}
+				if len(missingSets) > 0 {
+					msg := []string{}
+					for nodeName, missing := range missingSets {
+						msg = append(msg, fmt.Sprintf("%s (failed to set %s)", nodeName, strings.Join(missing, ", ")))
+					}
+					multiple := ""
+					if len(missingSets) > 1 {
+						multiple = "s"
+					}
+					seqErrors[seqName] = fmt.Errorf("node%s did not set job args declared in 'sets': %s", multiple, strings.Join(msg, "; "))
+				}
 			}
 		}
 
-		if len(missingSets) > 0 {
-			msg := []string{}
-			for nodeName, missing := range missingSets {
-				msg = append(msg, fmt.Sprintf("%s (failed to set %s)", nodeName, strings.Join(missing, ", ")))
+		// If we were unable to check any sequences, there must be a
+		// cyclical dependency.
+		if !newSeqChecked {
+			for seqName, _ := range seqsToCheck {
+				// This overwrites a build error, if there was one.
+				// We want all sequences that were part of the
+				// cyclical dependency to have this error; otherwise,
+				// we imply that some sequence wasn't part of the
+				// cyclical dependency when it actually was.
+				seqErrors[seqName] = fmt.Errorf("part of cyclical dependency among sequences")
 			}
-			multiple := ""
-			if len(missingSets) > 1 {
-				multiple = "s"
-			}
-			seqErrors[seqName] = fmt.Errorf("node%s did not actually set job args declared in 'sets': %s", multiple, strings.Join(msg, "; "))
-			delete(seqGraphs, seqName)
+			break
 		}
 	}
 
@@ -123,10 +173,10 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 	return seqGraphs, nil
 }
 
-// getAllSubsequences gets all subsequences called by a given node.
+// getNodeSubsequences gets all subsequences called by a given node.
 // For a sequence node, this is just the node's type.
 // For a conditional node, this is all possible paths it can take.
-func getAllSubsequences(nodeSpec *spec.Node, sequenceSpecs map[string]*spec.Sequence) []string {
+func getNodeSubsequences(nodeSpec *spec.Node, sequenceSpecs map[string]*spec.Sequence) []string {
 	subsequences := []string{}
 	if nodeSpec.IsSequence() {
 		subsequences = append(subsequences, *nodeSpec.NodeType)
@@ -142,19 +192,19 @@ func getAllSubsequences(nodeSpec *spec.Node, sequenceSpecs map[string]*spec.Sequ
 }
 
 // getFailedSubsequences returns a list of subsequences that didn't build,
-// i.e. don't show up in the seqGraphs map.
+// i.e. don't show up in the seqErrors map.
 // It does not check that subsequences were specified in sequenceSpecs.
-func getFailedSubsequences(subsequences []string, seqGraphs map[string]*Graph) []string {
+func getFailedSubsequences(subsequences []string, seqErrors map[string]error) []string {
 	failed := []string{}
 	for _, subseq := range subsequences {
-		if _, ok := seqGraphs[subseq]; !ok {
+		if _, ok := seqErrors[subseq]; ok {
 			failed = append(failed, subseq)
 		}
 	}
 	return failed
 }
 
-// getDeclaredSets gets all job args that the node described by `nodeSpec` is
+// getActualSets gets all job args that the node described by `nodeSpec` is
 // guaranteed to set.
 // `seqSets` is a map of sequence name -> set of job args it sets.
 // For a sequence node, this computation of is straightforward--it's just the
@@ -162,7 +212,7 @@ func getFailedSubsequences(subsequences []string, seqGraphs map[string]*Graph) [
 // For a conditional node, this is the intersection of the args set by the
 // possible subsequences: all job args must be set no matter which conditional
 // path was taken.
-func getDeclaredSets(subseqs []string, seqSets map[string]map[string]bool) map[string]bool {
+func getActualSets(subseqs []string, seqSets map[string]map[string]bool) map[string]bool {
 	setsCount := map[string]int{} // output job arg --> # of subsequences that output it
 	for _, seq := range subseqs {
 		if subseqSets, ok := seqSets[seq]; ok {

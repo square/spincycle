@@ -193,3 +193,28 @@ sequences:
         category: job
         type: job-type-a
         deps: []
+  circular-sequences-1: # cycle between sequences
+    nodes:
+      node-a:
+        category: sequence
+        type: circular-sequences-2
+        deps: []
+  circular-sequences-2: # cycle between sequences
+    args:
+      static:
+        - name: if-arg
+          default: 1
+    nodes:
+      node-a:
+        category: conditional
+        if: if-arg
+        eq:
+          1: circular-sequences-3
+          2: noop
+        deps: []
+  circular-sequences-3: # cycle between sequences
+    nodes:
+      node-a:
+        category: sequence
+        type: circular-sequences-1
+        deps: []
