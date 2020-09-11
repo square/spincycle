@@ -155,6 +155,11 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 		// cyclical dependency.
 		if !newSeqChecked {
 			for seqName, _ := range seqsToCheck {
+				// This overwrites a build error, if there was one.
+				// We want all sequences that were part of the
+				// cyclical dependency to have this error; otherwise,
+				// we imply that some sequence wasn't part of the
+				// cyclical dependency when it actually was.
 				seqErrors[seqName] = fmt.Errorf("part of cyclical dependency among sequences")
 			}
 			break
