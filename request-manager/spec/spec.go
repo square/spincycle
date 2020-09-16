@@ -45,12 +45,12 @@ type NodeSet struct {
 
 // A single sequence.
 type Sequence struct {
-	/* Read in from yaml. */
-	Name    string           `yaml:"-"   `    // name of the sequence
-	Args    SequenceArgs     `yaml:"args"`    // arguments to the sequence
-	Nodes   map[string]*Node `yaml:"nodes"`   // list of nodes that are a part of the sequence
-	Request bool             `yaml:"request"` // whether or not the sequence spec is a user request
-	ACL     []ACL            `yaml:"acl"`     // allowed caller roles (optional)
+	Name     string           `yaml:"-"`       // name of the sequence
+	Args     SequenceArgs     `yaml:"args"`    // arguments to the sequence
+	Nodes    map[string]*Node `yaml:"nodes"`   // list of nodes that are a part of the sequence
+	Request  bool             `yaml:"request"` // whether or not the sequence spec is a user request
+	ACL      []ACL            `yaml:"acl"`     // allowed caller roles (optional)
+	Filename string           `yaml:"_"`       // name of file this sequence was in
 }
 
 // A sequence's arguments. A sequence can have required arguments; any arguments

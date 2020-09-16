@@ -75,7 +75,7 @@ type Hooks struct {
 
 	// LoadSpecs loads the request specification files (specs). This hook overrides
 	// the default function. Spin Cycle fails to start if it returns an error.
-	LoadSpecs func(Context) (spec.Specs, error)
+	LoadSpecs func(Context) (specs spec.Specs, fileErrors, fileWarnings map[string][]error, traversalError error)
 
 	// SetUsername sets proto.Request.User. The auth.Plugin.Authenticate method is
 	// called first which sets the username to Caller.Name. This hook is called after
@@ -144,8 +144,8 @@ func LoadConfig(ctx Context) (config.RequestManager, error) {
 }
 
 // LoadSpecs is the default LoadSpecs hook.
-func LoadSpecs(ctx Context) (spec.Specs, error) {
-	return spec.ParseSpecsDir(ctx.Config.Specs.Dir, log.Printf)
+func LoadSpecs(ctx Context) (specs spec.Specs, fileErrors, fileWarnings map[string][]error, traversalError error) {
+	return spec.ParseSpecsDir(ctx.Config.Specs.Dir)
 }
 
 // MakeIDGeneratorFactory is the default MakeIDGeneratorFactory factory.

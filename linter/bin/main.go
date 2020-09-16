@@ -3,7 +3,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/square/spincycle/v2/linter"
@@ -12,9 +11,7 @@ import (
 
 func main() {
 	defaultContext := app.Defaults()
-	if err := linter.Run(defaultContext); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+	if ok := linter.Run(defaultContext); !ok {
 		os.Exit(1)
 	}
-	fmt.Println("No errors")
 }

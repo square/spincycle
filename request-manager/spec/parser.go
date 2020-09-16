@@ -12,39 +12,33 @@ import (
 )
 
 // Parse a single request (YAML) file.
-// 'logFunc' is a Printf-like function used to log warning(s) should they occur.
-// Errors are returned, not logged.
-func ParseSpec(specFile string, logFunc func(string, ...interface{})) (Specs, error) {
-	var spec Specs
-
+func ParseSpec(specFile string) (spec Specs, err error, warning error) {
 	sequenceData, err := ioutil.ReadFile(specFile)
 	if err != nil {
-		return spec, err
+		return spec, err, warning
 	}
 
-	/* Emit warning if unexpected or duplicate fields are present. */
-	/* Error if specs are incorrectly formatted or fields are of incorrect type. */
-	warn := yaml.UnmarshalStrict(sequenceData, &spec)
-	if warn != nil {
+	// Emit warning if unexpected or duplicate fields are present.
+	// Error if specs are incorrectly formatted or fields are of incorrect type.
+	warning = yaml.UnmarshalStrict(sequenceData, &spec)
+	if warning != nil {
 		err = yaml.Unmarshal(sequenceData, &spec)
 		if err != nil {
-			return spec, err
+			return spec, err, warning
 		}
-		logFunc("Warning: %s: %s", specFile, warn)
 	}
 
-	return spec, nil
+	return spec, nil, warning
 }
 
 // Read all specs file in indicated specs directory.
-// 'logFunc' is a Printf-like function used to log warning(s) should they occur.
-// Errors are returned, not logged.
-func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs, error) {
-	specs := Specs{
+func ParseSpecsDir(specsDir string) (specs Specs, fileErrors, fileWarnings map[string][]error, traversalError error) {
+	specs = Specs{
 		Sequences: map[string]*Sequence{},
 	}
+	fileErrors = map[string][]error{}
+	fileWarnings = map[string][]error{}
 
-	failedFiles := []string{}
 	seqFile := map[string]string{} // sequence name --> file it was first seen in
 	err := filepath.Walk(specsDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -58,15 +52,24 @@ func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs
 			relPath = path
 		}
 
-		spec, err := ParseSpec(path, logFunc) // logs warnings but not errors
+		spec, err, warn := ParseSpec(path)
 		if err != nil {
-			failedFiles = append(failedFiles, fmt.Sprintf("%s: %s", relPath, err))
+			fileErrors[relPath] = append(fileErrors[relPath], err)
 			return nil
+		}
+		if warn != nil {
+			fileWarnings[relPath] = append(fileWarnings[relPath], warn)
+		}
+
+		// Set the file name of the sequences here. ParseSpec can't do it
+		// because it only knows the absolute path.
+		for _, seqSpec := range spec.Sequences {
+			seqSpec.Filename = relPath
 		}
 
 		for name, spec := range spec.Sequences {
 			if _, ok := seqFile[name]; ok {
-				failedFiles = append(failedFiles, fmt.Sprintf("%s: sequence %s already seen in file %s", relPath, name, seqFile[name]))
+				fileErrors[relPath] = append(fileErrors[relPath], fmt.Errorf("sequence %s already seen in file %s", name, seqFile[name]))
 			} else {
 				specs.Sequences[name] = spec
 				seqFile[name] = relPath
@@ -75,18 +78,12 @@ func ParseSpecsDir(specsDir string, logFunc func(string, ...interface{})) (Specs
 
 		return nil
 	})
+
 	if err != nil {
-		return specs, fmt.Errorf("error traversing specs directory: %s", err)
-	}
-	if len(failedFiles) > 0 {
-		multiple := ""
-		if len(failedFiles) > 1 {
-			multiple = "s"
-		}
-		return specs, fmt.Errorf("error in file%s:\n%s", multiple, strings.Join(failedFiles, "\n"))
+		return specs, nil, nil, fmt.Errorf("error traversing specs directory: %s", err)
 	}
 
-	return specs, nil
+	return specs, fileErrors, fileWarnings, nil
 }
 
 // Specs require some processing after we've loaded them, but before we run the checker on them.

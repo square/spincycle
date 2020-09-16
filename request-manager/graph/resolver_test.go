@@ -97,7 +97,7 @@ func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[s
 		Type: requestName,
 	}
 
-	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, t.Logf)
+	specs, err, _ := spec.ParseSpec(rmtest.SpecPath + "/" + sequencesFile)
 	if err != nil {
 		t.Fatal(err)
 	}

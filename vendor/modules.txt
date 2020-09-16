@@ -16,6 +16,8 @@ github.com/labstack/gommon/bytes
 github.com/labstack/gommon/color
 github.com/labstack/gommon/log
 github.com/labstack/gommon/random
+# github.com/logrusorgru/aurora v2.0.3+incompatible
+github.com/logrusorgru/aurora
 # github.com/mattn/go-colorable v0.1.4
 github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.11

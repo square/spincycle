@@ -33,7 +33,7 @@ type Factories struct {
 
 type Hooks struct {
 	// Parse specs
-	LoadSpecs func(specsDir string, logFunc func(string, ...interface{})) (spec.Specs, error)
+	LoadSpecs func(specsDir string) (specs spec.Specs, fileErrors, fileWarnings map[string][]error, traversalError error)
 }
 
 func Defaults() Context {

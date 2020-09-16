@@ -55,7 +55,7 @@ func setupManager(t *testing.T, dataFile string) string {
 
 	// Create a mock creator factory.
 	if ref == nil {
-		specs, err := spec.ParseSpec(rmtest.SpecPath+"/a-b-c.yaml", t.Errorf)
+		specs, err, _ := spec.ParseSpec(rmtest.SpecPath + "/a-b-c.yaml")
 		if err != nil {
 			t.Fatal(err)
 		}

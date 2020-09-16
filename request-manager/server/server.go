@@ -186,9 +186,22 @@ func (s *Server) Boot() error {
 	log.Printf("Config: %s", cfgstr)
 
 	// Load and check requests specification files (specs)
-	specs, err := s.appCtx.Hooks.LoadSpecs(s.appCtx)
+	specs, parseErrors, parseWarnings, err := s.appCtx.Hooks.LoadSpecs(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("LoadSpecs: %s", err)
+	}
+	for file, warns := range parseWarnings {
+		for _, warn := range warns {
+			log.Errorf("%s: %s", file, warn)
+		}
+	}
+	if len(parseErrors) != 0 {
+		for file, errs := range parseErrors {
+			for _, err := range errs {
+				log.Errorf("%s: %s", file, err)
+			}
+		}
+		return fmt.Errorf("Errors occurred during parsing; see log for details")
 	}
 	spec.ProcessSpecs(&specs)
 	s.appCtx.Specs = specs
@@ -198,9 +211,19 @@ func (s *Server) Boot() error {
 		return fmt.Errorf("MakeCheckFactories: %s", err)
 	}
 	checkFactories = append(checkFactories, spec.BaseCheckFactory{specs})
-	checker, err := spec.NewChecker(checkFactories, log.Errorf)
-	ok := checker.RunChecks(specs)
-	if !ok {
+	checker, err := spec.NewChecker(checkFactories)
+	staticErrors, staticWarnings := checker.RunChecks(specs)
+	for seq, warns := range staticWarnings {
+		for _, warn := range warns {
+			log.Errorf("%s: %s", seq, warn)
+		}
+	}
+	if len(staticErrors) != 0 {
+		for seq, errs := range staticErrors {
+			for _, err := range errs {
+				log.Errorf("%s: %s", seq, err)
+			}
+		}
 		return fmt.Errorf("Static check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 
@@ -214,8 +237,10 @@ func (s *Server) Boot() error {
 	tg := graph.NewGrapher(specs, gf)
 	seqGraphs, seqErrors := tg.CheckSequences()
 	if len(seqErrors) != 0 {
-		for seqName, seqError := range seqErrors {
-			log.Errorf("Error: %s: %s", seqName, seqError)
+		for seq, errs := range seqErrors {
+			for _, err := range errs {
+				log.Errorf("Error: %s: %s", seq, err)
+			}
 		}
 		return fmt.Errorf("Graph check(s) on request specification files failed; see log or run spinc-linter for details")
 	}

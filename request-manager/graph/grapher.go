@@ -36,9 +36,9 @@ func NewGrapher(specs spec.Specs, idGenFactory id.GeneratorFactory) *Grapher {
 // return values are mutually exclusive; if any error occurs, it is logged in the
 // errors map, and the sequence graph map is nil. Else, all sequences have a
 // corresponding entry in the sequence graph map, and the error map is nil.
-func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[string]error) {
+func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[string][]error) {
 	seqGraphs = map[string]*Graph{}
-	seqErrors = map[string]error{}
+	seqErrors = map[string][]error{}
 
 	// sequence name -> set of job args that its nodes declare in `sets` field
 	// i.e. the job args that the sequence sets
@@ -52,17 +52,17 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 	// purposes, we'll fill it out now.
 	seqsToCheck := map[string]*spec.Sequence{}
 	for seqName, seqSpec := range gr.sequenceSpecs {
+		seqsToCheck[seqName] = seqSpec
+
 		// Generates IDs unique within sequence graph
 		idgen := gr.idGenFactory.Make()
 		seqGraph, sets, err := buildSeqGraph(seqSpec, idgen)
 		if err != nil {
-			seqErrors[seqName] = err
+			seqErrors[seqName] = append(seqErrors[seqName], err)
 			continue
 		}
 		seqGraphs[seqName] = seqGraph
 		seqSets[seqName] = sets
-
-		seqsToCheck[seqName] = seqSpec
 	}
 
 	// Now do sets check, and check that that there are no circular dependencies
@@ -122,7 +122,7 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 					if len(failed) > 1 {
 						multiple = "s"
 					}
-					seqErrors[seqName] = fmt.Errorf("subsequence%s failed checks: %s", multiple, strings.Join(failed, ", "))
+					seqErrors[seqName] = append(seqErrors[seqName], fmt.Errorf("subsequence%s failed checks: %s", multiple, strings.Join(failed, ", ")))
 					continue
 				}
 
@@ -149,7 +149,7 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 					if len(missingSets) > 1 {
 						multiple = "s"
 					}
-					seqErrors[seqName] = fmt.Errorf("node%s did not set job args declared in 'sets': %s", multiple, strings.Join(msg, "; "))
+					seqErrors[seqName] = append(seqErrors[seqName], fmt.Errorf("node%s did not set job args declared in 'sets': %s", multiple, strings.Join(msg, "; ")))
 				}
 			}
 		}
@@ -157,11 +157,7 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 		// If we were unable to check any sequences, there must be a cyclical dependency.
 		if !newSeqChecked {
 			for seqName, _ := range seqsToCheck {
-				// This overwrites a build error, if there was one. We want all
-				// sequences that were part of the cyclical dependency to have
-				// this error; otherwise, we imply that some sequence wasn't part
-				// of the cyclical dependency when it actually was.
-				seqErrors[seqName] = fmt.Errorf("part of cyclical dependency among sequences")
+				seqErrors[seqName] = append(seqErrors[seqName], fmt.Errorf("part of cyclical dependency among sequences"))
 			}
 			break
 		}
@@ -195,7 +191,7 @@ func getNodeSubsequences(nodeSpec *spec.Node, sequenceSpecs map[string]*spec.Seq
 // getFailedSubsequences returns a list of subsequences that didn't build,
 // i.e. don't show up in the seqErrors map.
 // It does not check that subsequences were specified in sequenceSpecs.
-func getFailedSubsequences(subsequences []string, seqErrors map[string]error) []string {
+func getFailedSubsequences(subsequences []string, seqErrors map[string][]error) []string {
 	failed := []string{}
 	for _, subseq := range subsequences {
 		if _, ok := seqErrors[subseq]; ok {
