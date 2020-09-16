@@ -48,6 +48,9 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 	// Since sequence graphs are just a graph representation of dependencies
 	// between a single sequence's nodes, this is contained to one sequence;
 	// this won't look at any subsequences.
+	// seqsToCheck is used in sets check loop later, but for optimization
+	// purposes, we'll fill it out now.
+	seqsToCheck := map[string]*spec.Sequence{}
 	for seqName, seqSpec := range gr.sequenceSpecs {
 		// Generates IDs unique within sequence graph
 		idgen := gr.idGenFactory.Make()
@@ -58,12 +61,17 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 		}
 		seqGraphs[seqName] = seqGraph
 		seqSets[seqName] = sets
+
+		seqsToCheck[seqName] = seqSpec
 	}
 
-	// Now check that a sequence/conditional node's `sets` field only lists
-	// job args that the subsequence(s) actually sets and that there are no
-	// circular dependencies among sequences.
-	// We need to do these in order, starting from sequences that don't call
+	// Now do sets check, and check that that there are no circular dependencies
+	// among sequences.
+	// Sets check: Sequence X sets exactly those job args that appear in its nodes'
+	// "sets" fields. A node in sequence Y that calls X, e.g. with category "sequence"
+	// and type "X", may list some job args in its "sets" field. These listed job
+	// args should be a subset of those that X sets.
+	// We need to do these checks in order, starting from sequences that don't call
 	// any subsequences, then sequences that call only subsequences we've
 	// already examined, etc.
 	// We use the same algorithm as we do for building sequence graphs node
@@ -73,7 +81,7 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 	subsequences := map[string][]string{}
 	for seqName, _ := range seqGraphs {
 		seqSpec := gr.sequenceSpecs[seqName]
-		subseqMap := map[string]bool{}
+		subseqSet := map[string]bool{}
 
 		for _, nodeSpec := range seqSpec.Nodes {
 			if nodeSpec.IsJob() {
@@ -81,10 +89,10 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 			}
 			subseqs := getNodeSubsequences(nodeSpec, gr.sequenceSpecs)
 			for _, s := range subseqs {
-				subseqMap[s] = true
+				subseqSet[s] = true
 			}
 		}
-		for s, _ := range subseqMap {
+		for s, _ := range subseqSet {
 			subsequences[seqName] = append(subsequences[seqName], s)
 		}
 	}
@@ -93,10 +101,6 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 	// anymore, either because we've checked them all, or because impossible
 	// dependencies exist.
 	seqsChecked := map[string]bool{}
-	seqsToCheck := map[string]*spec.Sequence{}
-	for k, v := range gr.sequenceSpecs {
-		seqsToCheck[k] = v
-	}
 
 	for len(seqsToCheck) != 0 {
 		newSeqChecked := false
@@ -107,8 +111,8 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 				delete(seqsToCheck, seqName)
 				seqsChecked[seqName] = true
 
-				// Only perform sets check if this sequence built
-				// and all its subsequences have passed all checks.
+				// Only perform sets check if this sequence built and all its
+				// subsequences have passed all checks.
 				if _, ok := seqErrors[seqName]; ok {
 					continue
 				}
@@ -128,8 +132,7 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 					if nodeSpec.IsJob() {
 						continue
 					}
-					// Compare declared `sets` with what the node
-					// actually sets
+					// Compare declared `sets` with what the node actually sets
 					subseqs := getNodeSubsequences(nodeSpec, gr.sequenceSpecs)
 					sets := getActualSets(subseqs, seqSets)
 					missing := getMissingSets(sets, nodeSpec.Sets)
@@ -151,15 +154,13 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 			}
 		}
 
-		// If we were unable to check any sequences, there must be a
-		// cyclical dependency.
+		// If we were unable to check any sequences, there must be a cyclical dependency.
 		if !newSeqChecked {
 			for seqName, _ := range seqsToCheck {
-				// This overwrites a build error, if there was one.
-				// We want all sequences that were part of the
-				// cyclical dependency to have this error; otherwise,
-				// we imply that some sequence wasn't part of the
-				// cyclical dependency when it actually was.
+				// This overwrites a build error, if there was one. We want all
+				// sequences that were part of the cyclical dependency to have
+				// this error; otherwise, we imply that some sequence wasn't part
+				// of the cyclical dependency when it actually was.
 				seqErrors[seqName] = fmt.Errorf("part of cyclical dependency among sequences")
 			}
 			break
@@ -328,9 +329,8 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 				continue
 			}
 
-			// Dependencies for node have been satisfied;
-			// presumably, all input job args are present in
-			// job args map. If not, it's an error.
+			// Dependencies for node have been satisfied; presumably, all input
+			// job args are present in job args map. If not, it's an error.
 			err := checkNodeArgs(nodeSpec, jobArgs)
 			if err != nil {
 				return nil, nil, err
@@ -338,18 +338,17 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 
 			// Insert node into graph
 			if len(nodeSpec.Dependencies) == 0 {
-				// Case: no dependencies; insert directly after
-				// the source node. No nodes that depend on this
-				// one have been added yet, so we can put it right
-				// before the sink node.
+				// Case: no dependencies; insert directly after the source node.
+				// No nodes that depend on this one have been added yet, so we
+				// can put it right before the sink node.
 				err := seqGraph.InsertComponentBetween(node, seqGraph.Source, seqGraph.Sink)
 				if err != nil {
 					return nil, nil, err
 				}
 			} else {
-				// Case: dependencies exist; insert between all its
-				// dependencies and the sink node, since no nodes
-				// depending on this one have been added yet.
+				// Case: dependencies exist; insert between all its dependencies
+				// and the sink node, since no nodes depending on this one have
+				// been added yet.
 				for _, dependencyName := range nodeSpec.Dependencies {
 					prevComponent := nodes[dependencyName]
 					err := seqGraph.InsertComponentBetween(node, prevComponent.Sink, seqGraph.Sink)
@@ -372,8 +371,8 @@ func buildSeqGraph(seqSpec *spec.Sequence, idgen id.Generator) (seqGraph *Graph,
 			nodeAdded = true
 		}
 
-		// If we were unable to add nodes on this iteration, there must
-		// be a cyclical dependency, which is an error.
+		// If we were unable to add nodes on this iteration, there must be a
+		// cyclical dependency, which is an error.
 		if !nodeAdded {
 			ns := []string{}
 			for n, _ := range nodesToAdd {
