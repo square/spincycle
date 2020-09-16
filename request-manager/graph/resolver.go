@@ -156,6 +156,27 @@ func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 	seqName := cfg.seqName
 	jobArgs := cfg.jobArgs
 
+	// Add optional and static sequence arguments to map.
+	// If this is the request sequence, then jobArgs was the output of RequestArgs,
+	// and these arguments are already present. However, subsequences will need
+	// these args.
+	seq, ok := r.seqSpecs[seqName]
+	if !ok {
+		// Static checks should prevent this from happening.
+		// If this error is thrown, there's a bug in the code.
+		return nil, fmt.Errorf("cannot find specs for sequence: %s", seqName)
+	}
+	for _, arg := range seq.Args.Optional {
+		if _, ok := jobArgs[*arg.Name]; !ok {
+			jobArgs[*arg.Name] = *arg.Default
+		}
+	}
+	for _, arg := range seq.Args.Static {
+		if _, ok := jobArgs[*arg.Name]; !ok {
+			jobArgs[*arg.Name] = *arg.Default
+		}
+	}
+
 	// Build request graph based on sequence graph. We use the sequence graph
 	// as a template, traversing it in topological order and processing each
 	// of its nodes depending on what category it is (job, sequence, conditional).
