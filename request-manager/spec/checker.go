@@ -72,12 +72,12 @@ func (checker *Checker) RunChecks(allSpecs Specs) (seqErrors map[string][]error,
 
 		for _, node := range sequence.Nodes {
 			for _, nodeCheck := range checker.nodeErrorChecks {
-				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
+				if err := nodeCheck.CheckNode(*node); err != nil {
 					errs = append(errs, err)
 				}
 			}
 			for _, nodeCheck := range checker.nodeWarningChecks {
-				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
+				if err := nodeCheck.CheckNode(*node); err != nil {
 					warns = append(warns, err)
 				}
 			}

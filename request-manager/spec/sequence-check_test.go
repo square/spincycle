@@ -20,8 +20,7 @@ func TestFailRequiredArgsNamedSequenceCheck(t *testing.T) {
 		},
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Field:    "args.required.name",
+		Field: "args.required.name",
 	}
 
 	err := check.CheckSequence(sequence)
@@ -39,9 +38,8 @@ func TestFailRequiredArgsHaveNoDefaultsSequenceCheck(t *testing.T) {
 		},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Field:    "args.required.default",
-		Values:   []string{fmt.Sprintf("%s (%s)", testVal, testVal)},
+		Field:  "args.required.default",
+		Values: []string{fmt.Sprintf("%s (%s)", testVal, testVal)},
 	}
 
 	err := check.CheckSequence(sequence)
@@ -59,8 +57,7 @@ func TestFailOptionalArgsHaveDefaultsSequenceCheck(t *testing.T) {
 		},
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Field:    "args.optional.default",
+		Field: "args.optional.default",
 	}
 
 	err := check.CheckSequence(sequence)
@@ -78,8 +75,7 @@ func TestFailStaticArgsHaveDefaultsSequenceCheck(t *testing.T) {
 		},
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Field:    "args.static.default",
+		Field: "args.static.default",
 	}
 
 	err := check.CheckSequence(sequence)
@@ -100,9 +96,8 @@ func TestFailNoDuplicateArgsSequenceCheck(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Field:    "args.*.name",
-		Values:   []string{testVal},
+		Field:  "args.*.name",
+		Values: []string{testVal},
 	}
 
 	err := check.CheckSequence(sequence)
@@ -115,8 +110,7 @@ func TestFailHasNodesSequenceCheck(t *testing.T) {
 		Name: seqA,
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Field:    "nodes",
+		Field: "nodes",
 	}
 
 	err := check.CheckSequence(sequence)
@@ -140,9 +134,8 @@ func TestFailNodesSetsUniqueSequenceCheck1(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Field:    "nodes.sets.as",
-		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", testVal, nodeA, nodeA)},
+		Field:  "nodes.sets.as",
+		Values: []string{fmt.Sprintf("%s (set by %s, %s)", testVal, nodeA, nodeA)},
 	}
 	err := check.CheckSequence(sequence)
 	compareError(t, err, expectedErr, "accepted sequence with multiple nodes setting the same arg, expected error")
@@ -165,9 +158,8 @@ func TestFailNodesSetsUniqueSequenceCheck2(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Field:    "nodes.sets.as",
-		Values:   []string{fmt.Sprintf("%s (set by %s, %s)", testVal, "this sequence", "this sequence")},
+		Field:  "nodes.sets.as",
+		Values: []string{fmt.Sprintf("%s (set by %s, %s)", testVal, "this sequence", "this sequence")},
 	}
 	err := check.CheckSequence(sequence)
 	compareError(t, err, expectedErr, "accepted sequence with multiple nodes setting the same arg, expected error")
@@ -185,9 +177,8 @@ func TestFailACLAdminXorOpsSequenceCheck(t *testing.T) {
 		},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Field:    "acl.admin",
-		Values:   []string{"true"},
+		Field:  "acl.admin",
+		Values: []string{"true"},
 	}
 
 	err := check.CheckSequence(sequence)
@@ -201,8 +192,7 @@ func TestFailACLsHaveRolesSequenceCheck(t *testing.T) {
 		ACL:  []ACL{ACL{}},
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Field:    "acl.role",
+		Field: "acl.role",
 	}
 
 	err := check.CheckSequence(sequence)
@@ -219,9 +209,8 @@ func TestFailNoDuplicateACLRolesSequenceCheck(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Field:    "acl.role",
-		Values:   []string{testVal},
+		Field:  "acl.role",
+		Values: []string{testVal},
 	}
 
 	err := check.CheckSequence(sequence)

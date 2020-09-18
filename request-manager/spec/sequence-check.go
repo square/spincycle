@@ -19,7 +19,6 @@ func (check RequiredArgsNamedSequenceCheck) CheckSequence(sequence Sequence) err
 	for _, arg := range sequence.Args.Required {
 		if arg.Name == nil {
 			return MissingValueError{
-				Sequence:    sequence.Name,
 				Node:        nil,
 				Field:       "args.required.name",
 				Explanation: "",
@@ -38,7 +37,6 @@ func (check OptionalArgsNamedSequenceCheck) CheckSequence(sequence Sequence) err
 	for _, arg := range sequence.Args.Optional {
 		if arg.Name == nil {
 			return MissingValueError{
-				Sequence:    sequence.Name,
 				Node:        nil,
 				Field:       "args.optional.name",
 				Explanation: "",
@@ -57,7 +55,6 @@ func (check StaticArgsNamedSequenceCheck) CheckSequence(sequence Sequence) error
 	for _, arg := range sequence.Args.Static {
 		if arg.Name == nil {
 			return MissingValueError{
-				Sequence:    sequence.Name,
 				Node:        nil,
 				Field:       "args.static.name",
 				Explanation: "",
@@ -88,7 +85,6 @@ func (check RequiredArgsHaveNoDefaultsSequenceCheck) CheckSequence(sequence Sequ
 
 	if len(values) > 0 {
 		return InvalidValueError{
-			Sequence: sequence.Name,
 			Node:     nil,
 			Field:    "args.required.default",
 			Values:   values,
@@ -107,7 +103,6 @@ func (check OptionalArgsHaveDefaultsSequenceCheck) CheckSequence(sequence Sequen
 	for _, arg := range sequence.Args.Optional {
 		if arg.Default == nil {
 			return MissingValueError{
-				Sequence:    sequence.Name,
 				Node:        nil,
 				Field:       "args.optional.default",
 				Explanation: "required for optional args",
@@ -126,7 +121,6 @@ func (check StaticArgsHaveDefaultsSequenceCheck) CheckSequence(sequence Sequence
 	for _, arg := range sequence.Args.Static {
 		if arg.Default == nil {
 			return MissingValueError{
-				Sequence:    sequence.Name,
 				Node:        nil,
 				Field:       "args.static.default",
 				Explanation: "required for static args",
@@ -157,7 +151,6 @@ func (check NoDuplicateArgsSequenceCheck) CheckSequence(sequence Sequence) error
 
 	if len(values) > 0 {
 		return DuplicateValueError{
-			Sequence:    sequence.Name,
 			Node:        nil,
 			Field:       "args.*.name",
 			Values:      stringSetToArray(values),
@@ -175,7 +168,6 @@ type HasNodesSequenceCheck struct{}
 func (check HasNodesSequenceCheck) CheckSequence(sequence Sequence) error {
 	if len(sequence.Nodes) == 0 {
 		return MissingValueError{
-			Sequence:    sequence.Name,
 			Node:        nil,
 			Field:       "nodes",
 			Explanation: "at least one node required",
@@ -222,7 +214,6 @@ func (check NodesSetsUniqueSequenceCheck) CheckSequence(sequence Sequence) error
 			values = append(values, fmt.Sprintf("%s (set by %s)", arg, strings.Join(setBy, ", ")))
 		}
 		return DuplicateValueError{
-			Sequence:    sequence.Name,
 			Node:        nil,
 			Field:       "nodes.sets.as",
 			Values:      values,
@@ -241,7 +232,6 @@ func (check ACLAdminXorOpsSequenceCheck) CheckSequence(sequence Sequence) error 
 	for _, acl := range sequence.ACL {
 		if acl.Admin && len(acl.Ops) != 0 {
 			return InvalidValueError{
-				Sequence: sequence.Name,
 				Node:     nil,
 				Field:    "acl.admin",
 				Values:   []string{"true"},
@@ -261,7 +251,6 @@ func (check ACLsHaveRolesSequenceCheck) CheckSequence(sequence Sequence) error {
 	for _, acl := range sequence.ACL {
 		if acl.Role == "" {
 			return MissingValueError{
-				Sequence:    sequence.Name,
 				Node:        nil,
 				Field:       "acl.role",
 				Explanation: "a non-empty role must be provided",
@@ -288,7 +277,6 @@ func (check NoDuplicateACLRolesSequenceCheck) CheckSequence(sequence Sequence) e
 
 	if len(values) > 0 {
 		return DuplicateValueError{
-			Sequence:    sequence.Name,
 			Node:        nil,
 			Field:       "acl.role",
 			Values:      stringSetToArray(values),

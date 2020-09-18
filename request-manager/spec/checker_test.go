@@ -18,7 +18,7 @@ func (c PassSequenceCheck) CheckSequence(s Sequence) error {
 
 type PassNodeCheck struct{}
 
-func (c PassNodeCheck) CheckNode(s string, n Node) error {
+func (c PassNodeCheck) CheckNode(n Node) error {
 	return nil
 }
 
@@ -33,7 +33,7 @@ func (c FailSequenceCheck) CheckSequence(s Sequence) error {
 
 type FailNodeCheck struct{}
 
-func (c FailNodeCheck) CheckNode(s string, n Node) error {
+func (c FailNodeCheck) CheckNode(n Node) error {
 	return failNodeCheckError
 }
 

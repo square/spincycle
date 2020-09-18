@@ -16,12 +16,11 @@ func TestFailHasCategoryNodeCheck(t *testing.T) {
 		Category: nil,
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "category",
+		Node:  &nodeA,
+		Field: "category",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted node with no category, expected error")
 }
 
@@ -32,13 +31,12 @@ func TestFailValidCategoryNodeCheck(t *testing.T) {
 		Category: &testVal,
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "category",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "category",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted category of value other than 'job', 'sequence', or 'conditional', expected error")
 }
 
@@ -49,13 +47,12 @@ func TestFailValidEachNodeCheck(t *testing.T) {
 		Each: []string{testVal},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "each",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "each",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted each not in format 'list:element', expected error")
 }
 
@@ -66,13 +63,12 @@ func TestFailEachElementUniqueNodeCheck(t *testing.T) {
 		Each: []string{"a:element", "b:element"},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "each",
-		Values:   []string{"element"},
+		Node:   &nodeA,
+		Field:  "each",
+		Values: []string{"element"},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted duplicated each element, expected error")
 }
 
@@ -83,13 +79,12 @@ func TestFailEachNotRenamedTwiceNodeCheck(t *testing.T) {
 		Each: []string{"list:a", "list:b"},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "each",
-		Values:   []string{"list"},
+		Node:   &nodeA,
+		Field:  "each",
+		Values: []string{"list"},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted duplicated each list, expected error")
 }
 
@@ -100,13 +95,12 @@ func TestFailArgsNotNilNodeCheck(t *testing.T) {
 		Args: []*NodeArg{nil},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args",
-		Values:   []string{"nil"},
+		Node:   &nodeA,
+		Field:  "args",
+		Values: []string{"nil"},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted nil node args, expected error")
 }
 
@@ -121,12 +115,11 @@ func TestFailArgsAreNamedNodeCheck(t *testing.T) {
 		},
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args.expected",
+		Node:  &nodeA,
+		Field: "args.expected",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted node arg without 'expected' field, expected error")
 }
 
@@ -144,13 +137,12 @@ func TestFailArgsExpectedUniqueNodeCheck1(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args.expected",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "args.expected",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted duplicated args, expected error")
 }
 
@@ -172,13 +164,12 @@ func TestFailArgsExpectedUniqueNodeCheck2(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args.expected",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "args.expected",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted duplicated args, expected error")
 }
 
@@ -198,13 +189,12 @@ func TestFailArgsExpectedUniqueNodeCheck3(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args.expected",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "args.expected",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted duplicated args, expected error")
 }
 
@@ -226,13 +216,12 @@ func TestFailArgsNotRenamedTwiceNodeCheck(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args.given",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "args.given",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "arg renamed differently with args.given, expected error")
 }
 
@@ -250,13 +239,12 @@ func TestFailEachElementDoesNotDuplicateArgsExpectedNodeCheck(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "each",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "each",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, fmt.Sprintf("allowed two lists to be renamed %s, expected error", testVal))
 }
 
@@ -274,13 +262,12 @@ func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck1(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "each",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "each",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, fmt.Sprintf("allowed %s to be renamed twice, expected error", testVal))
 }
 
@@ -297,13 +284,12 @@ func TestFailEachListDoesNotDuplicateArgsGivenNodeCheck2(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "each",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "each",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, fmt.Sprintf("allowed %s to be renamed twice, expected error", testVal))
 }
 
@@ -319,7 +305,7 @@ func TestEachListDoesNotDuplicateArgsGivenNodeCheck(t *testing.T) {
 		},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	if err != nil {
 		t.Errorf("unexpected error: %s", err.Error())
 	}
@@ -332,13 +318,12 @@ func TestFailSetsNotNilNodeCheck(t *testing.T) {
 		Sets: []*NodeSet{nil},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "sets",
-		Values:   []string{"nil"},
+		Node:   &nodeA,
+		Field:  "sets",
+		Values: []string{"nil"},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted nil node sets, expected error")
 }
 
@@ -353,12 +338,11 @@ func TestFailSetsAreNamedNodeCheck(t *testing.T) {
 		},
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "sets.arg",
+		Node:  &nodeA,
+		Field: "sets.arg",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted node sets without 'arg' field, expected error")
 }
 
@@ -378,13 +362,12 @@ func TestFailSetsAsUniqueNodeCheck1(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "sets.as",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "sets.as",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted duplicated sets, expected error")
 }
 
@@ -406,13 +389,12 @@ func TestFailSetsAsUniqueNodeCheck2(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "sets.as",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "sets.as",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted duplicated sets, expected error")
 }
 
@@ -433,13 +415,12 @@ func TestFailSetsAsUniqueNodeCheck3(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "sets.as",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "sets.as",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted duplicated sets, expected error")
 }
 
@@ -461,13 +442,12 @@ func TestFailSetsNotRenamedTwiceNodeCheck(t *testing.T) {
 		},
 	}
 	expectedErr := DuplicateValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "sets.arg",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "sets.arg",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "arg renamed differently with sets.as, expected error")
 }
 
@@ -479,12 +459,11 @@ func TestFailEachIfParallelNodeCheck(t *testing.T) {
 		Parallel: &parallel,
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "each",
+		Node:  &nodeA,
+		Field: "each",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted node with 'parallel' field with empty 'each' field, expected error")
 }
 
@@ -496,13 +475,12 @@ func TestFailValidParallelNodeCheck(t *testing.T) {
 		Parallel: &parallel,
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "parallel",
-		Values:   []string{"0"},
+		Node:   &nodeA,
+		Field:  "parallel",
+		Values: []string{"0"},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted parallel = 0, expected error")
 }
 
@@ -515,13 +493,12 @@ func TestFailConditionalNoTypeNodeCheck(t *testing.T) {
 		NodeType: &testVal,
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "type",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "type",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted conditional node specifying a type, expected error")
 }
 
@@ -533,12 +510,11 @@ func TestFailConditionalHasIfNodeCheck(t *testing.T) {
 		Category: &conditional,
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "if",
+		Node:  &nodeA,
+		Field: "if",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted conditional sequence without 'if' field, expected error")
 }
 
@@ -550,12 +526,11 @@ func TestFailConditionalHasEqNodeCheck(t *testing.T) {
 		Category: &conditional,
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "eq",
+		Node:  &nodeA,
+		Field: "eq",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted conditional sequence without 'eq' field, expected error")
 }
 
@@ -566,11 +541,10 @@ func TestFailNonconditionalHasTypeNodeCheck(t *testing.T) {
 	}
 
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "type",
+		Node:  &nodeA,
+		Field: "type",
 	}
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted node with no type, expected error")
 }
 
@@ -581,13 +555,12 @@ func TestFailNonconditionalNoIfNodeCheck(t *testing.T) {
 		If:   &testVal,
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "if",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "if",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted nonconditional sequence with 'if' field, expected error")
 }
 
@@ -599,13 +572,12 @@ func TestFailNonconditionalNoEqNodeCheck(t *testing.T) {
 		Eq:   eq,
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "eq",
-		Values:   []string{fmt.Sprint(eq)},
+		Node:   &nodeA,
+		Field:  "eq",
+		Values: []string{fmt.Sprint(eq)},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted nonconditional sequence with 'eq' field, expected error")
 }
 
@@ -616,12 +588,11 @@ func TestFailRetryIfRetryWaitNodeCheck(t *testing.T) {
 		RetryWait: testVal,
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "retry",
+		Node:  &nodeA,
+		Field: "retry",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted node with 'retryWait' field with retry: 0, expected error")
 }
 
@@ -632,13 +603,12 @@ func TestFailValidRetryWaitNodeCheck(t *testing.T) {
 		RetryWait: testVal,
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "retryWait",
-		Values:   []string{testVal},
+		Node:   &nodeA,
+		Field:  "retryWait",
+		Values: []string{testVal},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "accepted bad retryWait: duration, expected error")
 }
 
@@ -664,12 +634,11 @@ func TestFailRequiredArgsProvidedNodeCheck1(t *testing.T) {
 		NodeType: &seqa,
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args",
+		Node:  &nodeA,
+		Field: "args",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "not all required args to sequence node listed in 'args', expected error")
 }
 
@@ -702,12 +671,11 @@ func TestFailRequiredArgsProvidedNodeCheck2(t *testing.T) {
 		},
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args",
+		Node:  &nodeA,
+		Field: "args",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "not all required args to conditional sequence node listed in 'args', expected error")
 }
 
@@ -748,12 +716,11 @@ func TestFailRequiredArgsProvidedNodeCheck3(t *testing.T) {
 		},
 	}
 	expectedErr := MissingValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args",
+		Node:  &nodeA,
+		Field: "args",
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "not all required args to expanded sequence node listed in 'args', expected error")
 }
 
@@ -789,7 +756,7 @@ func TestNoExtraSequenceArgsProvidedNodeCheck1(t *testing.T) {
 		},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	if err != nil {
 		t.Errorf("NoExtraSequenceArgsProvidedNodeCheck failed, expected pass")
 	}
@@ -839,7 +806,7 @@ func TestNoExtraSequenceArgsProvidedNodeCheck2(t *testing.T) {
 		},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	if err != nil {
 		t.Errorf("NoExtraSequenceArgsProvidedNodeCheck failed, expected pass")
 	}
@@ -877,7 +844,7 @@ func TestNoExtraSequenceArgsProvidedNodeCheck3(t *testing.T) {
 		},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	if err != nil {
 		t.Errorf("NoExtraSequenceArgsProvidedNodeCheck failed, expected pass")
 	}
@@ -917,13 +884,12 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck1(t *testing.T) {
 		},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args', 'each.element",
-		Values:   []string{argC},
+		Node:   &nodeA,
+		Field:  "args', 'each.element",
+		Values: []string{argC},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "sequence node provides subsequence with unnecessary, expected error")
 }
 
@@ -970,13 +936,12 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck2(t *testing.T) {
 		},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args', 'each.element",
-		Values:   []string{argC},
+		Node:   &nodeA,
+		Field:  "args', 'each.element",
+		Values: []string{argC},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "sequence node provides subsequence with unnecessary, expected error")
 }
 
@@ -1014,13 +979,12 @@ func TestFailNoExtraSequenceArgsProvidedNodeCheck3(t *testing.T) {
 		},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "args', 'each.element",
-		Values:   []string{argC},
+		Node:   &nodeA,
+		Field:  "args', 'each.element",
+		Values: []string{argC},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "sequence node provides subsequence with unnecessary, expected error")
 }
 
@@ -1044,13 +1008,12 @@ func TestFailSubsequencesExistNodeCheck1(t *testing.T) {
 		},
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "eq",
-		Values:   []string{seqB},
+		Node:   &nodeA,
+		Field:  "eq",
+		Values: []string{seqB},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "node calls seq that does not exist in specs, expected error")
 }
 
@@ -1066,12 +1029,11 @@ func TestFailSubsequencesExistNodeCheck2(t *testing.T) {
 		NodeType: &seqA,
 	}
 	expectedErr := InvalidValueError{
-		Sequence: seqA,
-		Node:     &nodeA,
-		Field:    "type",
-		Values:   []string{seqA},
+		Node:   &nodeA,
+		Field:  "type",
+		Values: []string{seqA},
 	}
 
-	err := check.CheckNode(seqA, node)
+	err := check.CheckNode(node)
 	compareError(t, err, expectedErr, "node calls seq that does not exist in specs, expected error")
 }

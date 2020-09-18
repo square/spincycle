@@ -20,7 +20,6 @@ func stringSetToArray(set map[string]bool) []string {
 var _ error = InvalidValueError{}
 
 type InvalidValueError struct {
-	Sequence string
 	Node     *string
 	Field    string
 	Values   []string
@@ -29,11 +28,8 @@ type InvalidValueError struct {
 
 func (e InvalidValueError) Error() string {
 	var loc string
-	switch e.Node {
-	case nil:
-		loc = fmt.Sprintf("sequence %s", e.Sequence)
-	default:
-		loc = fmt.Sprintf("sequence %s, node %s", e.Sequence, *e.Node)
+	if e.Node != nil {
+		loc = fmt.Sprintf("node %s: ", *e.Node)
 	}
 
 	var values string
@@ -43,7 +39,7 @@ func (e InvalidValueError) Error() string {
 		multipleValues = "s"
 	}
 
-	return fmt.Sprintf("%s: invalid value%s %s in field '%s', expected %s",
+	return fmt.Sprintf("%sinvalid value%s %s in field '%s', expected %s",
 		loc, multipleValues, values, e.Field, e.Expected)
 }
 
@@ -52,7 +48,6 @@ func (e InvalidValueError) Error() string {
 var _ error = MissingValueError{}
 
 type MissingValueError struct {
-	Sequence    string
 	Node        *string
 	Field       string
 	Explanation string
@@ -60,11 +55,8 @@ type MissingValueError struct {
 
 func (e MissingValueError) Error() string {
 	var loc string
-	switch e.Node {
-	case nil:
-		loc = fmt.Sprintf("sequence %s", e.Sequence)
-	default:
-		loc = fmt.Sprintf("sequence %s, node %s", e.Sequence, *e.Node)
+	if e.Node != nil {
+		loc = fmt.Sprintf("node %s: ", *e.Node)
 	}
 
 	var explanation string
@@ -75,7 +67,7 @@ func (e MissingValueError) Error() string {
 		explanation = fmt.Sprintf(": %s", e.Explanation)
 	}
 
-	return fmt.Sprintf("%s: field '%s' missing%s", loc, e.Field, explanation)
+	return fmt.Sprintf("%sfield '%s' missing%s", loc, e.Field, explanation)
 }
 
 /* =========================================================================== */
@@ -83,7 +75,6 @@ func (e MissingValueError) Error() string {
 var _ error = DuplicateValueError{}
 
 type DuplicateValueError struct {
-	Sequence    string
 	Node        *string
 	Field       string
 	Values      []string
@@ -92,11 +83,8 @@ type DuplicateValueError struct {
 
 func (e DuplicateValueError) Error() string {
 	var loc string
-	switch e.Node {
-	case nil:
-		loc = fmt.Sprintf("sequence %s", e.Sequence)
-	default:
-		loc = fmt.Sprintf("sequence %s, node %s", e.Sequence, *e.Node)
+	if e.Node != nil {
+		loc = fmt.Sprintf("node %s: ", *e.Node)
 	}
 
 	var values string
@@ -114,6 +102,6 @@ func (e DuplicateValueError) Error() string {
 		explanation = fmt.Sprintf(": %s", e.Explanation)
 	}
 
-	return fmt.Sprintf("%s: value%s %s duplicated in field '%s'%s",
+	return fmt.Sprintf("%svalue%s %s duplicated in field '%s'%s",
 		loc, multipleValues, values, e.Field, explanation)
 }
