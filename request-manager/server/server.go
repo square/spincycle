@@ -20,6 +20,7 @@ import (
 	"github.com/square/spincycle/v2/request-manager/app"
 	"github.com/square/spincycle/v2/request-manager/auth"
 	"github.com/square/spincycle/v2/request-manager/graph"
+	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/joblog"
 	"github.com/square/spincycle/v2/request-manager/request"
 	"github.com/square/spincycle/v2/request-manager/spec"
@@ -186,62 +187,54 @@ func (s *Server) Boot() error {
 	log.Printf("Config: %s", cfgstr)
 
 	// Load and check requests specification files (specs)
-	specs, parseErrors, parseWarnings, err := s.appCtx.Hooks.LoadSpecs(s.appCtx)
+	specs, fileResults, err := s.appCtx.Hooks.LoadSpecs(s.appCtx)
 	if err != nil {
 		return fmt.Errorf("LoadSpecs: %s", err)
 	}
-	for file, warns := range parseWarnings {
-		for _, warn := range warns {
-			log.Errorf("%s: %s", file, warn)
+	for file, result := range fileResults.Results {
+		for _, warn := range result.Warnings {
+			log.Errorf("Warning: %s: %s", file, warn)
+		}
+		for _, err := range result.Errors {
+			log.Errorf("Error: %s: %s", file, err)
 		}
 	}
-	if len(parseErrors) != 0 {
-		for file, errs := range parseErrors {
-			for _, err := range errs {
-				log.Errorf("%s: %s", file, err)
-			}
-		}
+	if fileResults.AnyError {
 		return fmt.Errorf("Errors occurred during parsing; see log for details")
 	}
 	spec.ProcessSpecs(&specs)
 	s.appCtx.Specs = specs
 
-	checkFactories, err := s.appCtx.Factories.MakeCheckFactories(s.appCtx)
-	if err != nil {
-		return fmt.Errorf("MakeCheckFactories: %s", err)
-	}
-	checkFactories = append(checkFactories, spec.BaseCheckFactory{specs})
+	checkFactories := []spec.CheckFactory{spec.DefaultCheckFactory{specs}, spec.BaseCheckFactory{specs}}
 	checker, err := spec.NewChecker(checkFactories)
-	staticErrors, staticWarnings := checker.RunChecks(specs)
-	for seq, warns := range staticWarnings {
-		for _, warn := range warns {
-			log.Errorf("%s: %s", seq, warn)
+	staticResults := checker.RunChecks(specs)
+	for seq, result := range staticResults.Results {
+		for _, warn := range result.Warnings {
+			log.Errorf("Warning: %s: %s", seq, warn)
+		}
+		for _, err := range result.Errors {
+			log.Errorf("Error: %s: %s", seq, err)
 		}
 	}
-	if len(staticErrors) != 0 {
-		for seq, errs := range staticErrors {
-			for _, err := range errs {
-				log.Errorf("%s: %s", seq, err)
-			}
-		}
+	if staticResults.AnyError {
 		return fmt.Errorf("Static check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 
 	// Generator factory used to generate IDs for nodes in sequence graphs and jobs in job chains
-	gf, err := s.appCtx.Factories.MakeIDGeneratorFactory(s.appCtx)
-	if err != nil {
-		return fmt.Errorf("MakeIDGeneratorFactory: %s", err)
-	}
+	gf := id.NewGeneratorFactory(4, 100)
 
 	// Do graph checks and get sequence graphs
 	tg := graph.NewGrapher(specs, gf)
-	seqGraphs, seqErrors := tg.CheckSequences()
-	if len(seqErrors) != 0 {
-		for seq, errs := range seqErrors {
-			for _, err := range errs {
-				log.Errorf("Error: %s: %s", seq, err)
-			}
+	seqGraphs, graphResults := tg.CheckSequences()
+	for seq, result := range graphResults.Results {
+		for _, warn := range result.Warnings {
+			log.Errorf("Warning: %s: %s", seq, warn)
 		}
+		for _, err := range result.Errors {
+			log.Errorf("Error: %s: %s", seq, err)
+		}
+	}
+	if graphResults.AnyError {
 		return fmt.Errorf("Graph check(s) on request specification files failed; see log or run spinc-linter for details")
 	}
 

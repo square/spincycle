@@ -55,16 +55,16 @@ func setupManager(t *testing.T, dataFile string) string {
 
 	// Create a mock creator factory.
 	if ref == nil {
-		specs, err, _ := spec.ParseSpec(rmtest.SpecPath + "/a-b-c.yaml")
-		if err != nil {
-			t.Fatal(err)
+		specs, result := spec.ParseSpec(rmtest.SpecPath + "/a-b-c.yaml")
+		if len(result.Errors) != 0 {
+			t.Fatal(result.Errors)
 		}
 		spec.ProcessSpecs(&specs)
 
 		gr := graph.NewGrapher(specs, id.NewGeneratorFactory(4, 100))
-		seqGraphs, seqErrors := gr.CheckSequences()
-		if len(seqErrors) != 0 {
-			t.Fatal(seqErrors)
+		seqGraphs, seqResults := gr.CheckSequences()
+		if seqResults.AnyError {
+			t.Fatal(seqResults)
 		}
 
 		testJobFactory := &mock.JobFactory{

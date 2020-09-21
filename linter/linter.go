@@ -4,96 +4,64 @@ package linter
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/alexflint/go-arg"
 	"github.com/logrusorgru/aurora"
 
-	"github.com/square/spincycle/v2/linter/app"
 	"github.com/square/spincycle/v2/request-manager/graph"
+	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
 )
 
+// Note that go-arg help message will show defaults if the default is not false.
 type Linter struct {
-	SpecsDir string `arg:"positional,required" help:"path to spin cycle requests directory"`
+	SpecsDir string `arg:"positional" help:"path to spin cycle requests directory [default: current working dir]"`
 
-	Strict bool `arg:"-s, --strict" help:"make all warnings into errors"`
+	Strict   bool `arg:"-s, --strict" help:"make all warnings into errors [default: false]"`
+	Warnings bool `help:"turn warnings on or off"`
+	Color    bool `help:"turn color on or off"`
 
-	Sequences string `help:"comma-separated list of sequences for which to output info; sequence must exist in specs"`
-	Warnings  string `help:"turn warnings on or off (on | off)"`
-	Color     string `help:"turn color on or off (on | off)"`
+	Sequences string `help:"comma-separated list of sequences for which to output info; sequence must exist in specs [default: all]"`
+
+	errorStr   string `arg:"-"`
+	warningStr string `arg:"-"`
 }
 
 var splitter = "# ------------------------------------------------------------------------------"
 
-func Run(ctx app.Context) bool {
+func Run() bool {
 	// 1. Setup
-	cmd := Linter{
-		Warnings: "on",
-		Color:    "on",
+	linter := Linter{
+		Strict:   false,
+		Warnings: true,
+		Color:    true,
+		SpecsDir: "./",
 	}
-	arg.MustParse(&cmd)
+	arg.MustParse(&linter)
 
 	var sequences []string
-	if len(cmd.Sequences) != 0 {
-		sequences = strings.Split(cmd.Sequences, ",")
+	if len(linter.Sequences) != 0 {
+		sequences = strings.Split(linter.Sequences, ",")
 	}
 	// else we want to print all sequences, but we don't know what they are
 	// yet, so we can't fill out `sequences` properly yet
 
-	var printWarnings bool
-	switch strings.ToLower(cmd.Warnings) {
-	case "on":
-		printWarnings = true
-	case "off":
-		printWarnings = false
-	default:
-		fmt.Printf("Invalid args %s to --warnings; expected 'on' or 'off'\n", cmd.Warnings)
-	}
-
-	var useColor bool
-	switch strings.ToLower(cmd.Color) {
-	case "on":
-		useColor = true
-	case "off":
-		useColor = false
-	default:
-		fmt.Printf("Invalid arg %s to --color; expected 'on' or 'off'\n", cmd.Color)
-	}
-	color := aurora.NewAurora(useColor)
-
-	errorStr := fmt.Sprintf("%s", color.Red("Errors"))
-	warningStr := fmt.Sprintf("%s", color.Yellow("Warnings"))
+	color := aurora.NewAurora(linter.Color)
+	linter.errorStr = fmt.Sprintf("%s", color.Red("Errors"))
+	linter.warningStr = fmt.Sprintf("%s", color.Yellow("Warnings"))
 
 	// 2. Parsing and static parse checks
-	allSpecs, parseErrors, parseWarnings, err := ctx.Hooks.LoadSpecs(cmd.SpecsDir)
+	allSpecs, fileResults, err := spec.ParseSpecsDir(linter.SpecsDir)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintf(os.Stderr, "%s", err)
 		return false
 	}
-	if len(parseErrors) > 0 {
-		fileSeen := map[string]bool{}
-		for file, errs := range parseErrors {
-			fileSeen[file] = true
-
-			fmt.Println(splitter)
-			fmt.Printf("# File: %s\n", file)
-			fmt.Print(fmtList(errorStr, errs))
-
-			if printWarnings {
-				fmt.Print(fmtList(warningStr, parseWarnings[file]))
-			}
-		}
-
-		if printWarnings {
-			for file, warns := range parseWarnings {
-				if fileSeen[file] {
-					continue
-				}
-				fmt.Println(splitter)
-				fmt.Printf("# File: %s\n", file)
-				fmt.Print(fmtList(warningStr, warns))
-			}
+	if fileResults.AnyError {
+		for file, result := range fileResults.Results {
+			header := splitter + fmt.Sprintf("# File: %s\n", file)
+			linter.printCheckResult(header, result)
 		}
 		return false
 	}
@@ -105,7 +73,7 @@ func Run(ctx app.Context) bool {
 			missing = append(missing, seq)
 		}
 		if len(missing) > 0 {
-			fmt.Printf("Args to --sequences not found in specs: %s\n", strings.Join(missing, ", "))
+			fmt.Fprintf(os.Stderr, "Args to --sequences not found in specs: %s\n", strings.Join(missing, ", "))
 			return false
 		}
 	}
@@ -120,11 +88,11 @@ func Run(ctx app.Context) bool {
 	// There may be other warnings/errors from later checks, but those will
 	// be grouped by seqence. These can't be, so we'll just print them all
 	// together now.
-	if printWarnings && len(parseWarnings) > 0 {
+	if linter.Warnings && fileResults.AnyWarning {
 		warnings := []error{}
 		// There should only be one warning per file right now
-		for file, warns := range parseWarnings {
-			for _, warn := range warns {
+		for file, result := range fileResults.Results {
+			for _, warn := range result.Warnings {
 				warnings = append(warnings, fmt.Errorf("%s: %s", file, warn))
 			}
 		}
@@ -135,81 +103,69 @@ func Run(ctx app.Context) bool {
 	spec.ProcessSpecs(&allSpecs)
 
 	// 3. Static checks
-	checkFactories, err := ctx.Factories.MakeCheckFactories(allSpecs)
-	if err != nil {
-		fmt.Sprintf("MakeCheckFactories: %s", err)
-		return false
-	}
-	checkFactories = append(checkFactories, spec.BaseCheckFactory{allSpecs})
+	checkFactories := []spec.CheckFactory{spec.DefaultCheckFactory{allSpecs}, spec.BaseCheckFactory{allSpecs}}
 	checker, err := spec.NewChecker(checkFactories)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Fprintf(os.Stderr, "%s", err)
 		return false
 	}
-	staticErrors, staticWarnings := checker.RunChecks(allSpecs)
-	if len(staticErrors) != 0 {
+	seqResults := checker.RunChecks(allSpecs)
+	if seqResults.AnyError {
 		for _, seq := range sequences {
-			toPrint := fmtList(errorStr, staticErrors[seq]) + fmtList(warningStr, staticWarnings[seq])
-			if len(toPrint) != 0 {
-				printHeader(seq, allSpecs)
-				fmt.Print(toPrint)
+			header, err := fmtHeader(seq, allSpecs)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s", err)
 			}
+			linter.printCheckResult(header, seqResults.Results[seq])
 		}
 		return false
 	}
 	// We'll print warnings later along with graph errors, if any.
 
 	// 4. Graph checks
-	idgen, err := ctx.Factories.MakeIDGeneratorFactory()
-	if err != nil {
-		fmt.Printf("MakeIDGeneratorFactory: %s", err)
-		return false
-	}
+	idgen := id.NewGeneratorFactory(4, 100)
 	gr := graph.NewGrapher(allSpecs, idgen)
-	_, graphErrors := gr.CheckSequences()
-	if len(graphErrors) != 0 {
+	_, graphResults := gr.CheckSequences()
+	seqResults.Union(graphResults)
+	if seqResults.AnyError {
 		for _, seq := range sequences {
-			// There are no graph warnings, but if there are errors,
-			// we also want to print any static warnings from before.
-			toPrint := fmtList(errorStr, graphErrors[seq]) + fmtList(warningStr, staticWarnings[seq])
-			if len(toPrint) != 0 {
-				printHeader(seq, allSpecs)
-				fmt.Print(toPrint)
+			header, err := fmtHeader(seq, allSpecs)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s", err)
 			}
+			linter.printCheckResult(header, seqResults.Results[seq])
 		}
 		return false
 	}
 
 	// 5. No errors occurred: print warnings, then exit.
-	if printWarnings && len(staticWarnings) != 0 {
+	if seqResults.AnyWarning {
 		for _, seq := range sequences {
-			toPrint := fmtList(warningStr, staticWarnings[seq])
-			if len(toPrint) != 0 {
-				printHeader(seq, allSpecs)
-				fmt.Print(toPrint)
+			header, err := fmtHeader(seq, allSpecs)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s", err)
 			}
+			linter.printCheckResult(header, seqResults.Results[seq])
 		}
 	} else {
 		fmt.Println(color.Green("OK, all specs are valid"))
 	}
 
-	if cmd.Strict {
-		return len(parseWarnings) == 0 && len(staticWarnings) == 0
+	if linter.Strict {
+		return !fileResults.AnyWarning && !seqResults.AnyWarning
 	}
 	return true
 }
 
-func printHeader(seqName string, allSpecs spec.Specs) error {
+func fmtHeader(seqName string, allSpecs spec.Specs) (string, error) {
 	seqSpec, ok := allSpecs.Sequences[seqName]
 	if !ok {
-		return fmt.Errorf("linter CLI: could not find specs for sequence %s", seqName)
+		return "", fmt.Errorf("linter CLI: could not find specs for sequence %s", seqName)
 	}
 
-	fmt.Println(splitter)
-	fmt.Printf("# File: %s\n", seqSpec.Filename)
-	fmt.Printf("#  Seq: %s\n", seqName)
-
-	return nil
+	return splitter + "\n" +
+		fmt.Sprintf("# File: %s\n", seqSpec.Filename) +
+		fmt.Sprintf("#  Seq: %s\n", seqName), nil
 }
 
 func fmtList(header string, list []error) string {
@@ -221,4 +177,18 @@ func fmtList(header string, list []error) string {
 		str += fmt.Sprintf("%4d: %s\n\n", i+1, elt)
 	}
 	return str
+}
+
+func (ctx *Linter) printCheckResult(header string, result *spec.CheckResult) {
+	if result == nil {
+		return
+	}
+	toPrint := fmtList(ctx.errorStr, result.Errors)
+	if ctx.Warnings {
+		toPrint += fmtList(ctx.warningStr, result.Warnings)
+	}
+	if len(toPrint) != 0 {
+		fmt.Println(header)
+		fmt.Print(toPrint)
+	}
 }

@@ -74,12 +74,12 @@ func TestPassRunChecks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating checker: %s", err)
 	}
-	seqErrors, seqWarnings := checker.RunChecks(specs)
-	if len(seqErrors) > 0 {
-		t.Errorf("RunChecks reports some error, expected success: %v", seqErrors)
+	seqResults := checker.RunChecks(specs)
+	if seqResults.AnyError {
+		t.Errorf("RunChecks reports some error, expected success: %v", seqResults)
 	}
-	if len(seqWarnings) > 0 {
-		t.Errorf("RunChecks reports some warning, expected success: %v", seqWarnings)
+	if seqResults.AnyWarning {
+		t.Errorf("RunChecks reports some warning, expected success: %v", seqResults)
 	}
 }
 
@@ -104,11 +104,11 @@ func TestPassWithWarningRunChecks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating checker: %s", err)
 	}
-	seqErrors, seqWarnings := checker.RunChecks(specs)
-	if len(seqErrors) > 0 {
-		t.Errorf("RunChecks reports some error, expected success: %v", seqErrors)
+	seqResults := checker.RunChecks(specs)
+	if seqResults.AnyError {
+		t.Errorf("RunChecks reports some error, expected success: %v", seqResults)
 	}
-	if len(seqWarnings) == 0 {
+	if !seqResults.AnyWarning {
 		t.Errorf("RunChecks reports no warnings, expected some warning")
 	}
 }
@@ -134,11 +134,11 @@ func TestFailRunChecks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating checker: %s", err)
 	}
-	seqErrors, seqWarnings := checker.RunChecks(specs)
-	if len(seqErrors) == 0 {
+	seqResults := checker.RunChecks(specs)
+	if !seqResults.AnyError {
 		t.Errorf("RunChecks reports no error, expected failure")
 	}
-	if len(seqWarnings) == 0 {
+	if !seqResults.AnyWarning {
 		t.Errorf("RunChecks reports no warnings, expected some warning")
 	}
 }
@@ -164,12 +164,12 @@ func TestFailNoWarningRunChecks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error creating checker: %s", err)
 	}
-	seqErrors, seqWarnings := checker.RunChecks(specs)
-	if len(seqErrors) == 0 {
+	seqResults := checker.RunChecks(specs)
+	if !seqResults.AnyError {
 		t.Errorf("RunChecks reports no error, expected failure")
 	}
 
-	if len(seqWarnings) > 0 {
-		t.Errorf("RunChecks reports some warning, expected none: %v", seqWarnings)
+	if seqResults.AnyWarning {
+		t.Errorf("RunChecks reports some warning, expected none: %v", seqResults)
 	}
 }

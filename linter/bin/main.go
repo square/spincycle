@@ -1,4 +1,4 @@
-// Copyright 2019, Square, Inc.
+// Copyright 2020, Square, Inc.
 
 package main
 
@@ -6,12 +6,10 @@ import (
 	"os"
 
 	"github.com/square/spincycle/v2/linter"
-	"github.com/square/spincycle/v2/linter/app"
 )
 
 func main() {
-	defaultContext := app.Defaults()
-	if ok := linter.Run(defaultContext); !ok {
+	if ok := linter.Run(); !ok {
 		os.Exit(1)
 	}
 }

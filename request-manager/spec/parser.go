@@ -12,32 +12,38 @@ import (
 )
 
 // Parse a single request (YAML) file.
-func ParseSpec(specFile string) (spec Specs, err error, warning error) {
+func ParseSpec(specFile string) (Specs, *CheckResult) {
+	spec := Specs{}
+	result := &CheckResult{}
+
 	sequenceData, err := ioutil.ReadFile(specFile)
 	if err != nil {
-		return spec, err, warning
+		result.Errors = []error{err}
+		return spec, result
 	}
 
 	// Emit warning if unexpected or duplicate fields are present.
 	// Error if specs are incorrectly formatted or fields are of incorrect type.
-	warning = yaml.UnmarshalStrict(sequenceData, &spec)
-	if warning != nil {
+	warn := yaml.UnmarshalStrict(sequenceData, &spec)
+	if warn != nil {
+		result.Warnings = []error{warn}
 		err = yaml.Unmarshal(sequenceData, &spec)
 		if err != nil {
-			return spec, err, warning
+			result.Errors = []error{err}
+			return spec, result
 		}
 	}
 
-	return spec, nil, warning
+	return spec, result
 }
 
 // Read all specs file in indicated specs directory.
-func ParseSpecsDir(specsDir string) (specs Specs, fileErrors, fileWarnings map[string][]error, traversalError error) {
-	specs = Specs{
+// CheckResults are keyed on file name.
+func ParseSpecsDir(specsDir string) (Specs, *CheckResults, error) {
+	specs := Specs{
 		Sequences: map[string]*Sequence{},
 	}
-	fileErrors = map[string][]error{}
-	fileWarnings = map[string][]error{}
+	fileResults := NewCheckResults()
 
 	seqFile := map[string]string{} // sequence name --> file it was first seen in
 	err := filepath.Walk(specsDir, func(path string, info os.FileInfo, err error) error {
@@ -52,13 +58,10 @@ func ParseSpecsDir(specsDir string) (specs Specs, fileErrors, fileWarnings map[s
 			relPath = path
 		}
 
-		spec, err, warn := ParseSpec(path)
-		if err != nil {
-			fileErrors[relPath] = append(fileErrors[relPath], err)
+		spec, result := ParseSpec(path)
+		fileResults.AddResult(relPath, result)
+		if len(result.Errors) != 0 {
 			return nil
-		}
-		if warn != nil {
-			fileWarnings[relPath] = append(fileWarnings[relPath], warn)
 		}
 
 		// Set the file name of the sequences here. ParseSpec can't do it
@@ -69,7 +72,7 @@ func ParseSpecsDir(specsDir string) (specs Specs, fileErrors, fileWarnings map[s
 
 		for name, spec := range spec.Sequences {
 			if _, ok := seqFile[name]; ok {
-				fileErrors[relPath] = append(fileErrors[relPath], fmt.Errorf("sequence %s already seen in file %s", name, seqFile[name]))
+				fileResults.AddError(relPath, fmt.Errorf("sequence %s already seen in file %s", name, seqFile[name]))
 			} else {
 				specs.Sequences[name] = spec
 				seqFile[name] = relPath
@@ -80,10 +83,10 @@ func ParseSpecsDir(specsDir string) (specs Specs, fileErrors, fileWarnings map[s
 	})
 
 	if err != nil {
-		return specs, nil, nil, fmt.Errorf("error traversing specs directory: %s", err)
+		return specs, fileResults, fmt.Errorf("error traversing specs directory: %s", err)
 	}
 
-	return specs, fileErrors, fileWarnings, nil
+	return specs, fileResults, nil
 }
 
 // Specs require some processing after we've loaded them, but before we run the checker on them.

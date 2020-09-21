@@ -50,46 +50,34 @@ func NewChecker(checkFactories []CheckFactory) (*Checker, error) {
 }
 
 // Runs checks on allSpecs.
-// If any error is logged, this function returns false. If no errors occur, returns true.
-func (checker *Checker) RunChecks(allSpecs Specs) (seqErrors map[string][]error, seqWarnings map[string][]error) {
-	seqErrors = map[string][]error{}   // sequence name -> [errors]
-	seqWarnings = map[string][]error{} // sequence name -> [warnings]
+func (checker *Checker) RunChecks(allSpecs Specs) *CheckResults {
+	results := NewCheckResults()
 
 	for name, sequence := range allSpecs.Sequences {
-		errs := []error{}
-		warns := []error{}
-
 		for _, sequenceCheck := range checker.sequenceErrorChecks {
 			if err := sequenceCheck.CheckSequence(*sequence); err != nil {
-				errs = append(errs, err)
+				results.AddError(name, err)
 			}
 		}
 		for _, sequenceCheck := range checker.sequenceWarningChecks {
 			if err := sequenceCheck.CheckSequence(*sequence); err != nil {
-				warns = append(warns, err)
+				results.AddWarning(name, err)
 			}
 		}
 
 		for _, node := range sequence.Nodes {
 			for _, nodeCheck := range checker.nodeErrorChecks {
 				if err := nodeCheck.CheckNode(*node); err != nil {
-					errs = append(errs, err)
+					results.AddError(name, err)
 				}
 			}
 			for _, nodeCheck := range checker.nodeWarningChecks {
 				if err := nodeCheck.CheckNode(*node); err != nil {
-					warns = append(warns, err)
+					results.AddWarning(name, err)
 				}
 			}
 		}
-
-		if len(errs) > 0 {
-			seqErrors[name] = errs
-		}
-		if len(warns) > 0 {
-			seqWarnings[name] = warns
-		}
 	}
 
-	return seqErrors, seqWarnings
+	return results
 }

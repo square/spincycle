@@ -14,18 +14,19 @@ import (
 
 func TestParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "decomm.yaml"
-	_, err, _ := ParseSpec(sequencesFile)
-	if err != nil {
+	_, result := ParseSpec(sequencesFile)
+	if len(result.Errors) != 0 {
 		t.Errorf("failed to parse decomm.yaml, expected success")
 	}
 }
 
 func TestFailParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "fail-parse-spec.yaml" // mistmatched type
-	_, err, _ := ParseSpec(sequencesFile)
-	if err == nil {
+	_, result := ParseSpec(sequencesFile)
+	if len(result.Errors) == 0 {
 		t.Errorf("unmarshaled string into uint")
 	} else {
+		err := result.Errors[0]
 		switch err.(type) {
 		case *yaml.TypeError:
 			t.Log(err.Error())
@@ -38,24 +39,24 @@ func TestFailParseSpec(t *testing.T) {
 func TestWarnParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "warn-parse-spec.yaml" // duplicated field
 
-	_, _, warn := ParseSpec(sequencesFile)
-	if warn == nil {
+	_, result := ParseSpec(sequencesFile)
+	if len(result.Warnings) == 0 {
 		t.Errorf("failed to give warning for duplicated field")
 	}
 }
 
 func TestParseSpecsDir(t *testing.T) {
 	specsDir := specsDir + "parse-specs-dir"
-	_, parseErrors, _, err := ParseSpecsDir(specsDir)
-	if err != nil || len(parseErrors) > 0 {
+	_, results, err := ParseSpecsDir(specsDir)
+	if err != nil || results.AnyError {
 		t.Errorf("failed to parse specs directory, expected success: %s", err)
 	}
 }
 
 func TestFailParseSpecsDir(t *testing.T) {
 	specsDir := specsDir + "fail-parse-specs-dir"
-	_, parseErrors, _, _ := ParseSpecsDir(specsDir)
-	if len(parseErrors) == 0 {
+	_, results, _ := ParseSpecsDir(specsDir)
+	if !results.AnyError {
 		t.Fatalf("successfully parsed specs directory with repeated sequences, expected failure")
 	}
 }

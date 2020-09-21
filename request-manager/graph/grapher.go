@@ -32,13 +32,11 @@ func NewGrapher(specs spec.Specs, idGenFactory id.GeneratorFactory) *Grapher {
 }
 
 // CheckSequences performs graph checks for all sequences and returns a map of
-// sequence name -> sequence graph and a map of sequence name --> error. The two
-// return values are mutually exclusive; if any error occurs, it is logged in the
-// errors map, and the sequence graph map is nil. Else, all sequences have a
-// corresponding entry in the sequence graph map, and the error map is nil.
-func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[string][]error) {
-	seqGraphs = map[string]*Graph{}
-	seqErrors = map[string][]error{}
+// sequence name -> sequence graph and a map of sequence name --> error.
+// If any error occurs, the sequence graph map is nil.
+func (gr *Grapher) CheckSequences() (map[string]*Graph, *spec.CheckResults) {
+	seqGraphs := map[string]*Graph{}
+	seqResults := spec.NewCheckResults()
 
 	// sequence name -> set of job args that its nodes declare in `sets` field
 	// i.e. the job args that the sequence sets
@@ -58,7 +56,7 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 		idgen := gr.idGenFactory.Make()
 		seqGraph, sets, err := buildSeqGraph(seqSpec, idgen)
 		if err != nil {
-			seqErrors[seqName] = append(seqErrors[seqName], err)
+			seqResults.AddError(seqName, err)
 			continue
 		}
 		seqGraphs[seqName] = seqGraph
@@ -113,16 +111,16 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 
 				// Only perform sets check if this sequence built and all its
 				// subsequences have passed all checks.
-				if _, ok := seqErrors[seqName]; ok {
+				if _, ok := seqResults.Get(seqName); ok {
 					continue
 				}
-				failed := getFailedSubsequences(subsequences[seqName], seqErrors)
+				failed := getFailedSubsequences(subsequences[seqName], seqResults)
 				if len(failed) != 0 {
 					multiple := ""
 					if len(failed) > 1 {
 						multiple = "s"
 					}
-					seqErrors[seqName] = append(seqErrors[seqName], fmt.Errorf("subsequence%s failed checks: %s", multiple, strings.Join(failed, ", ")))
+					seqResults.AddError(seqName, fmt.Errorf("subsequence%s failed checks: %s", multiple, strings.Join(failed, ", ")))
 					continue
 				}
 
@@ -149,25 +147,30 @@ func (gr *Grapher) CheckSequences() (seqGraphs map[string]*Graph, seqErrors map[
 					if len(missingSets) > 1 {
 						multiple = "s"
 					}
-					seqErrors[seqName] = append(seqErrors[seqName], fmt.Errorf("node%s did not set job args declared in 'sets': %s", multiple, strings.Join(msg, "; ")))
+					seqResults.AddError(seqName, fmt.Errorf("node%s did not set job args declared in 'sets': %s", multiple, strings.Join(msg, "; ")))
 				}
 			}
 		}
 
 		// If we were unable to check any sequences, there must be a cyclical dependency.
 		if !newSeqChecked {
+			seqsList := make([]string, 0, len(seqsToCheck))
 			for seqName, _ := range seqsToCheck {
-				seqErrors[seqName] = append(seqErrors[seqName], fmt.Errorf("part of cyclical dependency among sequences"))
+				seqsList = append(seqsList, seqName)
+			}
+			seqsString := strings.Join(seqsList, ", ")
+			for seqName, _ := range seqsToCheck {
+				seqResults.AddError(seqName, fmt.Errorf("part of cyclical dependency among sequences: %s", seqsString))
 			}
 			break
 		}
 	}
 
-	if len(seqErrors) != 0 {
-		return nil, seqErrors
+	if seqResults.AnyWarning || seqResults.AnyError {
+		return nil, seqResults
 	}
 
-	return seqGraphs, nil
+	return seqGraphs, seqResults
 }
 
 // getNodeSubsequences gets all subsequences called by a given node.
@@ -189,12 +192,12 @@ func getNodeSubsequences(nodeSpec *spec.Node, sequenceSpecs map[string]*spec.Seq
 }
 
 // getFailedSubsequences returns a list of subsequences that didn't build,
-// i.e. don't show up in the seqErrors map.
+// i.e. don't show up in the seqResults map.
 // It does not check that subsequences were specified in sequenceSpecs.
-func getFailedSubsequences(subsequences []string, seqErrors map[string][]error) []string {
+func getFailedSubsequences(subsequences []string, seqResults *spec.CheckResults) []string {
 	failed := []string{}
 	for _, subseq := range subsequences {
-		if _, ok := seqErrors[subseq]; ok {
+		if _, ok := seqResults.Get(subseq); ok {
 			failed = append(failed, subseq)
 		}
 	}
