@@ -194,16 +194,22 @@ func (check NodesSetsUniqueSequenceCheck) CheckSequence(sequence Sequence) error
 	}
 
 	for _, node := range sequence.Nodes {
-		for _, nodeSet := range node.Sets {
-			if nodeSet.As == nil {
-				continue
+		// Don't catch duplicates within a node--there's a node check that
+		// does that for us.
+		argsSet := map[string]bool{} // set of args that this node sets
+		for _, set := range node.Sets {
+			if set.As != nil {
+				argsSet[*set.As] = true
 			}
-			if setBy, ok := duplicated[*nodeSet.As]; ok {
-				duplicated[*nodeSet.As] = append(setBy, node.Name)
-			} else if setBy, ok := set[*nodeSet.As]; ok {
-				duplicated[*nodeSet.As] = []string{setBy, node.Name}
+		}
+
+		for arg, _ := range argsSet {
+			if setBy, ok := duplicated[arg]; ok {
+				duplicated[arg] = append(setBy, node.Name)
+			} else if setBy, ok := set[arg]; ok {
+				duplicated[arg] = []string{setBy, node.Name}
 			} else {
-				set[*nodeSet.As] = node.Name
+				set[arg] = node.Name
 			}
 		}
 	}

@@ -117,6 +117,26 @@ func TestFailHasNodesSequenceCheck(t *testing.T) {
 	compareError(t, err, expectedErr, "accepted sequence with no nodes, expected error")
 }
 
+func TestNodesSetsUniqueSequenceCheck(t *testing.T) {
+	check := NodesSetsUniqueSequenceCheck{}
+	sequence := Sequence{ // Check that repeats within a node _aren't_ caught
+		Name: seqA,
+		Nodes: map[string]*Node{
+			nodeA: &Node{
+				Name: nodeA,
+				Sets: []*NodeSet{
+					&NodeSet{Arg: &testVal, As: &testVal},
+					&NodeSet{Arg: &testVal, As: &testVal},
+				},
+			},
+		},
+	}
+	err := check.CheckSequence(sequence)
+	if err != nil {
+		t.Fatalf("check failed, expected pass")
+	}
+}
+
 func TestFailNodesSetsUniqueSequenceCheck1(t *testing.T) {
 	check := NodesSetsUniqueSequenceCheck{}
 	nodeB := "node-b"
