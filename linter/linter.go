@@ -27,6 +27,7 @@ type Linter struct {
 
 	errorStr   string `arg:"-"`
 	warningStr string `arg:"-"`
+	count      int    `arg:"-"` // warning + error counter
 }
 
 var splitter = "# ------------------------------------------------------------------------------"
@@ -38,6 +39,8 @@ func Run() bool {
 		Warnings: true,
 		Color:    true,
 		SpecsDir: "./",
+
+		count: 1,
 	}
 	arg.MustParse(&linter)
 
@@ -60,9 +63,14 @@ func Run() bool {
 	}
 	if fileResults.AnyError {
 		for file, result := range fileResults.Results {
-			header := splitter + fmt.Sprintf("# File: %s\n", file)
+			header := splitter + "\n" + fmt.Sprintf("# File: %s\n", file)
 			linter.printCheckResult(header, result)
 		}
+		return false
+	}
+	// Check that we did indeed read some specs.
+	if len(allSpecs.Sequences) == 0 {
+		fmt.Fprintf(os.Stderr, "%s\n", color.Red("No specs found in directory"))
 		return false
 	}
 	// Check that all sequences provided by --sequences arg are actually in
@@ -98,7 +106,7 @@ func Run() bool {
 		}
 
 		fmt.Println(splitter)
-		fmt.Print(fmtList("# Parse warnings", warnings))
+		fmt.Print(linter.fmtList("# Syntax warnings\n", warnings))
 	}
 	spec.ProcessSpecs(&allSpecs)
 
@@ -168,24 +176,25 @@ func fmtHeader(seqName string, allSpecs spec.Specs) (string, error) {
 		fmt.Sprintf("#  Seq: %s\n", seqName), nil
 }
 
-func fmtList(header string, list []error) string {
+func (linter *Linter) fmtList(header string, list []error) string {
 	if len(list) == 0 {
 		return ""
 	}
 	str := fmt.Sprintf("%s\n", header)
-	for i, elt := range list {
-		str += fmt.Sprintf("%4d: %s\n\n", i+1, elt)
+	for _, elt := range list {
+		str += fmt.Sprintf("%4d: %s\n\n", linter.count, elt)
+		linter.count++
 	}
 	return str
 }
 
-func (ctx *Linter) printCheckResult(header string, result *spec.CheckResult) {
+func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) {
 	if result == nil {
 		return
 	}
-	toPrint := fmtList(ctx.errorStr, result.Errors)
-	if ctx.Warnings {
-		toPrint += fmtList(ctx.warningStr, result.Warnings)
+	toPrint := linter.fmtList(linter.errorStr, result.Errors)
+	if linter.Warnings {
+		toPrint += linter.fmtList(linter.warningStr, result.Warnings)
 	}
 	if len(toPrint) != 0 {
 		fmt.Println(header)

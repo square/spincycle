@@ -202,6 +202,9 @@ func (s *Server) Boot() error {
 	if fileResults.AnyError {
 		return fmt.Errorf("Errors occurred during parsing; see log for details")
 	}
+	if len(specs.Sequences) == 0 {
+		log.Errorf("Warning: no specs found in directory")
+	}
 	spec.ProcessSpecs(&specs)
 	s.appCtx.Specs = specs
 
