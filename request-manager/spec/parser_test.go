@@ -3,9 +3,7 @@
 package spec_test
 
 import (
-	"fmt"
 	"gopkg.in/yaml.v2"
-	"strings"
 	"testing"
 
 	"github.com/go-test/deep"
@@ -16,18 +14,19 @@ import (
 
 func TestParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "decomm.yaml"
-	_, err := ParseSpec(sequencesFile, t.Logf)
-	if err != nil {
+	_, result := ParseSpec(sequencesFile)
+	if len(result.Errors) != 0 {
 		t.Errorf("failed to parse decomm.yaml, expected success")
 	}
 }
 
 func TestFailParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "fail-parse-spec.yaml" // mistmatched type
-	_, err := ParseSpec(sequencesFile, t.Logf)
-	if err == nil {
+	_, result := ParseSpec(sequencesFile)
+	if len(result.Errors) == 0 {
 		t.Errorf("unmarshaled string into uint")
 	} else {
+		err := result.Errors[0]
 		switch err.(type) {
 		case *yaml.TypeError:
 			t.Log(err.Error())
@@ -40,34 +39,26 @@ func TestFailParseSpec(t *testing.T) {
 func TestWarnParseSpec(t *testing.T) {
 	sequencesFile := specsDir + "warn-parse-spec.yaml" // duplicated field
 
-	var warning string
-	logFunc := func(s string, args ...interface{}) { warning = fmt.Sprintf(s, args...) }
-
-	ParseSpec(sequencesFile, logFunc)
-	if warning == "" {
+	_, result := ParseSpec(sequencesFile)
+	if len(result.Warnings) == 0 {
 		t.Errorf("failed to give warning for duplicated field")
-	} else if strings.Contains(strings.ToLower(warning), "warning") {
-		t.Log(warning)
-	} else {
-		t.Errorf("expected warning containing 'warning' as substring, got: %s", warning)
 	}
 }
 
 func TestParseSpecsDir(t *testing.T) {
 	specsDir := specsDir + "parse-specs-dir"
-	_, err := ParseSpecsDir(specsDir, t.Logf)
-	if err != nil {
+	_, results, err := ParseSpecsDir(specsDir)
+	if err != nil || results.AnyError {
 		t.Errorf("failed to parse specs directory, expected success: %s", err)
 	}
 }
 
 func TestFailParseSpecsDir(t *testing.T) {
 	specsDir := specsDir + "fail-parse-specs-dir"
-	_, err := ParseSpecsDir(specsDir, t.Logf)
-	if err == nil {
+	_, results, _ := ParseSpecsDir(specsDir)
+	if !results.AnyError {
 		t.Fatalf("successfully parsed specs directory with repeated sequences, expected failure")
 	}
-	t.Log(err)
 }
 
 func TestProcessSpecs(t *testing.T) {

@@ -97,9 +97,9 @@ func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[s
 		Type: requestName,
 	}
 
-	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, t.Logf)
-	if err != nil {
-		t.Fatal(err)
+	specs, result := spec.ParseSpec(rmtest.SpecPath + "/" + sequencesFile)
+	if len(result.Errors) != 0 {
+		t.Fatal(result.Errors)
 	}
 	spec.ProcessSpecs(&specs)
 
@@ -120,9 +120,9 @@ func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[s
 	}
 
 	gr := NewGrapher(specs, id.NewGeneratorFactory(4, 100))
-	seqGraphs, seqErrors := gr.CheckSequences()
-	if len(seqErrors) != 0 {
-		t.Fatalf("failed to create sequence graphs: %v", seqErrors)
+	seqGraphs, seqResults := gr.CheckSequences()
+	if seqResults.AnyError {
+		t.Fatalf("failed to create sequence graphs: %v", seqResults)
 	}
 
 	rf := NewResolverFactory(tf, specs.Sequences, seqGraphs, idgenFactory)

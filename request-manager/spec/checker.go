@@ -9,18 +9,15 @@ type Checker struct {
 	sequenceWarningChecks []SequenceCheck
 	nodeErrorChecks       []NodeCheck
 	nodeWarningChecks     []NodeCheck
-	// Printf-like function used to log warnings and errors should they occur.
-	logFunc func(string, ...interface{})
 }
 
 // Create a new Checker with the checks specified by check factories in list.
-func NewChecker(checkFactories []CheckFactory, logFunc func(string, ...interface{})) (*Checker, error) {
+func NewChecker(checkFactories []CheckFactory) (*Checker, error) {
 	checker := &Checker{
 		sequenceErrorChecks:   []SequenceCheck{},
 		sequenceWarningChecks: []SequenceCheck{},
 		nodeErrorChecks:       []NodeCheck{},
 		nodeWarningChecks:     []NodeCheck{},
-		logFunc:               logFunc,
 	}
 
 	for _, factory := range checkFactories {
@@ -53,37 +50,34 @@ func NewChecker(checkFactories []CheckFactory, logFunc func(string, ...interface
 }
 
 // Runs checks on allSpecs.
-// If any error is logged, this function returns false. If no errors occur, returns true.
-func (checker *Checker) RunChecks(allSpecs Specs) (errOccurred bool) {
-	errOccurred = false
+func (checker *Checker) RunChecks(allSpecs Specs) *CheckResults {
+	results := NewCheckResults()
 
-	for _, sequence := range allSpecs.Sequences {
+	for name, sequence := range allSpecs.Sequences {
 		for _, sequenceCheck := range checker.sequenceErrorChecks {
 			if err := sequenceCheck.CheckSequence(*sequence); err != nil {
-				checker.logFunc("Error: %s", err)
-				errOccurred = true
+				results.AddError(name, err)
 			}
 		}
 		for _, sequenceCheck := range checker.sequenceWarningChecks {
 			if err := sequenceCheck.CheckSequence(*sequence); err != nil {
-				checker.logFunc("Warning: %s", err)
+				results.AddWarning(name, err)
 			}
 		}
 
 		for _, node := range sequence.Nodes {
 			for _, nodeCheck := range checker.nodeErrorChecks {
-				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
-					checker.logFunc("Error: %s", err)
-					errOccurred = true
+				if err := nodeCheck.CheckNode(*node); err != nil {
+					results.AddError(name, err)
 				}
 			}
 			for _, nodeCheck := range checker.nodeWarningChecks {
-				if err := nodeCheck.CheckNode(sequence.Name, *node); err != nil {
-					checker.logFunc("Warning: %s", err)
+				if err := nodeCheck.CheckNode(*node); err != nil {
+					results.AddWarning(name, err)
 				}
 			}
 		}
 	}
 
-	return !errOccurred
+	return results
 }

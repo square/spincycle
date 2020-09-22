@@ -4,7 +4,6 @@ package spec_test
 
 import (
 	"fmt"
-	"strings"
 	"testing"
 
 	. "github.com/square/spincycle/v2/request-manager/spec"
@@ -19,23 +18,23 @@ func (c PassSequenceCheck) CheckSequence(s Sequence) error {
 
 type PassNodeCheck struct{}
 
-func (c PassNodeCheck) CheckNode(s string, n Node) error {
+func (c PassNodeCheck) CheckNode(n Node) error {
 	return nil
 }
 
-var failSequenceCheckText = "FailSequenceCheck failed"
-var failNodeCheckText = "FailNodeCheck failed"
+var failSequenceCheckError = fmt.Errorf("FailSequenceCheck failed")
+var failNodeCheckError = fmt.Errorf("FailNodeCheck failed")
 
 type FailSequenceCheck struct{}
 
 func (c FailSequenceCheck) CheckSequence(s Sequence) error {
-	return fmt.Errorf(failSequenceCheckText)
+	return failSequenceCheckError
 }
 
 type FailNodeCheck struct{}
 
-func (c FailNodeCheck) CheckNode(s string, n Node) error {
-	return fmt.Errorf(failNodeCheckText)
+func (c FailNodeCheck) CheckNode(n Node) error {
+	return failNodeCheckError
 }
 
 // Dummy sequence specs. Contains the absolute minimum of one sequence and one node
@@ -71,21 +70,16 @@ func (f PassFact) MakeNodeWarningChecks() ([]NodeCheck, error) {
 	return []NodeCheck{PassNodeCheck{}}, nil
 }
 func TestPassRunChecks(t *testing.T) {
-	var log []string
-	logf := func(s string, args ...interface{}) { log = append(log, fmt.Sprintf(s, args...)) }
-
-	checker, err := NewChecker([]CheckFactory{PassFact{}}, logf)
+	checker, err := NewChecker([]CheckFactory{PassFact{}})
 	if err != nil {
 		t.Fatalf("Error creating checker: %s", err)
 	}
-	ok := checker.RunChecks(specs)
-	if !ok {
-		t.Error("RunChecks reports some error, expected success")
+	seqResults := checker.RunChecks(specs)
+	if seqResults.AnyError {
+		t.Errorf("RunChecks reports some error, expected success: %v", seqResults)
 	}
-
-	// Check that nothing was printed (if anything was printed, it's an error or warning)
-	if len(log) > 0 {
-		t.Errorf("log printed something (presumed to be warning or error): %s", log)
+	if seqResults.AnyWarning {
+		t.Errorf("RunChecks reports some warning, expected success: %v", seqResults)
 	}
 }
 
@@ -106,35 +100,16 @@ func (f PassWithWarning) MakeNodeWarningChecks() ([]NodeCheck, error) {
 	return []NodeCheck{FailNodeCheck{}}, nil
 }
 func TestPassWithWarningRunChecks(t *testing.T) {
-	var log []string
-	logf := func(s string, args ...interface{}) { log = append(log, fmt.Sprintf(s, args...)) }
-
-	checker, err := NewChecker([]CheckFactory{PassWithWarning{}}, logf)
+	checker, err := NewChecker([]CheckFactory{PassWithWarning{}})
 	if err != nil {
 		t.Fatalf("Error creating checker: %s", err)
 	}
-	ok := checker.RunChecks(specs)
-	if !ok {
-		t.Error("RunChecks reports some error, expected success")
+	seqResults := checker.RunChecks(specs)
+	if seqResults.AnyError {
+		t.Errorf("RunChecks reports some error, expected success: %v", seqResults)
 	}
-
-	// Check that all warnings were printed properly
-	seqWarningFound := false
-	nodeWarningFound := false
-	for _, output := range log {
-		if strings.Contains(strings.ToLower(output), "warning") {
-			if strings.Contains(output, failSequenceCheckText) {
-				seqWarningFound = true
-			} else if strings.Contains(output, failNodeCheckText) {
-				nodeWarningFound = true
-			}
-		}
-	}
-	if !seqWarningFound {
-		t.Errorf("Expected but could not find sequence check warning in log: %s", log)
-	}
-	if !nodeWarningFound {
-		t.Errorf("Expected but could not find node check warning in log: %s", log)
+	if !seqResults.AnyWarning {
+		t.Errorf("RunChecks reports no warnings, expected some warning")
 	}
 }
 
@@ -155,54 +130,16 @@ func (f FailFact) MakeNodeWarningChecks() ([]NodeCheck, error) {
 	return []NodeCheck{FailNodeCheck{}}, nil
 }
 func TestFailRunChecks(t *testing.T) {
-	var log []string
-	logf := func(s string, args ...interface{}) { log = append(log, fmt.Sprintf(s, args...)) }
-
-	checker, err := NewChecker([]CheckFactory{FailFact{}}, logf)
+	checker, err := NewChecker([]CheckFactory{FailFact{}})
 	if err != nil {
 		t.Fatalf("Error creating checker: %s", err)
 	}
-	ok := checker.RunChecks(specs)
-	if ok {
-		t.Error("RunChecks reports no error, expected failure")
+	seqResults := checker.RunChecks(specs)
+	if !seqResults.AnyError {
+		t.Errorf("RunChecks reports no error, expected failure")
 	}
-
-	// Check that all errors were printed properly
-	seqErrorFound := false
-	nodeErrorFound := false
-	for _, output := range log {
-		if strings.Contains(strings.ToLower(output), "error") {
-			if strings.Contains(output, failSequenceCheckText) {
-				seqErrorFound = true
-			} else if strings.Contains(output, failNodeCheckText) {
-				nodeErrorFound = true
-			}
-		}
-	}
-	if !seqErrorFound {
-		t.Errorf("Expected but could not find sequence check error in log: %s", log)
-	}
-	if !nodeErrorFound {
-		t.Errorf("Expected but could not find node check error in log: %s", log)
-	}
-
-	// Check that all warnings were printed properly
-	seqWarningFound := false
-	nodeWarningFound := false
-	for _, output := range log {
-		if strings.Contains(strings.ToLower(output), "warning") {
-			if strings.Contains(output, failSequenceCheckText) {
-				seqWarningFound = true
-			} else if strings.Contains(output, failNodeCheckText) {
-				nodeWarningFound = true
-			}
-		}
-	}
-	if !seqWarningFound {
-		t.Errorf("Expected but could not find sequence check warning in log: %s", log)
-	}
-	if !nodeWarningFound {
-		t.Errorf("Expected but could not find node check warning in log: %s", log)
+	if !seqResults.AnyWarning {
+		t.Errorf("RunChecks reports no warnings, expected some warning")
 	}
 }
 
@@ -223,26 +160,16 @@ func (f FailNoWarningFact) MakeNodeWarningChecks() ([]NodeCheck, error) {
 	return []NodeCheck{PassNodeCheck{}}, nil
 }
 func TestFailNoWarningRunChecks(t *testing.T) {
-	var log []string
-	logf := func(s string, args ...interface{}) { log = append(log, fmt.Sprintf(s, args...)) }
-
-	checker, err := NewChecker([]CheckFactory{FailNoWarningFact{}}, logf)
+	checker, err := NewChecker([]CheckFactory{FailNoWarningFact{}})
 	if err != nil {
 		t.Fatalf("Error creating checker: %s", err)
 	}
-	ok := checker.RunChecks(specs)
-	if ok {
-		t.Error("RunChecks reports no error, expected failure")
+	seqResults := checker.RunChecks(specs)
+	if !seqResults.AnyError {
+		t.Errorf("RunChecks reports no error, expected failure")
 	}
 
-	// Check that no warnings were printed
-	warningFound := false
-	for _, output := range log {
-		if strings.Contains(strings.ToLower(output), "warning") {
-			warningFound = true
-		}
-	}
-	if warningFound {
-		t.Errorf("Unexpected warning found in log: %s", log)
+	if seqResults.AnyWarning {
+		t.Errorf("RunChecks reports some warning, expected none: %v", seqResults)
 	}
 }

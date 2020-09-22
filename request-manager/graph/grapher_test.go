@@ -11,10 +11,10 @@ import (
 	rmtest "github.com/square/spincycle/v2/request-manager/test"
 )
 
-func MakeGrapher(t *testing.T, sequencesFile string, logFunc func(string, ...interface{})) *Grapher {
-	specs, err := spec.ParseSpec(rmtest.SpecPath+"/"+sequencesFile, logFunc)
-	if err != nil {
-		t.Fatal(err)
+func MakeGrapher(t *testing.T, sequencesFile string) *Grapher {
+	specs, result := spec.ParseSpec(rmtest.SpecPath + "/" + sequencesFile)
+	if len(result.Errors) != 0 {
+		t.Fatal(result.Errors)
 	}
 	spec.ProcessSpecs(&specs)
 
@@ -99,9 +99,9 @@ func verifyDecomGraph(t *testing.T, seqGraphs map[string]*Graph) {
 
 func TestCreateDecomGraph(t *testing.T) {
 	sequenceFile := "decomm.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) != 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	seqGraphs, seqResults := grapher.CheckSequences()
+	if seqResults.AnyError {
 		t.Fatal("unexpected errors creating sequence graphs")
 	}
 
@@ -111,17 +111,17 @@ func TestCreateDecomGraph(t *testing.T) {
 // Try to create twice with same grapher
 func TestCreateDecomGraphTwice(t *testing.T) {
 	sequenceFile := "decomm.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) != 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	seqGraphs, seqResults := grapher.CheckSequences()
+	if seqResults.AnyError {
 		t.Fatal("unexpected error creating sequence graphs")
 	}
 
 	verifyDecomGraph(t, seqGraphs)
 
 	verifyDecomGraph(t, seqGraphs)
-	seqGraphs, seqErrors = grapher.CheckSequences()
-	if len(seqErrors) != 0 {
+	seqGraphs, seqResults = grapher.CheckSequences()
+	if seqResults.AnyError {
 		t.Fatal("unexpected error creating sequence graphs")
 	}
 
@@ -130,9 +130,9 @@ func TestCreateDecomGraphTwice(t *testing.T) {
 
 func TestCreateDecomSetsGraph(t *testing.T) {
 	sequenceFile := "decomm-sets.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) != 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	seqGraphs, seqResults := grapher.CheckSequences()
+	if seqResults.AnyError {
 		t.Fatal("unexpected error creating sequence graphs")
 	}
 
@@ -141,10 +141,10 @@ func TestCreateDecomSetsGraph(t *testing.T) {
 
 func TestCreateDestroyConditionalGraph(t *testing.T) {
 	sequenceFile := "destroy-conditional.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	seqGraphs, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) != 0 {
-		t.Log(seqErrors)
+	grapher := MakeGrapher(t, sequenceFile)
+	seqGraphs, seqResults := grapher.CheckSequences()
+	if seqResults.AnyError {
+		t.Log(seqResults)
 		t.Fatal("unexpected error creating sequence graphs")
 	}
 
@@ -173,9 +173,9 @@ func TestCreateDestroyConditionalGraph(t *testing.T) {
 
 func TestFailMissingSetsGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) == 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	_, seqResults := grapher.CheckSequences()
+	if !seqResults.AnyError {
 		t.Fatal("no error creating subsequence graph with incorrectly specified `sets`, expected error")
 	}
 
@@ -183,20 +183,20 @@ func TestFailMissingSetsGraphCheck(t *testing.T) {
 
 	// verify that error occurred in expected subsequence
 	subsequence = "missing-sets-subsequence-1"
-	if err := getSeqError(subsequence, seqErrors); err != nil {
-		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) != 0 {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %v", subsequence, errs)
 	}
 	subsequence = "missing-sets"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailMissingSetsConditionalGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) == 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	_, seqResults := grapher.CheckSequences()
+	if !seqResults.AnyError {
 		t.Fatal("no error creating subsequence graph with incorrectly specified `sets`, expected error")
 	}
 
@@ -204,28 +204,28 @@ func TestFailMissingSetsConditionalGraphCheck(t *testing.T) {
 
 	// verify that error occurred in expected subsequence
 	subsequence = "missing-sets-subsequence-1"
-	if err := getSeqError(subsequence, seqErrors); err != nil {
-		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) != 0 {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %v", subsequence, errs)
 	}
 	subsequence = "missing-sets-subsequence-2"
-	if err := getSeqError(subsequence, seqErrors); err != nil {
-		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) != 0 {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %v", subsequence, errs)
 	}
 	subsequence = "missing-sets-subsequence-3"
-	if err := getSeqError(subsequence, seqErrors); err != nil {
-		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) != 0 {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %v", subsequence, errs)
 	}
 	subsequence = "missing-sets-conditional"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailMissingJobArgsGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) == 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	_, seqResults := grapher.CheckSequences()
+	if !seqResults.AnyError {
 		t.Fatal("no error creating subsequence graph with missing job args, expected error")
 	}
 
@@ -233,20 +233,20 @@ func TestFailMissingJobArgsGraphCheck(t *testing.T) {
 
 	// verify that error occurred in expected subsequence
 	subsequence = "missing-job-args-subsequence"
-	if err := getSeqError(subsequence, seqErrors); err != nil {
-		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) != 0 {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %v", subsequence, errs)
 	}
 	subsequence = "missing-job-args"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailCircularDependenciesGraphCheck(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) == 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	_, seqResults := grapher.CheckSequences()
+	if !seqResults.AnyError {
 		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
 
@@ -254,16 +254,16 @@ func TestFailCircularDependenciesGraphCheck(t *testing.T) {
 
 	// verify that error occurred in expected subsequence
 	subsequence = "circular-dependencies"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailPropagate(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) == 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	_, seqResults := grapher.CheckSequences()
+	if !seqResults.AnyError {
 		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
 
@@ -271,20 +271,20 @@ func TestFailPropagate(t *testing.T) {
 
 	// verify that error occurred in expected subsequence
 	subsequence = "propagate-subsequence-1"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 	subsequence = "propagate"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailPropagateConditional(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) == 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	_, seqResults := grapher.CheckSequences()
+	if !seqResults.AnyError {
 		t.Fatal("no error creating subsequence graph with circular dependencies, expected error")
 	}
 
@@ -292,28 +292,28 @@ func TestFailPropagateConditional(t *testing.T) {
 
 	// verify that error occurred in expected subsequence
 	subsequence = "propagate-subsequence-1"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 	subsequence = "propagate-subsequence-2"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 	subsequence = "propagate-subsequence-3"
-	if err := getSeqError(subsequence, seqErrors); err != nil {
-		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %s", subsequence, err)
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) != 0 {
+		t.Fatalf("error creating subsequence graph for sequence %s, expected no error: %v", subsequence, errs)
 	}
 	subsequence = "propagate-conditional"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
 func TestFailCyclicalSequence(t *testing.T) {
 	sequenceFile := "graph-checks.yaml"
-	grapher := MakeGrapher(t, sequenceFile, t.Logf)
-	_, seqErrors := grapher.CheckSequences()
-	if len(seqErrors) == 0 {
+	grapher := MakeGrapher(t, sequenceFile)
+	_, seqResults := grapher.CheckSequences()
+	if !seqResults.AnyError {
 		t.Fatal("no error creating subsequence graph with circular dependencies among sequences, expected error")
 	}
 
@@ -321,22 +321,22 @@ func TestFailCyclicalSequence(t *testing.T) {
 
 	// verify that error occurred in expected subsequence
 	subsequence = "circular-sequences-1"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 	subsequence = "circular-sequences-2"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 	subsequence = "circular-sequences-3"
-	if err := getSeqError(subsequence, seqErrors); err == nil {
+	if errs := getSeqErrors(subsequence, seqResults); len(errs) == 0 {
 		t.Fatalf("no error creating subsequence graph for sequence %s, expected error", subsequence)
 	}
 }
 
-func getSeqError(sequenceName string, seqErrors map[string]error) error {
-	if err, ok := seqErrors[sequenceName]; ok {
-		return err
+func getSeqErrors(sequenceName string, seqResults *spec.CheckResults) []error {
+	if result, ok := seqResults.Get(sequenceName); ok && len(result.Errors) > 0 {
+		return result.Errors
 	}
 	return nil
 }
