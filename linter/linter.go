@@ -13,6 +13,7 @@ import (
 	"github.com/square/spincycle/v2/request-manager/graph"
 	"github.com/square/spincycle/v2/request-manager/id"
 	"github.com/square/spincycle/v2/request-manager/spec"
+	v "github.com/square/spincycle/v2/version"
 )
 
 // Note that go-arg help message will show defaults if the default is not false.
@@ -28,9 +29,14 @@ type Linter struct {
 	errorStr   string `arg:"-"`
 	warningStr string `arg:"-"`
 	count      int    `arg:"-"` // warning + error counter
+	anyWarning bool   `arg:"-"` // whether any warnings we would output with --warnings=true occurred
 }
 
 var splitter = "# ------------------------------------------------------------------------------"
+
+func (linter *Linter) Version() string {
+	return "linter " + v.Version()
+}
 
 func Run() bool {
 	// 1. Setup
@@ -40,7 +46,8 @@ func Run() bool {
 		Color:    true,
 		SpecsDir: "./",
 
-		count: 1,
+		count:      1,
+		anyWarning: false,
 	}
 	arg.MustParse(&linter)
 
@@ -96,17 +103,21 @@ func Run() bool {
 	// There may be other warnings/errors from later checks, but those will
 	// be grouped by seqence. These can't be, so we'll just print them all
 	// together now.
-	if linter.Warnings && fileResults.AnyWarning {
-		warnings := []error{}
-		// There should only be one warning per file right now
-		for file, result := range fileResults.Results {
-			for _, warn := range result.Warnings {
-				warnings = append(warnings, fmt.Errorf("%s: %s", file, warn))
-			}
-		}
+	if fileResults.AnyWarning {
+		linter.anyWarning = true
 
-		fmt.Println(splitter)
-		fmt.Print(linter.fmtList("# Syntax warnings\n", warnings))
+		if linter.Warnings {
+			warnings := []error{}
+			// There should only be one warning per file right now
+			for file, result := range fileResults.Results {
+				for _, warn := range result.Warnings {
+					warnings = append(warnings, fmt.Errorf("%s: %s", file, warn))
+				}
+			}
+
+			fmt.Println(splitter)
+			fmt.Print(linter.fmtList("# Syntax warnings\n", warnings))
+		}
 	}
 	spec.ProcessSpecs(&allSpecs)
 
@@ -155,12 +166,18 @@ func Run() bool {
 			}
 			linter.printCheckResult(header, seqResults.Results[seq])
 		}
-	} else {
-		fmt.Println(color.Green("OK, all specs are valid"))
 	}
 
+	if linter.anyWarning && !linter.Warnings {
+		// Case: warnings occurred, but were surpressed
+		fmt.Println(color.Yellow("Warnings occurred and suppressed"))
+	} else if !linter.anyWarning {
+		// Case: no warnings and no errors
+		fmt.Println(color.Green("OK, all specs are valid"))
+	} // else Case: some warnings printed, no errors
+
 	if linter.Strict {
-		return !fileResults.AnyWarning && !seqResults.AnyWarning
+		return !linter.anyWarning
 	}
 	return true
 }
@@ -193,6 +210,9 @@ func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) 
 		return
 	}
 	toPrint := linter.fmtList(linter.errorStr, result.Errors)
+	if len(result.Warnings) != 0 {
+		linter.anyWarning = true
+	}
 	if linter.Warnings {
 		toPrint += linter.fmtList(linter.warningStr, result.Warnings)
 	}
