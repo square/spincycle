@@ -40,11 +40,12 @@ The spinc commands are:
 
 | Command | Purpose | 
 | ------- | -------- |
-| help [command] | Print general help and command-specific help |
+| find [filters]   | Print (optionally) filtered request history |
+| help [command]   | Print general help and command-specific help |
 | info \<ID\>      | Print complete request information |
 | log \<ID\>       | Print job log (hint: pipe output to less) |
 | ps \[ID\]        | Show running requests and jobs. Request ID is optional. |
-| running        | Exit 0 if request is running or pending, else exit 1 |
+| running          | Exit 0 if request is running or pending, else exit 1 |
 | start \<ID\>     | Start new request |
 | status \<ID\>    | Print request status and basic information |
 | stop \<ID\>      | Stop request |
