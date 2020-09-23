@@ -162,7 +162,11 @@ func Run() bool {
 		if errorPrinted {
 			return false
 		}
-	} else if seqResults.AnyWarning {
+	}
+
+	// 5. No errors occurred. Print warnings and decide whether we need to
+	// print anything else, then exit.
+	if seqResults.AnyWarning {
 		// No errors occurred; print all warnings now.
 		for _, seq := range sequences {
 			header, err := fmtHeader(seq, allSpecs)
@@ -173,8 +177,6 @@ func Run() bool {
 		}
 	}
 
-	// 5. No errors occurred, and we've printed all warnings. Decide whether
-	// we need to print anything else, then exit.
 	if linter.anyWarning && !linter.Warnings {
 		// Case: warnings occurred, but were surpressed
 		fmt.Println(color.Yellow("Warnings occurred and suppressed"))
@@ -212,7 +214,7 @@ func (linter *Linter) fmtList(header string, list []error) string {
 	return str
 }
 
-func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) bool {
+func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) (didPrint bool) {
 	if result == nil {
 		return false
 	}
