@@ -130,12 +130,16 @@ func Run() bool {
 	}
 	seqResults := checker.RunChecks(allSpecs)
 	if seqResults.AnyError {
+		errorPrinted := false // whether we printed anything
 		for _, seq := range sequences {
 			header, err := fmtHeader(seq, allSpecs)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s", err)
 			}
-			linter.printCheckResult(header, seqResults.Results[seq])
+			errorPrinted = linter.printCheckResult(header, seqResults.Results[seq]) || errorPrinted
+		}
+		if !errorPrinted {
+			fmt.Printf("%s\n", color.Red("Sequence not listed in --sequences failed static check; fix errors to perform graph checks"))
 		}
 		return false
 	}
@@ -147,6 +151,19 @@ func Run() bool {
 	_, graphResults := gr.CheckSequences()
 	seqResults.Union(graphResults)
 	if seqResults.AnyError {
+		errorPrinted := false // whether we printed anything
+		for _, seq := range sequences {
+			header, err := fmtHeader(seq, allSpecs)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s", err)
+			}
+			errorPrinted = linter.printCheckResult(header, seqResults.Results[seq]) || errorPrinted
+		}
+		if errorPrinted {
+			return false
+		}
+	} else if seqResults.AnyWarning {
+		// No errors occurred; print all warnings now.
 		for _, seq := range sequences {
 			header, err := fmtHeader(seq, allSpecs)
 			if err != nil {
@@ -154,20 +171,10 @@ func Run() bool {
 			}
 			linter.printCheckResult(header, seqResults.Results[seq])
 		}
-		return false
 	}
 
-	// 5. No errors occurred: print warnings, then exit.
-	if seqResults.AnyWarning {
-		for _, seq := range sequences {
-			header, err := fmtHeader(seq, allSpecs)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%s", err)
-			}
-			linter.printCheckResult(header, seqResults.Results[seq])
-		}
-	}
-
+	// 5. No errors occurred, and we've printed all warnings. Decide whether
+	// we need to print anything else, then exit.
 	if linter.anyWarning && !linter.Warnings {
 		// Case: warnings occurred, but were surpressed
 		fmt.Println(color.Yellow("Warnings occurred and suppressed"))
@@ -205,9 +212,9 @@ func (linter *Linter) fmtList(header string, list []error) string {
 	return str
 }
 
-func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) {
+func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) bool {
 	if result == nil {
-		return
+		return false
 	}
 	toPrint := linter.fmtList(linter.errorStr, result.Errors)
 	if len(result.Warnings) != 0 {
@@ -216,8 +223,10 @@ func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) 
 	if linter.Warnings {
 		toPrint += linter.fmtList(linter.warningStr, result.Warnings)
 	}
-	if len(toPrint) != 0 {
-		fmt.Println(header)
-		fmt.Print(toPrint)
+	if len(toPrint) == 0 {
+		return false
 	}
+	fmt.Println(header)
+	fmt.Print(toPrint)
+	return true
 }
