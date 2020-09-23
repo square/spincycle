@@ -3,7 +3,7 @@
 // Package version provides the Spin Cycle version.
 package version
 
-const VERSION = "2.0.3"
+const VERSION = "2.0.4"
 
 // BUILD is appended to VERSION if set: "VERSION+BUILD". The "+" is included automatically.
 var BUILD string = ""

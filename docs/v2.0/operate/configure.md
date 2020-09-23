@@ -91,7 +91,7 @@ Take a config option, change `.` to `_`, upper-case everything, and add `SPINCYC
 
 <a id="rm.server.tls">server.tls</a>: Enable TLS for clients (users) and when JR connects to RM. See common [TLS](#tls) section below.
 
-<a id="rm.specs.dir">specs.dir</a>: Directory containing all request spec files. Subdirectories are ignored. The default is "specs/", relative to current working dir.
+<a id="rm.specs.dir">specs.dir</a>: Directory containing all request spec files. Spin Cycle assumes all files in and under the specs directory ending with `.yaml` (case-insensitive) are spec files. The default is "specs/", relative to current working dir.
 
 ## Job Runner
 
