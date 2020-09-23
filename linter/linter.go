@@ -130,12 +130,16 @@ func Run() bool {
 	}
 	seqResults := checker.RunChecks(allSpecs)
 	if seqResults.AnyError {
+		errorPrinted := false // whether we printed anything
 		for _, seq := range sequences {
 			header, err := fmtHeader(seq, allSpecs)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s", err)
 			}
-			linter.printCheckResult(header, seqResults.Results[seq])
+			errorPrinted = linter.printCheckResult(header, seqResults.Results[seq]) || errorPrinted
+		}
+		if !errorPrinted {
+			fmt.Printf("%s\n", color.Red("Sequence not listed in --sequences failed static check; fix errors to perform graph checks"))
 		}
 		return false
 	}
@@ -147,18 +151,23 @@ func Run() bool {
 	_, graphResults := gr.CheckSequences()
 	seqResults.Union(graphResults)
 	if seqResults.AnyError {
+		errorPrinted := false // whether we printed anything
 		for _, seq := range sequences {
 			header, err := fmtHeader(seq, allSpecs)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "%s", err)
 			}
-			linter.printCheckResult(header, seqResults.Results[seq])
+			errorPrinted = linter.printCheckResult(header, seqResults.Results[seq]) || errorPrinted
 		}
-		return false
+		if errorPrinted {
+			return false
+		}
 	}
 
-	// 5. No errors occurred: print warnings, then exit.
+	// 5. No errors occurred. Print warnings and decide whether we need to
+	// print anything else, then exit.
 	if seqResults.AnyWarning {
+		// No errors occurred; print all warnings now.
 		for _, seq := range sequences {
 			header, err := fmtHeader(seq, allSpecs)
 			if err != nil {
@@ -205,9 +214,9 @@ func (linter *Linter) fmtList(header string, list []error) string {
 	return str
 }
 
-func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) {
+func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) (didPrint bool) {
 	if result == nil {
-		return
+		return false
 	}
 	toPrint := linter.fmtList(linter.errorStr, result.Errors)
 	if len(result.Warnings) != 0 {
@@ -216,8 +225,10 @@ func (linter *Linter) printCheckResult(header string, result *spec.CheckResult) 
 	if linter.Warnings {
 		toPrint += linter.fmtList(linter.warningStr, result.Warnings)
 	}
-	if len(toPrint) != 0 {
-		fmt.Println(header)
-		fmt.Print(toPrint)
+	if len(toPrint) == 0 {
+		return false
 	}
+	fmt.Println(header)
+	fmt.Print(toPrint)
+	return true
 }
