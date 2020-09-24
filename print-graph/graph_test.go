@@ -1,9 +1,11 @@
-package graph
+package graph_test
 
 import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/square/spincycle/v2/print-graph"
 )
 
 // There's something wrong with the way this graph is output, but L can't recreate
@@ -63,7 +65,7 @@ func validateGraph(edges map[string][]string, expected string, t *testing.T) {
 	for i := 0; i <= len(edges); i++ {
 		vertices[fmt.Sprintf("%d", i)] = true
 	}
-	g := New(vertices, edges)
+	g := graph.New(vertices, edges)
 
 	for _, e := range strings.Split(expected, "\n") {
 		if !g.NextLine() {

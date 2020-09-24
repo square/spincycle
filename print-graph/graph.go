@@ -15,14 +15,14 @@ import (
 //   this function.
 //
 // Example usage:
-// 	g := New(vertices, edges)
-// 	for g.GetNext() {
+// 	g := graph.New(vertices, edges)
+// 	for g.NextLine() {
 // 		line, id := g.GetLine()
 // 	 	idstr := ""
 // 	 	if id != nil {
 // 			idstr = *id
-// 	     }
-// 	     fmt.Printf("%s %s\n", line, id)
+// 	    }
+// 	    fmt.Printf("%s %s\n", line, idstr)
 // 	}
 type graph struct {
 	// The graph we're printing. These are set when we create the graph and
