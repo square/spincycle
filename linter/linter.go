@@ -5,6 +5,7 @@ package linter
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/alexflint/go-arg"
@@ -77,7 +78,11 @@ func Run() bool {
 	}
 	// Check that we did indeed read some specs.
 	if len(allSpecs.Sequences) == 0 {
-		fmt.Fprintf(os.Stderr, "%s\n", color.Red("No specs found in directory"))
+		errMsg := fmt.Sprintf("No specs found in %s", linter.SpecsDir)
+		if absPath, err := filepath.Abs(linter.SpecsDir); err == nil && absPath != linter.SpecsDir {
+			errMsg += " (" + absPath + ")"
+		}
+		fmt.Fprintf(os.Stderr, "%s\n", color.Red(errMsg))
 		return false
 	}
 	// Check that all sequences provided by --sequences arg are actually in
