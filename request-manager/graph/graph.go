@@ -173,23 +173,31 @@ func (g *Graph) PrintDot() {
 
 // hasCycles returns true iff the graph has at least one cycle in it.
 func (g *Graph) hasCycles() bool {
-	seen := map[string]*Node{g.Source.Id: g.Source}
-	return g.hasCyclesHelper(seen, g.Source)
+	inPath := map[string]*Node{g.Source.Id: g.Source}
+	visited := map[string]struct{}{}
+	return g.hasCyclesHelper(inPath, visited, g.Source)
 }
 
 // isConnected returns true iff every node is reachable from the start node, and
 // every path terminates at the end node.
 func (g *Graph) isConnected() bool {
+	lvisited := map[string]struct{}{}
+	fvisited := map[string]struct{}{}
 	// Check forwards connectivity and backwards connectivity
-	return g.connectedToLastNode(g.Source) && g.connectedToFirstNode(g.Sink)
+	return g.connectedToLastNode(g.Source, lvisited) && g.connectedToFirstNode(g.Sink, fvisited)
 }
 
 // connectedToLastNode returns true iff the last node in g is reachable from n.
-func (g *Graph) connectedToLastNode(n *Node) bool {
+// Keeps track of nodes that have already been visited and are known to be
+// connected to the last node.
+func (g *Graph) connectedToLastNode(n *Node, visited map[string]struct{}) bool {
 	if n == nil {
 		return false
 	}
 	if g.Sink.Id == n.Id {
+		return true
+	}
+	if _, ok := visited[n.Id]; ok {
 		return true
 	}
 	if g.Sink.Id != n.Id && len(g.GetNext(n)) == 0 {
@@ -198,20 +206,26 @@ func (g *Graph) connectedToLastNode(n *Node) bool {
 	for _, next := range g.GetNext(n) {
 
 		// Every node after n must also be connected to the last node
-		connected := g.connectedToLastNode(next)
+		connected := g.connectedToLastNode(next, visited)
 		if !connected {
 			return false
 		}
+		visited[n.Id] = struct{}{}
 	}
 	return true
 }
 
 // connectedToFirstNode returns true if n is reachable from the first node in g.
-func (g *Graph) connectedToFirstNode(n *Node) bool {
+// Keeps track of nodes that have already been visited and are known to be
+// connected to the first node.
+func (g *Graph) connectedToFirstNode(n *Node, visited map[string]struct{}) bool {
 	if n == nil {
 		return false
 	}
 	if g.Source.Id == n.Id {
+		return true
+	}
+	if _, ok := visited[n.Id]; ok {
 		return true
 	}
 	if g.Source.Id != n.Id && len(g.GetPrev(n)) == 0 {
@@ -220,10 +234,11 @@ func (g *Graph) connectedToFirstNode(n *Node) bool {
 	for _, prev := range g.GetPrev(n) {
 
 		// Every node before n must also be connected to the first node
-		connected := g.connectedToFirstNode(prev)
+		connected := g.connectedToFirstNode(prev, visited)
 		if !connected {
 			return false
 		}
+		visited[n.Id] = struct{}{}
 	}
 	return true
 }
@@ -250,26 +265,37 @@ func (g *Graph) edgesMatchesRevEdges() bool {
 	return true
 }
 
-// hasCyclesHelper determines if a graph has cycles, using DFS.
-// Precondition: start node is already in seen list.
-func (g *Graph) hasCyclesHelper(seen map[string]*Node, start *Node) bool {
+// Determines if a graph has cycles, using dfs. inPath is a list of nodes
+// that are in the current traversal path. visited is a list of nodes that
+// are guaranteed to not be involved in any cycles.
+// precondition: start node is already in inPath list
+func (g *Graph) hasCyclesHelper(inPath map[string]*Node, visited map[string]struct{}, start *Node) bool {
 	for _, next := range g.GetNext(start) {
+		// If we've already determined the next node is not involved in
+		// any cycles, skip it
+		if _, ok := visited[next.Id]; ok {
+			continue
+		}
 
-		// If the next node has already been seen, return true
-		if _, ok := seen[next.Id]; ok {
+		// If the next node is already in inPath, return true
+		if _, ok := inPath[next.Id]; ok {
 			return true
 		}
 
-		// Add next node to seen list
-		seen[next.Id] = next
+		// Add next node to the inPath list
+		inPath[next.Id] = next
 
 		// Continue searching after next node
-		if g.hasCyclesHelper(seen, next) {
+		if g.hasCyclesHelper(inPath, visited, next) {
 			return true
 		}
 
-		// Remove next node from seen list
-		delete(seen, next.Id)
+		// Remove next node from the inPath list
+		delete(inPath, next.Id)
+
+		// Add the next node to the visited list. At this point, we
+		// are certain that there are no cycles involving the next node.
+		visited[next.Id] = struct{}{}
 	}
 	return false
 }
