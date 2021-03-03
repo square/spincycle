@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/square/spincycle/v2/config"
@@ -183,7 +184,18 @@ func (s *Server) Boot() error {
 	cfg.JRClient.TLS.KeyFile = config.Env("SPINCYCLE_JR_CLIENT_TLS_KEY_FILE", cfg.JRClient.TLS.KeyFile)
 	cfg.JRClient.TLS.CAFile = config.Env("SPINCYCLE_JR_CLIENT_TLS_CA_FILE", cfg.JRClient.TLS.CAFile)
 	s.appCtx.Config = cfg
-	cfgstr, _ := json.MarshalIndent(cfg, "", "  ")
+
+	// Log the config. If a password exists in the MySQL DSN, obfuscate it before logging.
+	logCfg := cfg // Create a copy of cfg since we may mutate it.
+	dsn, err := mysql.ParseDSN(logCfg.MySQL.DSN)
+	if err != nil {
+		return fmt.Errorf("error parsing MySQL DSN: %s", err)
+	}
+	if dsn.Passwd != "" {
+		dsn.Passwd = "*****"
+		logCfg.MySQL.DSN = dsn.FormatDSN()
+	}
+	cfgstr, _ := json.MarshalIndent(logCfg, "", "  ")
 	log.Printf("Config: %s", cfgstr)
 
 	// Load and check requests specification files (specs)
