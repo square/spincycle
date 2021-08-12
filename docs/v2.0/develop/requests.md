@@ -76,6 +76,7 @@ A job node specifies a job to run. (If this was a tree data structure, these wou
             given: cluster
         sets:
           - arg: app   # string
+            as: clusterApp
           - arg: env   # string
           - arg: nodes # []string
         retry: 2
@@ -104,7 +105,7 @@ If a job has optional args, they must be listed so they are passed to the job, i
 
 If `arg == as`, `as:` may be omitted.
 
-In the example above, the job sets "app", "env", and "node" in `jobArgs`. After calling the job's `Create` method, the RM checks that all three are set in `jobArgs` (with any value, including nil). Like `args:`, this is strict but makes it possible to follow every arg through different sequences. It also makes it explicit which jobs set which args.
+In the example above, the job sets "app" (remapped to "clusterApp" by the RM), "env", and "node" in `jobArgs`. After calling the job's `Create` method, the RM checks that all three are set in `jobArgs` (with any value, including nil). Like `args:`, this is strict but makes it possible to follow every arg through different sequences. It also makes it explicit which jobs set which args.
 
 `retry:` and `retryWait:` specify how many times the JR should retry the job if `Run` does not return `proto.STATE_COMPLETE`. The job is always ran once, so total runs is 1 + `retry`. `retryWait` is the wait time between tries. It is a [time.Duration string](https://golang.org/pkg/time/#ParseDuration) like "3s" or "500ms". If not specified, the default is no wait between tries.
 
@@ -135,14 +136,17 @@ All node specs begin with a node name: "notify-app-owners", in this case. `categ
             given: app
           - expected: env
             given: env
+        sets:
+          - arg: messageSent
+            as: message
         deps: [expand-cluster]
         retry: 9
         retryWait: 5000ms
 ```
 
-When the RM encounters this sequence node, it looks for a sequence called "notify-app-owners". (We would put that sequence in a file named notify-app-owners.yaml.) It replaces the sequence node with all the nodes in the target sequence. Since sequences can have required args, the sequence node must specify the `args:` to pass to the sequence (as if the sequence was a request). The same rules about `args:`, `exepected:`, and `given:` apply. The only difference is that the job args are passed to a sequence instead of a job.
+When the RM encounters this sequence node, it looks for a sequence called "notify-app-owners". (We would put that sequence in a file named notify-app-owners.yaml.) It replaces the sequence node with all the nodes in the target sequence. Since sequences can have required args, the sequence node must specify the `args:` to pass to the sequence (as if the sequence was a request). The same rules about `args:`, `expected:`, and `given:` apply. The only difference is that the job args are passed to a sequence instead of a job.
 
-Sequences cannot set job args, so `set:` can be omitted.
+`sets:` also applies to sequences - it specifies the job args that the jobs within the sequence set. In this example, the "notify-app-owners" sequence sets the job "messageSent", which is renamed to "message" for use in this spec. One of the jobs within the "notify-app-owners" sequence must therefore set the arg "messageSent".
 
 The same rules about `deps:` apply (described above). In this example, the "notify-app-owners" sequence is not called until the "expand-cluster" node is complete and successful. Likewise, if another node `deps: [notify-app-owners]`, it is not called until the entire sequence is complete and successful. The sequence node, at this point in the spec, acts like a single node&mdash;it just happens to contain/run other nodes and sequences.
 
@@ -176,6 +180,8 @@ In the example above, if `jobArgs["vitess"] == "yes"`, then sequence "restart-vt
 All values and comparison are expected to be strings. The `if:` job arg must be set with a string value, and the values listed under `eq:` are string values, except "default" which is a special case.
 
 Conditional nodes can be used to switch between alternatives or, like the example above, do nothing in one part of a spec (but do everything else before and after).
+
+Conditional nodes can also set job args using `sets:`, just as in job or sequence nodes. In order for a conditional node to set an arg, every sequence that the conditional may call must set that arg.
 
 ## Sequence Expansion
 
