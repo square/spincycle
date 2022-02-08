@@ -354,6 +354,14 @@ func (r *SuspendedChainReaper) Reap(job proto.Job) {
 		if r.chain.CanRetrySequence(job.Id) {
 			r.prepareSequenceRetry(job)
 		}
+	case proto.STATE_UNKNOWN:
+		jLogger.Warn("job state unknown")
+		// Treat an unknown state as a failure for the purpose of retrying.
+		// Prepare for sequence retry but don't actually start the retry.
+		// This gets the chain ready to be resumed later on.
+		if r.chain.CanRetrySequence(job.Id) {
+			r.prepareSequenceRetry(job)
+		}
 	case proto.STATE_COMPLETE:
 		jLogger.Infof("job completed")
 		r.chain.IncrementFinishedJobs(1)
