@@ -2,7 +2,7 @@ name: Go
 
 on:
   push:
-    branches: [ master ]
+    branches: [ felixp-github-actions-build  ]
   pull_request:
     branches: [ master ]
 
@@ -10,7 +10,13 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    env:
+      SPINCYCLE_TEST_MYSQL_DSN: root:root@tcp(localhost:3306)/request_manager_test?parseTime=true
     steps:
+    - name: Start MySQL
+      run: |
+        sudo /etc/init.d/mysql start
+
     - uses: actions/checkout@v2
 
     - name: Set up Go

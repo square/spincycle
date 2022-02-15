@@ -3,6 +3,7 @@
 package test
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,6 +24,7 @@ func init() {
 	SchemaFile, _ = filepath.Abs("../resources/request_manager_schema.sql")
 
 	MySQLDSN = os.Getenv("SPINCYCLE_TEST_MYSQL_DSN")
+	fmt.Printf("got env dsn: %s\n", MySQLDSN)
 	if MySQLDSN == "" {
 		MySQLDSN = "root:@tcp(localhost:3306)/request_manager_test?parseTime=true"
 	}
