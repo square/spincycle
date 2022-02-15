@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/square/spincycle/v2/proto"
@@ -188,16 +189,38 @@ func (c *Start) Run() error {
 	}
 
 	fmt.Printf("OK, started %s request %s\n\n"+
-		"  spinc status %s\n\n", c.reqName, reqId, reqId)
+		"  spinc status %s%s\n\n", c.reqName, reqId, c.userOptionsString(), reqId)
 
 	return nil
+}
+
+func (c *Start) userOptionsString() string {
+	var userOptions string
+
+	// Add critical options to the output if set
+	if c.ctx.UserOptions.Env != "" {
+		userOptions = "--env " + escapeArg(c.ctx.Options.Env) + " "
+	}
+
+	if c.ctx.UserOptions.Addr != "" {
+		userOptions += "--addr " + escapeArg(c.ctx.Options.Addr) + " "
+	}
+
+	if c.ctx.UserOptions.Config != "" {
+		userOptions += "--config " + escapeArg(c.ctx.Options.Config) + " "
+	}
+
+	return userOptions
 }
 
 func (c *Start) Cmd() string {
 	if c.fullCmd != "" {
 		return c.fullCmd
 	}
-	fullCmd := "start " + c.reqName
+
+	fullCmd := c.userOptionsString()
+
+	fullCmd += "start " + c.reqName
 	args := map[string]interface{}{}
 	for _, i := range c.requiredArgs {
 		fullCmd += " " + i.Name + "=" + QuoteArgValue(i.Value)
@@ -219,4 +242,13 @@ func (c *Start) Cmd() string {
 func (c *Start) Help() string {
 	return "'spinc start <request> [args]' starts a new request.\n" +
 		"Request args can be provided, else spinc prompts for them. Run 'spinc help <request>' to list the request args.\n"
+}
+
+// Escapes strings with whitespace using double quotes
+func escapeArg(str string) string {
+	if ok, _ := regexp.Match(`.*\s.*`, []byte(str)); ok {
+		return "\"" + str + "\""
+	} else {
+		return str
+	}
 }

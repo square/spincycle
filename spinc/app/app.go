@@ -30,10 +30,11 @@ type Context struct {
 	Factories Factories // for integration with other code
 
 	// Set automatically in spinc.Run()
-	Options  config.Options // command line options (--addr, etc.)
-	Command  config.Command // command and args, if any ("start <request>", etc.)
-	RMClient rm.Client      // Request Manager client
-	Nargs    int            // number of positional args including command
+	Options     config.Options // command line options (--addr, etc.)
+	Command     config.Command // command and args, if any ("start <request>", etc.)
+	UserOptions config.Options // command line options explictly set by the user
+	RMClient    rm.Client      // Request Manager client
+	Nargs       int            // number of positional args including command
 }
 
 type Command interface {

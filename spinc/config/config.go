@@ -22,6 +22,22 @@ const (
 	DEFAULT_TIMEOUT      = 5000 // 5s
 )
 
+// An Options record for pulling the originally set user arguments
+type UserOptions struct {
+	Addr    *string
+	Config  *string
+	Debug   *bool
+	Env     *string
+	Help    *bool
+	Timeout *uint
+	Version *bool
+}
+
+type UserCommandLine struct {
+	UserOptions
+	Command
+}
+
 // Options represents typical command line options: --addr, --config, etc.
 type Options struct {
 	Addr    string `arg:"env:SPINC_ADDR" yaml:"addr"`
@@ -50,6 +66,64 @@ type Command struct {
 type CommandLine struct {
 	Options
 	Command
+}
+
+// Parses the Options explictly set on the command line by the user.
+// Used for allowing reporting on command line needed to re-run a command
+func ParseUserOptions(def UserOptions) UserOptions {
+	var c UserCommandLine
+	c.UserOptions = def
+	p, err := arg.NewParser(arg.Config{Program: "spinc"}, &c)
+	if err != nil {
+		fmt.Printf("arg.NewParser: %s", err)
+		os.Exit(1)
+	}
+	if err := p.Parse(os.Args[1:]); err != nil {
+		switch err {
+		case arg.ErrHelp:
+			*c.Help = true
+		case arg.ErrVersion:
+			*c.Version = true
+		default:
+			fmt.Printf("Error parsing command line: %s\n", err)
+			os.Exit(1)
+		}
+	}
+	return c.UserOptions
+}
+
+func (u *UserOptions) ToOptions() Options {
+	var o Options
+
+	if u.Addr != nil {
+		o.Addr = *u.Addr
+	}
+
+	if u.Config != nil {
+		o.Config = *u.Config
+	}
+
+	if u.Debug != nil {
+		o.Debug = *u.Debug
+	}
+
+	if u.Env != nil {
+		o.Env = *u.Env
+	}
+
+	if u.Help != nil {
+		o.Help = *u.Help
+	}
+
+	if u.Timeout != nil {
+		o.Timeout = *u.Timeout
+	}
+
+	if u.Version != nil {
+		o.Version = *u.Version
+	}
+
+	return o
 }
 
 // ParseCommandLine parses the command line and env vars. Command line options

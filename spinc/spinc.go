@@ -28,6 +28,9 @@ func Run(ctx app.Context) error {
 	// So first we must apply config files, then do cmd line parsing which
 	// will apply env vars and cmd line options.
 
+	// Parse the cmd line to get the options explicitly set by the user
+	userOptions := config.ParseUserOptions(config.UserOptions{})
+
 	// Parse cmd line to get --config files
 	cmdLine := config.ParseCommandLine(config.Options{})
 
@@ -84,6 +87,10 @@ func Run(ctx app.Context) error {
 
 	ctx.Options = o
 	ctx.Command = c
+
+	// Update the user options after the hooks are processed
+	ctx.UserOptions = userOptions.ToOptions()
+
 	if o.Debug {
 		app.Debug("command: %#v\n", c)
 		app.Debug("options: %#v\n", o)
