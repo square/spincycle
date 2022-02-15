@@ -322,6 +322,33 @@ func TestIsDoneFailAndPending(t *testing.T) {
 	}
 }
 
+func TestIsDoneUnknownAndPending(t *testing.T) {
+	// A chain is not done (and not complete) if any job is pending and runnable
+	jc := &proto.JobChain{
+		Jobs: testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+		},
+	}
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+	c.IncrementSequenceTries("job1", 1)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_COMPLETE)
+	c.SetJobState("job3", proto.STATE_UNKNOWN)
+	// ^ Job 4 is pending and runnable because job2 is complete
+	// The job3 "unknown" doesn't matter because, currently, we don't fail the chain
+	// immediately when a job fails
+
+	expectedDone := false
+	expectedComplete := false
+	done, complete := c.IsDoneRunning()
+
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
+	}
+}
+
 func TestIsDoneFailNoSeqRetry(t *testing.T) {
 	// A chain is done (and not complete) if any job is failed and can't retry seq
 	jc := &proto.JobChain{
@@ -336,6 +363,32 @@ func TestIsDoneFailNoSeqRetry(t *testing.T) {
 	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_FAIL) // can't retry seq
+	c.SetJobState("job3", proto.STATE_COMPLETE)
+	c.SetJobState("job4", proto.STATE_PENDING)
+
+	expectedDone := true
+	expectedComplete := false
+	done, complete := c.IsDoneRunning()
+
+	if done != expectedDone || complete != expectedComplete {
+		t.Errorf("done = %t, complete = %t, want %t and %t", done, complete, expectedDone, expectedComplete)
+	}
+}
+
+func TestIsDoneUnknownNoSeqRetry(t *testing.T) {
+	// A chain is done (and not complete) if any job is failed and can't retry seq
+	jc := &proto.JobChain{
+		Jobs: testutil.InitJobs(4),
+		AdjacencyList: map[string][]string{
+			"job1": {"job2", "job3"},
+			"job2": {"job4"},
+		},
+		FinishedJobs: 2,
+	}
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+	c.IncrementSequenceTries("job1", 1)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_UNKNOWN) // can't retry seq
 	c.SetJobState("job3", proto.STATE_COMPLETE)
 	c.SetJobState("job4", proto.STATE_PENDING)
 
@@ -714,6 +767,58 @@ func TestIsDoneRetryableSequenceTrue(t *testing.T) {
 	c.IncrementSequenceTries("job1", 1)
 	c.SetJobState("job1", proto.STATE_COMPLETE)
 	c.SetJobState("job2", proto.STATE_FAIL)
+
+	// Simulate exhausting sequence retries
+	failedJobId := "job2"
+	c.IncrementSequenceTries(failedJobId, 2)
+
+	expectDone := true
+	expectComplete := false
+	actualDone, actualComplete := c.IsDoneRunning()
+
+	if actualDone != expectDone || actualComplete != expectComplete {
+		t.Errorf("done = %v, expected %v. complete = %v, expected %v.", actualDone, expectDone, actualComplete, expectComplete)
+	}
+}
+
+func TestIsDoneRetryableSequenceFalseUnknown(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+	c.IncrementSequenceTries("job1", 1)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_UNKNOWN)
+
+	expectDone := false
+	expectComplete := false
+	actualDone, actualComplete := c.IsDoneRunning()
+
+	if actualDone != expectDone || actualComplete != expectComplete {
+		t.Errorf("done = %v, expected %v. complete = %v, expected %v.", actualDone, expectDone, actualComplete, expectComplete)
+	}
+}
+
+func TestIsDoneRetryableSequenceTrueUnknown(t *testing.T) {
+	jobs := testutil.InitJobsWithSequenceRetry(4, 2)
+	jc := &proto.JobChain{
+		Jobs: jobs,
+		AdjacencyList: map[string][]string{
+			"job1": {"job2"},
+			"job2": {"job3"},
+			"job3": {"job4"},
+		},
+	}
+	c := NewChain(jc, make(map[string]uint), make(map[string]uint), make(map[string]uint))
+	c.IncrementSequenceTries("job1", 1)
+	c.SetJobState("job1", proto.STATE_COMPLETE)
+	c.SetJobState("job2", proto.STATE_UNKNOWN)
 
 	// Simulate exhausting sequence retries
 	failedJobId := "job2"

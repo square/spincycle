@@ -124,7 +124,7 @@ func (c *Chain) IsDoneRunning() (done bool, complete bool) {
 			}
 			// This job is pending but not runnable which means a previous job
 			// failed.
-		case proto.STATE_FAIL:
+		case proto.STATE_FAIL, proto.STATE_UNKNOWN:
 			// If sequence can retry, then chain isn't done or complete,
 			if c.canRetrySequence(job.Id) {
 				return false, false
@@ -150,7 +150,7 @@ func (c *Chain) FailedJobs() uint {
 	defer c.jobsMux.RUnlock()
 	n := uint(0)
 	for _, job := range c.jobChain.Jobs {
-		if job.State == proto.STATE_FAIL {
+		if job.State == proto.STATE_FAIL || job.State == proto.STATE_UNKNOWN {
 			n++
 		}
 	}
