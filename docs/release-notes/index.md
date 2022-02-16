@@ -9,6 +9,18 @@ permalink: /release-notes
 
 ## v2.0
 
+### v2.0.6 (released 2022-02-16)
+
+* JR now handles jobs that end in an `UNKNOWN` state without a panic.
+
+* `spinc` reports the user-specified options when printing the commands to re-run the request or get the status. Only includes options that were explicitly set by the user on the command line.
+
+### v2.0.5 (released 2020-11-19)
+
+* Minor adjustments to the linter.
+
+* Improved performance when creating graphs from requests.
+
 ### v2.0.4 (released 2020-09-23)
 
 * RM now [supports subdirectories](/spincycle/v2.0/develop/requests) for [specs.dir](/spincycle/v2.0/operate/configure#rm.specs.dir).
