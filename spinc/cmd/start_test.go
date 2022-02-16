@@ -83,3 +83,96 @@ func TestStartTestRequest(t *testing.T) {
 		t.Errorf("got cmd '%s', expected '%s'", gotCmd, expectCmd)
 	}
 }
+
+func TestStartTestRequestWithOptions(t *testing.T) {
+	specs := []proto.RequestSpec{
+		{
+			Name: "test",
+			Args: []proto.RequestArg{
+				{
+					Name: "foo",
+					Desc: "foo is required",
+					Type: proto.ARG_TYPE_REQUIRED,
+				},
+				{
+					Name:    "bar",
+					Desc:    "bar is optional",
+					Default: "brr",
+					Type:    proto.ARG_TYPE_OPTIONAL,
+				},
+			},
+		},
+	}
+	ctx := app.Context{
+		Out: &bytes.Buffer{},
+		RMClient: &mock.RMClient{
+			RequestListFunc: func() ([]proto.RequestSpec, error) {
+				return specs, nil
+			},
+		},
+		Options:     config.Options{Debug: true, Env: "staging", Addr: "someaddr", Config: "/config/path"},
+		UserOptions: config.Options{Env: "staging", Addr: "someaddr", Config: "/config/path"},
+		Command: config.Command{
+			Cmd:  "start",
+			Args: []string{"test", "foo=val"},
+		},
+	}
+	start := cmd.NewStart(ctx)
+	err := start.Prepare()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectCmd := "--env staging --addr someaddr --config /config/path start test foo=val"
+	gotCmd := start.Cmd()
+	if expectCmd != gotCmd {
+		t.Errorf("got cmd '%s', expected '%s'", gotCmd, expectCmd)
+	}
+}
+
+func TestStartTestRequestWithOptionsHavingSpaces(t *testing.T) {
+	specs := []proto.RequestSpec{
+		{
+			Name: "test",
+			Args: []proto.RequestArg{
+				{
+					Name: "foo",
+					Desc: "foo is required",
+					Type: proto.ARG_TYPE_REQUIRED,
+				},
+				{
+					Name:    "bar",
+					Desc:    "bar is optional",
+					Default: "brr",
+					Type:    proto.ARG_TYPE_OPTIONAL,
+				},
+			},
+		},
+	}
+	ctx := app.Context{
+		Out: &bytes.Buffer{},
+		RMClient: &mock.RMClient{
+			RequestListFunc: func() ([]proto.RequestSpec, error) {
+				return specs, nil
+			},
+		},
+		Options:     config.Options{Debug: true, Env: "staging", Addr: "someaddr", Config: "/config/path with spaces"},
+		UserOptions: config.Options{Debug: true, Env: "staging", Addr: "someaddr", Config: "/config/path with spaces"},
+		Command: config.Command{
+			Cmd:  "start",
+			Args: []string{"test", "foo=val"},
+		},
+	}
+	start := cmd.NewStart(ctx)
+	err := start.Prepare()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Spaces in strings should result in quotes
+	expectCmd := "--env staging --addr someaddr --config \"/config/path with spaces\" start test foo=val"
+	gotCmd := start.Cmd()
+	if expectCmd != gotCmd {
+		t.Errorf("got cmd '%s', expected '%s'", gotCmd, expectCmd)
+	}
+}
