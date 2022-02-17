@@ -78,11 +78,14 @@ func ParseUserOptions(def UserOptions) UserOptions {
 		fmt.Printf("arg.NewParser: %s", err)
 		os.Exit(1)
 	}
+
 	if err := p.Parse(os.Args[1:]); err != nil {
 		switch err {
 		case arg.ErrHelp:
+			c.Help = new(bool)
 			*c.Help = true
 		case arg.ErrVersion:
+			c.Version = new(bool)
 			*c.Version = true
 		default:
 			fmt.Printf("Error parsing command line: %s\n", err)
