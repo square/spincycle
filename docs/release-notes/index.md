@@ -9,6 +9,10 @@ permalink: /release-notes
 
 ## v2.0
 
+### v2.0.7 (released 2022-02-17)
+
+* Fixed panic on `--help` and `--verison` introduced in v2.0.6
+
 ### v2.0.6 (released 2022-02-16)
 
 * JR now handles jobs that end in an `UNKNOWN` state without a panic.
