@@ -24,3 +24,17 @@ func TestArgsNoCommand(t *testing.T) {
 		t.Errorf("got error '%v', expected ErrHelp", err)
 	}
 }
+
+func TestArgsHelpCommand(t *testing.T) {
+	ctx := app.Context{
+		In:        os.Stdin,
+		Out:       &bytes.Buffer{},
+		Hooks:     app.Hooks{},
+		Factories: app.Factories{},
+	}
+	os.Args = []string{"spinc", "--help"}
+	err := spinc.Run(ctx)
+	if err != app.ErrHelp {
+		t.Errorf("got error '%v', expected ErrHelp", err)
+	}
+}
