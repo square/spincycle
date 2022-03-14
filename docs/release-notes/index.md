@@ -9,6 +9,10 @@ permalink: /release-notes
 
 ## v2.0
 
+### v2.0.8 (released 2022-03-14)
+
+* Fix exit code in SQL schema to be a signed bigint to match the int64 from Go code.
+
 ### v2.0.7 (released 2022-02-17)
 
 * Fixed panic on `--help` and `--verison` introduced in v2.0.6
