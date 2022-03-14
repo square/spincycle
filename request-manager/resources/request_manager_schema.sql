@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS `job_log` (
   `started_at`    BIGINT UNSIGNED  NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
   `finished_at`   BIGINT UNSIGNED  NOT NULL DEFAULT 0, -- Unix time (nanoseconds)
   `error`         TEXT                 NULL DEFAULT NULL,
-  `exit`          TINYINT UNSIGNED     NULL DEFAULT NULL,
+  `exit`          BIGINT               NULL DEFAULT NULL,
   `stdout`        LONGBLOB             NULL DEFAULT NULL,
   `stderr`        LONGBLOB             NULL DEFAULT NULL,
 
