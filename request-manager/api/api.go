@@ -247,7 +247,7 @@ func (api *API) findRequestsHandler(c echo.Context) error {
 		var err error
 		filter.Since, err = time.Parse(time.RFC3339Nano, since)
 		if err != nil {
-			errMsg := fmt.Sprintf("invalid 'since' parameter: %q cannot be parsed to time.Time using RFC3339Nano format: %w", since, err)
+			errMsg := fmt.Sprintf("invalid 'since' parameter: %q cannot be parsed to time.Time using RFC3339Nano format: %s", since, err)
 			return handleError(serr.ValidationError{Message: errMsg}, c)
 		}
 	}
@@ -255,14 +255,14 @@ func (api *API) findRequestsHandler(c echo.Context) error {
 		var err error
 		filter.Until, err = time.Parse(time.RFC3339Nano, until)
 		if err != nil {
-			errMsg := fmt.Sprintf("invalid 'until' parameter: %q cannot be parsed to time.Time using RFC3339Nano format: %w", until, err)
+			errMsg := fmt.Sprintf("invalid 'until' parameter: %q cannot be parsed to time.Time using RFC3339Nano format: %s", until, err)
 			return handleError(serr.ValidationError{Message: errMsg}, c)
 		}
 	}
 	if limit := c.QueryParam("limit"); limit != "" {
 		limitInt, err := strconv.ParseUint(limit, 10, 0)
 		if err != nil {
-			errMsg := fmt.Sprintf("invalid 'limit' parameter: %q cannot be parsed to uint: %w", limit, err)
+			errMsg := fmt.Sprintf("invalid 'limit' parameter: %q cannot be parsed to uint: %s", limit, err)
 			return handleError(serr.ValidationError{Message: errMsg}, c)
 		}
 		filter.Limit = uint(limitInt)
@@ -270,7 +270,7 @@ func (api *API) findRequestsHandler(c echo.Context) error {
 		if offset := c.QueryParam("offset"); offset != "" {
 			offsetInt, err := strconv.ParseUint(offset, 10, 0)
 			if err != nil {
-				errMsg := fmt.Sprintf("invalid 'offset' parameter: %q cannot be parsed to uint: %w", offset, err)
+				errMsg := fmt.Sprintf("invalid 'offset' parameter: %q cannot be parsed to uint: %s", offset, err)
 				return handleError(serr.ValidationError{Message: errMsg}, c)
 			}
 			filter.Offset = uint(offsetInt)
