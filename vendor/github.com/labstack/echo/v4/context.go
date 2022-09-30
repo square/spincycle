@@ -2,7 +2,6 @@ package echo
 
 import (
 	"bytes"
-	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -10,8 +9,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -43,6 +40,7 @@ type (
 
 		// RealIP returns the client's network address based on `X-Forwarded-For`
 		// or `X-Real-IP` request header.
+		// The behavior can be configured using `Echo#IPExtractor`.
 		RealIP() string
 
 		// Path returns the registered path for the handler.
@@ -211,6 +209,13 @@ type (
 )
 
 const (
+	// ContextKeyHeaderAllow is set by Router for getting value for `Allow` header in later stages of handler call chain.
+	// Allow header is mandatory for status 405 (method not found) and useful for OPTIONS method requests.
+	// It is added to context only when Router does not find matching method handler for request.
+	ContextKeyHeaderAllow = "echo_header_allow"
+)
+
+const (
 	defaultMemory = 32 << 20 // 32 MB
 	indexPage     = "index.html"
 	defaultIndent = "  "
@@ -245,7 +250,7 @@ func (c *context) IsTLS() bool {
 
 func (c *context) IsWebSocket() bool {
 	upgrade := c.request.Header.Get(HeaderUpgrade)
-	return strings.ToLower(upgrade) == "websocket"
+	return strings.EqualFold(upgrade, "websocket")
 }
 
 func (c *context) Scheme() string {
@@ -270,8 +275,16 @@ func (c *context) Scheme() string {
 }
 
 func (c *context) RealIP() string {
+	if c.echo != nil && c.echo.IPExtractor != nil {
+		return c.echo.IPExtractor(c.request)
+	}
+	// Fall back to legacy behavior
 	if ip := c.request.Header.Get(HeaderXForwardedFor); ip != "" {
-		return strings.Split(ip, ", ")[0]
+		i := strings.IndexAny(ip, ",")
+		if i > 0 {
+			return strings.TrimSpace(ip[:i])
+		}
+		return ip
 	}
 	if ip := c.request.Header.Get(HeaderXRealIP); ip != "" {
 		return ip
@@ -305,6 +318,19 @@ func (c *context) ParamNames() []string {
 
 func (c *context) SetParamNames(names ...string) {
 	c.pnames = names
+
+	l := len(names)
+	if *c.echo.maxParam < l {
+		*c.echo.maxParam = l
+	}
+
+	if len(c.pvalues) < l {
+		// Keeping the old pvalues just for backward compatibility, but it sounds that doesn't make sense to keep them,
+		// probably those values will be overriden in a Context#SetParamValues
+		newPvalues := make([]string, l)
+		copy(newPvalues, c.pvalues)
+		c.pvalues = newPvalues
+	}
 }
 
 func (c *context) ParamValues() []string {
@@ -312,7 +338,15 @@ func (c *context) ParamValues() []string {
 }
 
 func (c *context) SetParamValues(values ...string) {
-	c.pvalues = values
+	// NOTE: Don't just set c.pvalues = values, because it has to have length c.echo.maxParam at all times
+	// It will brake the Router#Find code
+	limit := len(values)
+	if limit > *c.echo.maxParam {
+		limit = *c.echo.maxParam
+	}
+	for i := 0; i < limit; i++ {
+		c.pvalues[i] = values[i]
+	}
 }
 
 func (c *context) QueryParam(name string) string {
@@ -352,8 +386,11 @@ func (c *context) FormParams() (url.Values, error) {
 
 func (c *context) FormFile(name string) (*multipart.FileHeader, error) {
 	f, fh, err := c.request.FormFile(name)
-	defer f.Close()
-	return fh, err
+	if err != nil {
+		return nil, err
+	}
+	f.Close()
+	return fh, nil
 }
 
 func (c *context) MultipartForm() (*multipart.Form, error) {
@@ -424,17 +461,16 @@ func (c *context) String(code int, s string) (err error) {
 }
 
 func (c *context) jsonPBlob(code int, callback string, i interface{}) (err error) {
-	enc := json.NewEncoder(c.response)
-	_, pretty := c.QueryParams()["pretty"]
-	if c.echo.Debug || pretty {
-		enc.SetIndent("", "  ")
+	indent := ""
+	if _, pretty := c.QueryParams()["pretty"]; c.echo.Debug || pretty {
+		indent = defaultIndent
 	}
 	c.writeContentType(MIMEApplicationJavaScriptCharsetUTF8)
 	c.response.WriteHeader(code)
 	if _, err = c.response.Write([]byte(callback + "(")); err != nil {
 		return
 	}
-	if err = enc.Encode(i); err != nil {
+	if err = c.echo.JSONSerializer.Serialize(c, i, indent); err != nil {
 		return
 	}
 	if _, err = c.response.Write([]byte(");")); err != nil {
@@ -444,13 +480,9 @@ func (c *context) jsonPBlob(code int, callback string, i interface{}) (err error
 }
 
 func (c *context) json(code int, i interface{}, indent string) error {
-	enc := json.NewEncoder(c.response)
-	if indent != "" {
-		enc.SetIndent("", indent)
-	}
 	c.writeContentType(MIMEApplicationJSONCharsetUTF8)
 	c.response.Status = code
-	return enc.Encode(i)
+	return c.echo.JSONSerializer.Serialize(c, i, indent)
 }
 
 func (c *context) JSON(code int, i interface{}) (err error) {
@@ -532,29 +564,6 @@ func (c *context) Stream(code int, contentType string, r io.Reader) (err error) 
 	c.writeContentType(contentType)
 	c.response.WriteHeader(code)
 	_, err = io.Copy(c.response, r)
-	return
-}
-
-func (c *context) File(file string) (err error) {
-	f, err := os.Open(file)
-	if err != nil {
-		return NotFoundHandler(c)
-	}
-	defer f.Close()
-
-	fi, _ := f.Stat()
-	if fi.IsDir() {
-		file = filepath.Join(file, indexPage)
-		f, err = os.Open(file)
-		if err != nil {
-			return NotFoundHandler(c)
-		}
-		defer f.Close()
-		if fi, err = f.Stat(); err != nil {
-			return
-		}
-	}
-	http.ServeContent(c.Response(), c.Request(), fi.Name(), fi.ModTime(), f)
 	return
 }
 

@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -18,9 +19,18 @@ type (
 		// Optional. Default value []string{"*"}.
 		AllowOrigins []string `yaml:"allow_origins"`
 
+		// AllowOriginFunc is a custom function to validate the origin. It takes the
+		// origin as an argument and returns true if allowed or false otherwise. If
+		// an error is returned, it is returned by the handler. If this option is
+		// set, AllowOrigins is ignored.
+		// Optional.
+		AllowOriginFunc func(origin string) (bool, error) `yaml:"allow_origin_func"`
+
 		// AllowMethods defines a list methods allowed when accessing the resource.
 		// This is used in response to a preflight request.
 		// Optional. Default value DefaultCORSConfig.AllowMethods.
+		// If `allowMethods` is left empty will fill for preflight request `Access-Control-Allow-Methods` header value
+		// from `Allow` header that echo.Router set into context.
 		AllowMethods []string `yaml:"allow_methods"`
 
 		// AllowHeaders defines a list of request headers that can be used when
@@ -33,6 +43,8 @@ type (
 		// a response to a preflight request, this indicates whether or not the
 		// actual request can be made using credentials.
 		// Optional. Default value false.
+		// Security: avoid using `AllowCredentials = true` with `AllowOrigins = *`.
+		// See http://blog.portswigger.net/2016/10/exploiting-cors-misconfigurations-for.html
 		AllowCredentials bool `yaml:"allow_credentials"`
 
 		// ExposeHeaders defines a whitelist headers that clients are allowed to
@@ -72,8 +84,19 @@ func CORSWithConfig(config CORSConfig) echo.MiddlewareFunc {
 	if len(config.AllowOrigins) == 0 {
 		config.AllowOrigins = DefaultCORSConfig.AllowOrigins
 	}
+	hasCustomAllowMethods := true
 	if len(config.AllowMethods) == 0 {
+		hasCustomAllowMethods = false
 		config.AllowMethods = DefaultCORSConfig.AllowMethods
+	}
+
+	allowOriginPatterns := []string{}
+	for _, origin := range config.AllowOrigins {
+		pattern := regexp.QuoteMeta(origin)
+		pattern = strings.Replace(pattern, "\\*", ".*", -1)
+		pattern = strings.Replace(pattern, "\\?", ".", -1)
+		pattern = "^" + pattern + "$"
+		allowOriginPatterns = append(allowOriginPatterns, pattern)
 	}
 
 	allowMethods := strings.Join(config.AllowMethods, ",")
@@ -92,29 +115,92 @@ func CORSWithConfig(config CORSConfig) echo.MiddlewareFunc {
 			origin := req.Header.Get(echo.HeaderOrigin)
 			allowOrigin := ""
 
-			// Check allowed origins
-			for _, o := range config.AllowOrigins {
-				if o == "*" && config.AllowCredentials {
-					allowOrigin = origin
-					break
-				}
-				if o == "*" || o == origin {
-					allowOrigin = o
-					break
-				}
-				if matchSubdomain(origin, o) {
-					allowOrigin = origin
-					break
+			res.Header().Add(echo.HeaderVary, echo.HeaderOrigin)
+
+			// Preflight request is an OPTIONS request, using three HTTP request headers: Access-Control-Request-Method,
+			// Access-Control-Request-Headers, and the Origin header. See: https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request
+			// For simplicity we just consider method type and later `Origin` header.
+			preflight := req.Method == http.MethodOptions
+
+			// Although router adds special handler in case of OPTIONS method we avoid calling next for OPTIONS in this middleware
+			// as CORS requests do not have cookies / authentication headers by default, so we could get stuck in auth
+			// middlewares by calling next(c).
+			// But we still want to send `Allow` header as response in case of Non-CORS OPTIONS request as router default
+			// handler does.
+			routerAllowMethods := ""
+			if preflight {
+				tmpAllowMethods, ok := c.Get(echo.ContextKeyHeaderAllow).(string)
+				if ok && tmpAllowMethods != "" {
+					routerAllowMethods = tmpAllowMethods
+					c.Response().Header().Set(echo.HeaderAllow, routerAllowMethods)
 				}
 			}
 
-			// Simple request
-			if req.Method != http.MethodOptions {
-				res.Header().Add(echo.HeaderVary, echo.HeaderOrigin)
-				res.Header().Set(echo.HeaderAccessControlAllowOrigin, allowOrigin)
-				if config.AllowCredentials {
-					res.Header().Set(echo.HeaderAccessControlAllowCredentials, "true")
+			// No Origin provided. This is (probably) not request from actual browser - proceed executing middleware chain
+			if origin == "" {
+				if !preflight {
+					return next(c)
 				}
+				return c.NoContent(http.StatusNoContent)
+			}
+
+			if config.AllowOriginFunc != nil {
+				allowed, err := config.AllowOriginFunc(origin)
+				if err != nil {
+					return err
+				}
+				if allowed {
+					allowOrigin = origin
+				}
+			} else {
+				// Check allowed origins
+				for _, o := range config.AllowOrigins {
+					if o == "*" && config.AllowCredentials {
+						allowOrigin = origin
+						break
+					}
+					if o == "*" || o == origin {
+						allowOrigin = o
+						break
+					}
+					if matchSubdomain(origin, o) {
+						allowOrigin = origin
+						break
+					}
+				}
+
+				checkPatterns := false
+				if allowOrigin == "" {
+					// to avoid regex cost by invalid (long) domains (253 is domain name max limit)
+					if len(origin) <= (253+3+5) && strings.Contains(origin, "://") {
+						checkPatterns = true
+					}
+				}
+				if checkPatterns {
+					for _, re := range allowOriginPatterns {
+						if match, _ := regexp.MatchString(re, origin); match {
+							allowOrigin = origin
+							break
+						}
+					}
+				}
+			}
+
+			// Origin not allowed
+			if allowOrigin == "" {
+				if !preflight {
+					return next(c)
+				}
+				return c.NoContent(http.StatusNoContent)
+			}
+
+			res.Header().Set(echo.HeaderAccessControlAllowOrigin, allowOrigin)
+			if config.AllowCredentials {
+				res.Header().Set(echo.HeaderAccessControlAllowCredentials, "true")
+			}
+
+			// Simple request
+			if !preflight {
 				if exposeHeaders != "" {
 					res.Header().Set(echo.HeaderAccessControlExposeHeaders, exposeHeaders)
 				}
@@ -122,14 +208,15 @@ func CORSWithConfig(config CORSConfig) echo.MiddlewareFunc {
 			}
 
 			// Preflight request
-			res.Header().Add(echo.HeaderVary, echo.HeaderOrigin)
 			res.Header().Add(echo.HeaderVary, echo.HeaderAccessControlRequestMethod)
 			res.Header().Add(echo.HeaderVary, echo.HeaderAccessControlRequestHeaders)
-			res.Header().Set(echo.HeaderAccessControlAllowOrigin, allowOrigin)
-			res.Header().Set(echo.HeaderAccessControlAllowMethods, allowMethods)
-			if config.AllowCredentials {
-				res.Header().Set(echo.HeaderAccessControlAllowCredentials, "true")
+
+			if !hasCustomAllowMethods && routerAllowMethods != "" {
+				res.Header().Set(echo.HeaderAccessControlAllowMethods, routerAllowMethods)
+			} else {
+				res.Header().Set(echo.HeaderAccessControlAllowMethods, allowMethods)
 			}
+
 			if allowHeaders != "" {
 				res.Header().Set(echo.HeaderAccessControlAllowHeaders, allowHeaders)
 			} else {
