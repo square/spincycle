@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -232,6 +233,7 @@ func (api *API) findRequestsHandler(c echo.Context) error {
 	filter := proto.RequestFilter{
 		Type: c.QueryParam("type"),
 		User: c.QueryParam("user"),
+		Args: make(map[string]string),
 	}
 	if states := c.QueryParams()["state"]; len(states) != 0 {
 		for _, state := range states {
@@ -241,6 +243,16 @@ func (api *API) findRequestsHandler(c echo.Context) error {
 				return handleError(serr.ValidationError{Message: errMsg}, c)
 			}
 			filter.States = append(filter.States, stateVal)
+		}
+	}
+	if args := c.QueryParams()["arg"]; len(args) != 0 {
+		for _, arg := range args {
+			split := strings.SplitN(arg, "=", 2)
+			if len(split) != 2 {
+				errMsg := fmt.Sprintf("invalid 'arg' parameter: '%s' does not match expected format key=value", arg)
+				return handleError(serr.ValidationError{Message: errMsg}, c)
+			}
+			filter.Args[split[0]] = split[1]
 		}
 	}
 	if since := c.QueryParam("since"); since != "" {

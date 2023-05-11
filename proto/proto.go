@@ -257,9 +257,10 @@ func (j Jobs) Swap(i, k int) {
 
 // RequestFilter represents optional filters when listing requests.
 type RequestFilter struct {
-	Type   string // Type of requests to return.
-	States []byte // Request states to include.
-	User   string // User who made the request.
+	Type   string            // Type of requests to return.
+	States []byte            // Request states to include.
+	User   string            // User who made the request.
+	Args   map[string]string // Request args to filter with
 
 	// Return only requests that were created and run at any point within the time
 	// range. I.e. Requests created before Since but finished after Since will
@@ -282,6 +283,11 @@ func (f RequestFilter) String() string {
 	if len(f.States) != 0 {
 		for _, state := range f.States {
 			params.Add("state", StateName[state])
+		}
+	}
+	if len(f.Args) != 0 {
+		for k, v := range f.Args {
+			params.Add("arg", fmt.Sprintf("%s=%s", k, v))
 		}
 	}
 	if f.User != "" {

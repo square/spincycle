@@ -275,6 +275,10 @@ func TestFindRequestsHandler(t *testing.T) {
 			proto.STATE_RUNNING,
 			proto.STATE_SUSPENDED,
 		},
+		Args: map[string]string{
+			"arg1": "val1",
+			"arg2": "val2",
+		},
 		User:   "felixp",
 		Since:  time.Date(2020, 01, 01, 12, 34, 56, 789000000, time.UTC),
 		Until:  time.Date(2020, 01, 02, 12, 34, 56, 789000000, time.UTC),
@@ -305,6 +309,10 @@ func TestFindRequestsHandler(t *testing.T) {
 			proto.STATE_PENDING,
 			proto.STATE_RUNNING,
 			proto.STATE_SUSPENDED,
+		},
+		Args: map[string]string{
+			"arg1": "val1",
+			"arg2": "val2",
 		},
 		User:   "felixp",
 		Since:  time.Date(2020, 01, 01, 12, 34, 56, 789000000, time.UTC),
