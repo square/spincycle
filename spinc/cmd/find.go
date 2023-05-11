@@ -268,7 +268,7 @@ Filters:
   type        type of request to return
   states      comma-separated list of request states to include
   user        return only requests made by this user
-  requestArgs return requests made with specific args (format: arg1=value1,arg2=value2)
+  args        return requests made with specific args (format: arg1=value1,arg2=value2)
   since       return requests created or run after this time
   until       return requests created or run before this time
   limit       limit response to this many requests (default: %d)
