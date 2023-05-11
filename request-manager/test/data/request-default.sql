@@ -21,7 +21,7 @@ INSERT INTO requests (request_id, type, created_at, finished_at, state) VALUES (
 
 -- a suspended request + job chain + suspended job chain
 INSERT INTO requests (request_id, type, created_at, state, started_at) VALUES ("suspended___________", 'do-another-thing', '2017-09-13 03:00:00', 7, '2017-09-13 03:01:00');
-INSERT INTO request_archives (request_id, create_request, args, job_chain) VALUES ("suspended___________", '{"some":"param"}', '', '{"requestId":"suspended___________","jobs":{"hw48":{"id":"hw48","type":"test","bytes":null,"state":1,"args":null,"data":null,"retry":5,"sequenceId":"hw48","sequenceRetry":1}},"adjacencyList":null,"state":1}');
+INSERT INTO request_archives (request_id, create_request, args, job_chain) VALUES ("suspended___________", '{"some":"other_param"}', '', '{"requestId":"suspended___________","jobs":{"hw48":{"id":"hw48","type":"test","bytes":null,"state":1,"args":null,"data":null,"retry":5,"sequenceId":"hw48","sequenceRetry":1}},"adjacencyList":null,"state":1}');
 INSERT INTO suspended_job_chains (request_id, suspended_job_chain) VALUES ("suspended___________", '{"requestId":"suspended___________","jobChain":{"requestId":"suspended___________","jobs":{"hw48":{"id":"hw48","type":"test","bytes":null,"state":6,"args":null,"data":null,"retry":5,"sequenceId":"hw48","sequenceRetry":1}},"adjacencyList":null,"state":7},"totalJobTries":{"hw48":5},"latestRunJobTries":{"hw48":2},"sequenceTries":{"hw48":1}}');
 
 -- a suspended request + claimed SJC that hasn't been updated recently

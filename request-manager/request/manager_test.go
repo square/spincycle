@@ -856,7 +856,6 @@ func TestFind(t *testing.T) {
 	}
 	expected = []proto.Request{
 		// ordered by descending create time
-		testdb.SavedRequests["suspended___________"],
 		testdb.SavedRequests["454ae2f98a05cv16sdwt"],
 		testdb.SavedRequests["0874a524aa1edn3ysp00"],
 	}
