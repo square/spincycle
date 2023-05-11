@@ -644,42 +644,6 @@ func (m *manager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
 		}
 
 		requests = append(requests, req)
-
-		// if len(filter.Args) > 0 {
-		// 	if filter.Limit != 0 && uint(len(requests)) >= filter.Limit {
-		// 		break
-		// 	}
-		// 	if len(reqArgsBytes) > 0 {
-		// 		var reqArgs []proto.RequestArg
-		// 		if err := json.Unmarshal(reqArgsBytes, &reqArgs); err != nil {
-		// 			return []proto.Request{}, fmt.Errorf("Error unmarshaling request args: %s", err)
-		// 		}
-
-		// 		// build a map of argName -> argValue
-		// 		argsMap := make(map[string]interface{})
-		// 		for _, arg := range reqArgs {
-		// 			argsMap[arg.Name] = arg.Value
-		// 		}
-
-		// 		// match every filter args
-		// 		argsMatch := true
-		// 		for filterArgName, filterArgValue := range filter.Args {
-		// 			requestArgValue, ok := argsMap[filterArgName]
-		// 			if !ok || requestArgValue != filterArgValue {
-		// 				argsMatch = false
-		// 				break
-		// 			}
-		// 		}
-
-		// 		if argsMatch {
-		// 			requests = append(requests, req)
-		// 		}
-		// 	} else {
-		// 		continue
-		// 	}
-		// } else {
-		// 	requests = append(requests, req)
-		// }
 	}
 	if rows.Err() != nil {
 		return []proto.Request{}, fmt.Errorf("Error iterating over rows returned from MySQL: %s", err)
