@@ -540,31 +540,38 @@ func (m *manager) GetWithJC(requestId string) (proto.Request, error) {
 
 func (m *manager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
 	// Build the query from the filter.
-	query := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs, jr_url FROM requests "
+	query := "SELECT request_id, type, state, user, created_at, started_at, finished_at, total_jobs, finished_jobs, jr_url" +
+		" FROM requests r LEFT JOIN request_archives ra USING (request_id) "
 
 	var fields []string
 	var values []interface{}
 	if filter.Type != "" {
-		fields = append(fields, "type = ?")
+		fields = append(fields, "r.type = ?")
 		values = append(values, filter.Type)
 	}
 	if filter.User != "" {
-		fields = append(fields, "user = ?")
+		fields = append(fields, "r.user = ?")
 		values = append(values, filter.User)
 	}
 	if len(filter.States) != 0 {
-		stateSQL := fmt.Sprintf("state IN (%s)", strings.TrimRight(strings.Repeat("?, ", len(filter.States)), ", "))
+		stateSQL := fmt.Sprintf("r.state IN (%s)", strings.TrimRight(strings.Repeat("?, ", len(filter.States)), ", "))
 		fields = append(fields, stateSQL)
 		for _, state := range filter.States {
 			values = append(values, state)
 		}
 	}
+	if len(filter.Args) != 0 {
+		for arg, val := range filter.Args {
+			fields = append(fields, "ra.create_request LIKE CONCAT('%\"', ?, '\":\"', ?, '\"%')")
+			values = append(values, arg, val)
+		}
+	}
 	if !filter.Since.IsZero() {
-		fields = append(fields, "(finished_at > ? OR finished_at IS NULL)")
+		fields = append(fields, "(r.finished_at > ? OR r.finished_at IS NULL)")
 		values = append(values, filter.Since.Format(time.RFC3339Nano))
 	}
 	if !filter.Until.IsZero() {
-		fields = append(fields, "(created_at < ?)")
+		fields = append(fields, "(r.created_at < ?)")
 		values = append(values, filter.Until.Format(time.RFC3339Nano))
 	}
 
@@ -572,7 +579,7 @@ func (m *manager) Find(filter proto.RequestFilter) ([]proto.Request, error) {
 		query += "WHERE " + strings.Join(fields, " AND ")
 	}
 
-	query += " ORDER BY created_at DESC, request_id "
+	query += " ORDER BY r.created_at DESC, r.request_id "
 
 	if filter.Limit != 0 {
 		query += fmt.Sprintf(" LIMIT %d", filter.Limit)

@@ -17,6 +17,7 @@ import (
 
 func TestFindPrepare1(t *testing.T) {
 	args := []string{"type=requestname", "states=RUNNING,PENDING,FAIL",
+		"args=arg1=val1,arg2=val2",
 		"user=owner", "since=2006-01-02 15:04:05 UTC",
 		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3", "timezone=local"}
 
@@ -175,6 +176,27 @@ func TestFailFindPrepare6(t *testing.T) {
 	err := find.Prepare()
 	if err == nil {
 		t.Fatalf("No error in 'Prepare' with invalid input (invalid arg)")
+	}
+}
+
+func TestFailFindPrepare7(t *testing.T) {
+	args := []string{"type=requestname", "states=RUNNING,PENDING,FAIL",
+		"args=arg1",
+		"user=owner", "since=2006-01-02 15:04:05 UTC",
+		"until=2006-01-02 15:04:05 UTC", "limit=5", "offset=3"}
+
+	command := config.Command{
+		Args: args,
+	}
+
+	ctx := app.Context{
+		Command: command,
+	}
+
+	find := cmd.NewFind(ctx)
+	err := find.Prepare()
+	if err == nil {
+		t.Fatalf("No error in 'Prepare' with invalid input (invalid args input)")
 	}
 }
 

@@ -52,6 +52,7 @@ func (c *Find) Prepare() error {
 		"type":   true,
 		"states": true,
 		"user":   true,
+		"args":   true,
 		"since":  true,
 		"until":  true,
 		"limit":  true,
@@ -103,6 +104,17 @@ func (c *Find) Prepare() error {
 		}
 	}
 
+	requestArgs := make(map[string]string)
+	if args["args"] != "" {
+		for _, requestArg := range strings.Split(args["args"], ",") {
+			split := strings.SplitN(requestArg, "=", 2)
+			if len(split) != 2 {
+				return fmt.Errorf("Invalid request arg '%s': expected format key1=value1,key2=value2", requestArg)
+			}
+			requestArgs[split[0]] = split[1]
+		}
+	}
+
 	var since time.Time
 	if args["since"] != "" {
 		if strings.Index(args["since"], "UTC") != findUtcIndex {
@@ -151,6 +163,7 @@ func (c *Find) Prepare() error {
 		Type:   args["type"],
 		States: states,
 		User:   args["user"],
+		Args:   requestArgs,
 
 		Since: since,
 		Until: until,
@@ -255,6 +268,7 @@ Filters:
   type        type of request to return
   states      comma-separated list of request states to include
   user        return only requests made by this user
+  args        return requests made with specific args (format: arg1=value1,arg2=value2)
   since       return requests created or run after this time
   until       return requests created or run before this time
   limit       limit response to this many requests (default: %d)

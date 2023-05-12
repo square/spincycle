@@ -836,6 +836,39 @@ func TestFind(t *testing.T) {
 		t.Error(diff)
 	}
 
+	// 6. Filter args
+	filter = proto.RequestFilter{
+		Args: map[string]string{
+			"some": "param",
+		},
+	}
+	cfg = request.ManagerConfig{
+		ResolverFactory: ref,
+		DBConnector:     dbc,
+		JRClient:        &mock.JRClient{},
+		ShutdownChan:    shutdownChan,
+		DefaultJRURL:    "http://defaulturl:1111",
+	}
+	m = request.NewManager(cfg)
+	actual, err = m.Find(filter)
+	if err != nil {
+		t.Errorf("error = %s, expected nil", err)
+	}
+	expected = []proto.Request{
+		// ordered by descending create time
+		testdb.SavedRequests["454ae2f98a05cv16sdwt"],
+		testdb.SavedRequests["0874a524aa1edn3ysp00"],
+	}
+	// Expect requests without job chain + args.
+	for i, _ := range expected {
+		expected[i].JobChain = nil
+		expected[i].Args = nil
+	}
+
+	if diff := deep.Equal(actual, expected); diff != nil {
+		t.Error(diff)
+	}
+
 	// 6. Empty filter
 	filter = proto.RequestFilter{}
 	cfg = request.ManagerConfig{
