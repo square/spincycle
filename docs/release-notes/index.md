@@ -9,6 +9,11 @@ permalink: /release-notes
 
 ## v2.0
 
+### v2.1.0 (released 2023-05-12)
+
+* RM find endpoint now supports filtering by request arg/value pairs
+* Spinc cli find now supports filtering by request arg/value pairs
+
 ### v2.0.8 (released 2022-03-14)
 
 * Fix exit code in SQL schema to be a signed bigint to match the int64 from Go code.
