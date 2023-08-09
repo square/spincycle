@@ -97,13 +97,13 @@ func (r *resolver) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestA
 	for i, arg := range seq.Args.Optional {
 		val, ok := jobArgs[*arg.Name]
 		if !ok {
-			val = *arg.Default
+			val = arg.Default
 		}
 		reqArgs = append(reqArgs, proto.RequestArg{
 			Pos:     i,
 			Name:    *arg.Name,
 			Type:    proto.ARG_TYPE_OPTIONAL,
-			Default: *arg.Default,
+			Default: arg.Default,
 			Value:   val,
 			Given:   ok,
 		})
@@ -114,7 +114,7 @@ func (r *resolver) RequestArgs(jobArgs map[string]interface{}) ([]proto.RequestA
 			Pos:   i,
 			Name:  *arg.Name,
 			Type:  proto.ARG_TYPE_STATIC,
-			Value: *arg.Default,
+			Value: arg.Default,
 		})
 	}
 
@@ -168,12 +168,12 @@ func (r *resolver) buildSequence(cfg buildSequenceConfig) (*Graph, error) {
 	}
 	for _, arg := range seq.Args.Optional {
 		if _, ok := jobArgs[*arg.Name]; !ok {
-			jobArgs[*arg.Name] = *arg.Default
+			jobArgs[*arg.Name] = arg.Default
 		}
 	}
 	for _, arg := range seq.Args.Static {
 		if _, ok := jobArgs[*arg.Name]; !ok {
-			jobArgs[*arg.Name] = *arg.Default
+			jobArgs[*arg.Name] = arg.Default
 		}
 	}
 

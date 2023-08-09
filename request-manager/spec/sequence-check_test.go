@@ -33,7 +33,7 @@ func TestFailRequiredArgsHaveNoDefaultsSequenceCheck(t *testing.T) {
 		Name: seqA,
 		Args: SequenceArgs{
 			Required: []*Arg{
-				&Arg{Name: &testVal, Default: &testVal},
+				&Arg{Name: &testVal, Default: testVal},
 			},
 		},
 	}

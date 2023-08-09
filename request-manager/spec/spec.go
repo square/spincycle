@@ -67,9 +67,9 @@ type SequenceArgs struct {
 
 // A sequence's args.
 type Arg struct {
-	Name    *string `yaml:"name"`
-	Desc    string  `yaml:"desc"`
-	Default *string `yaml:"default"`
+	Name    *string     `yaml:"name"`
+	Desc    string      `yaml:"desc"`
+	Default interface{} `yaml:"default"`
 }
 
 // A single role-based ACL entry. Every auth.Caller (from the

@@ -79,7 +79,7 @@ func (check RequiredArgsHaveNoDefaultsSequenceCheck) CheckSequence(sequence Sequ
 			} else {
 				name = *arg.Name
 			}
-			values = append(values, fmt.Sprintf("%s (%s)", *arg.Default, name))
+			values = append(values, fmt.Sprintf("%s (%s)", arg.Default, name))
 		}
 	}
 

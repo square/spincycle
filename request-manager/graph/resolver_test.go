@@ -110,12 +110,12 @@ func createGraph0(t *testing.T, sequencesFile, requestName string, jobArgs map[s
 	}
 	for _, arg := range seqSpec.Args.Optional {
 		if _, ok := jobArgs[*arg.Name]; !ok {
-			jobArgs[*arg.Name] = *arg.Default
+			jobArgs[*arg.Name] = arg.Default
 		}
 	}
 	for _, arg := range seqSpec.Args.Static {
 		if _, ok := jobArgs[*arg.Name]; !ok {
-			jobArgs[*arg.Name] = *arg.Default
+			jobArgs[*arg.Name] = arg.Default
 		}
 	}
 
