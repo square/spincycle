@@ -190,8 +190,8 @@ func TestCreate(t *testing.T) {
 			{
 				Name:    "bar",
 				Type:    proto.ARG_TYPE_OPTIONAL,
-				Default: "175",
-				Value:   "175",
+				Default: 175,
+				Value:   175,
 				Given:   false,
 			},
 		},
