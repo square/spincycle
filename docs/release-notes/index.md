@@ -9,6 +9,10 @@ permalink: /release-notes
 
 ## v2.0
 
+### v2.1.1 (released 2025-04-16)
+
+* Minor dependency updates
+
 ### v2.1.0 (released 2023-05-12)
 
 * RM find endpoint now supports filtering by request arg/value pairs
